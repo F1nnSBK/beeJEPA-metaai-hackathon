@@ -24,10 +24,13 @@ public class MuseController {
 
     @Get("/status")
     public Map<String, Object> getStatus() {
+        boolean configured = museService.getConfig().isConfigured();
         return Map.of(
-                "configured", museService.getConfig().isConfigured(),
+                "configured", configured,
                 "baseUrl", museService.getConfig().getBaseUrl(),
-                "mode", museService.getConfig().isConfigured() ? "LIVE" : "MOCK",
+                "status", configured ? "STANDBY" : "DORMANT_OFFLINE",
+                "creditsConsumed", 0,
+                "message", configured ? "Key detected. Ready for manual triggers." : "No active API key set. Zero credits consumed.",
                 "thread", Thread.currentThread().toString()
         );
     }

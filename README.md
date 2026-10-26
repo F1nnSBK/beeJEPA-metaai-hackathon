@@ -1,18 +1,21 @@
 # beeJEPA Edge Server & Console
 
-High-performance, lightweight edge server and embedded web console for **beeJEPA**, optimized for deployment on a **Raspberry Pi** (ARM64) using **GraalVM Native Image (AOT)**, **Java Virtual Threads**, and an embedded **Vue 3 + Tailwind CSS** frontend.
+High-performance, lightweight edge server and embedded web console for **beeJEPA**, optimized for deployment on a **Raspberry Pi 4 Model B** (ARM64) using **GraalVM Native Image (AOT)**, **Java Virtual Threads**, and an embedded **Vue 3 + Tailwind CSS** frontend.
 
 ---
 
 ## Architecture & Features
 
+- **Edge Hardware Target:** Raspberry Pi 4 Model B (Broadcom BCM2711, Quad-core Cortex-A72, ARM64).
 - **Backend Runtime:** Micronaut 4.7 with Netty and Ahead-of-Time (AOT) optimizations (`io.micronaut.aot`).
 - **Concurrency:** Java Virtual Threads (Project Loom, `micronaut.server.thread-selection: AUTO`) for non-blocking, high-concurrency edge I/O.
+- **Beekeeper User Management:** Secure edge authentication. Passwords are never stored in plain text; credentials are cryptographically protected via **PBKDF2WithHmacSHA256 with 16-byte random salts** and constant-time verification stored in SQLite (`state.db`).
 - **Embedded Frontend:** Vue 3 Single Page Application (SPA) built with Vite and Tailwind CSS.
+  - Beekeeper Login Portal for apiary inspectors.
   - 3-column video layout placeholder (Raw Hive Optical Stream, V-JEPA Latent Forecast, Surprise Anomaly Detector).
-  - Interactive bottom timeline component with anomaly spike indicators and scrubber controls.
+  - Clean anomaly timeline component (buffer state without artificial mock values).
 - **Single-Binary Delivery:** The compiled Vue 3 frontend is bundled into `src/main/resources/public/` and served directly by Micronaut on `/**`. During GraalVM native image compilation, the entire frontend and backend are baked into a single standalone binary.
-- **Meta Muse API Integration:** Declarative HTTP client (`@Client`) for Meta Muse endpoints, supporting `.env` secret management (`META_MUSE_API_KEY`) with automated mock/fallback execution for local offline testing.
+- **Meta Muse API Integration:** Declarative HTTP client (`@Client`) for Meta Muse endpoints. Runs in dormant standby when unconfigured to prevent unintentional credit consumption.
 - **External SSD Repository:** Symlinked data hierarchy (`data/ -> /mnt/ssd/...` or `/Volumes/...`) with automated symlink detection, mount validation, and free disk space monitoring.
 - **Edge State Storage:** Embedded SQLite engine (`state.db`) operating in Write-Ahead Logging (`WAL`) mode directly on the SSD symlink for persistent state and run tracking across virtual threads.
 

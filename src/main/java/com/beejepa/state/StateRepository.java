@@ -1,5 +1,6 @@
 package com.beejepa.state;
 
+import com.beejepa.auth.BeekeeperUser;
 import com.beejepa.config.StorageConfig;
 import com.beejepa.state.model.MuseLogEntry;
 import com.beejepa.state.model.ProcessingRun;
@@ -78,6 +79,19 @@ public class StateRepository {
                         status_code INTEGER NOT NULL,
                         latency_ms INTEGER NOT NULL,
                         timestamp TEXT NOT NULL
+                    );
+                    """);
+
+            // Beekeeper User Management table
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS beekeepers (
+                        id TEXT PRIMARY KEY,
+                        username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        salt TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        last_login_at TEXT
                     );
                     """);
 
@@ -244,5 +258,80 @@ public class StateRepository {
             throw new RuntimeException(e);
         }
         return logs;
+    }
+
+    // ---------------- Beekeeper User Management ----------------
+
+    public Optional<BeekeeperUser> findBeekeeperByUsername(String username) {
+        String sql = "SELECT id, username, password_hash, salt, role, created_at, last_login_at FROM beekeepers WHERE username = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String lastLogin = rs.getString("last_login_at");
+                    return Optional.of(new BeekeeperUser(
+                            rs.getString("id"),
+                            rs.getString("username"),
+                            rs.getString("password_hash"),
+                            rs.getString("salt"),
+                            rs.getString("role"),
+                            Instant.parse(rs.getString("created_at")),
+                            lastLogin != null ? Instant.parse(lastLogin) : null
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.error("Error finding beekeeper {}: {}", username, e.getMessage());
+            throw new RuntimeException(e);
+        }
+        return Optional.empty();
+    }
+
+    public void saveBeekeeper(BeekeeperUser user) {
+        String sql = """
+                INSERT INTO beekeepers (id, username, password_hash, salt, role, created_at, last_login_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    password_hash = excluded.password_hash,
+                    salt = excluded.salt,
+                    role = excluded.role,
+                    last_login_at = excluded.last_login_at;
+                """;
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, user.id());
+            ps.setString(2, user.username());
+            ps.setString(3, user.passwordHash());
+            ps.setString(4, user.salt());
+            ps.setString(5, user.role());
+            ps.setString(6, user.createdAt().toString());
+            ps.setString(7, user.lastLoginAt() != null ? user.lastLoginAt().toString() : null);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.error("Error saving beekeeper {}: {}", user.username(), e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void updateBeekeeperLoginTime(String userId) {
+        String sql = "UPDATE beekeepers SET last_login_at = ? WHERE id = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, Instant.now().toString());
+            ps.setString(2, userId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to update last login for {}: {}", userId, e.getMessage());
+        }
+    }
+
+    public int countBeekeepers() {
+        String sql = "SELECT COUNT(*) FROM beekeepers";
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("Error counting beekeepers: {}", e.getMessage());
+        }
+        return 0;
     }
 }

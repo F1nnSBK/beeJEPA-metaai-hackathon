@@ -1,0 +1,8 @@
+micronaut:
+  server:
+    port: -1
+
+beejepa:
+  data:
+    path: ./build/test-data
+    require-symlink: false
