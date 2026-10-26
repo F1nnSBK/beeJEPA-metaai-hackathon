@@ -161,6 +161,35 @@ Access the complete UI and API at `http://<raspberry-pi-ip>:8080/`.
 
 ---
 
+## Nginx & Cloudflare Tunnel (beejepa.finn-hertsch.de)
+
+The repository provides a production Nginx configuration tailored for the Raspberry Pi with WebSocket support and direct SSD file delivery.
+
+### 1. Install & Activate Nginx Config
+
+Run the installer script with sudo on the Raspberry Pi:
+
+```bash
+sudo ./scripts/install_nginx.sh
+```
+
+Or manually link the file:
+```bash
+sudo cp nginx/beejepa.conf /etc/nginx/sites-available/beejepa.conf
+sudo ln -sf /etc/nginx/sites-available/beejepa.conf /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 2. Cloudflare Tunnel Configuration
+
+Point your Cloudflare Tunnel (`cloudflared`) to Nginx:
+- **Public Hostname:** `beejepa.finn-hertsch.de`
+- **Service:** `HTTP` -> `localhost:80` (or `http://127.0.0.1:8080` directly)
+- **Additional Headers:** Nginx is pre-configured with `$http_cf_connecting_ip` and full WebSocket upgrade support (`/ws`).
+
+---
+
 ## REST API Reference
 
 | Method | Endpoint | Description |
