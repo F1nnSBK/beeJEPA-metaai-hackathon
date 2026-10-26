@@ -140,11 +140,15 @@ const activeMediaSource = computed(() => {
 const hotspotBoxStyle = computed(() => {
   if (!selectedEvent.value?.hotspot) return {}
   const hs = selectedEvent.value.hotspot
+  const cx = hs.normCenterX * 100
+  const cy = hs.normCenterY * 100
+  const w = 16
+  const h = 16
   return {
-    left: `${Math.round(hs.normCenterX * 100) - 10}%`,
-    top: `${Math.round(hs.normCenterY * 100) - 10}%`,
-    width: '20%',
-    height: '20%'
+    left: `${Math.max(0, Math.min(100 - w, cx - w / 2)).toFixed(1)}%`,
+    top: `${Math.max(0, Math.min(100 - h, cy - h / 2)).toFixed(1)}%`,
+    width: `${w}%`,
+    height: `${h}%`
   }
 })
 
@@ -464,7 +468,7 @@ async function handleLogout() {
               <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
                 <div class="text-[10px] font-mono text-slate-400 uppercase">V-JEPA Surprise Score</div>
                 <div class="text-xl font-bold font-mono text-rose-400 mt-1">
-                  {{ selectedEvent.surpriseScoreL2 }}σ
+                  {{ Number(selectedEvent.surpriseScoreL2).toFixed(2) }}σ
                 </div>
                 <div class="text-[10px] text-slate-500 mt-0.5">Latent Error ||ẑ - z||₂</div>
               </div>
@@ -472,7 +476,7 @@ async function handleLogout() {
               <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
                 <div class="text-[10px] font-mono text-slate-400 uppercase">Pixel-Diff Baseline</div>
                 <div class="text-xl font-bold font-mono text-slate-300 mt-1">
-                  {{ selectedEvent.pixelDiffBaseline }}
+                  {{ Number(selectedEvent.pixelDiffBaseline).toFixed(4) }}
                 </div>
                 <div class="text-[10px] text-slate-500 mt-0.5">|I(t+Δt) - I(t)|</div>
               </div>
@@ -489,7 +493,7 @@ async function handleLogout() {
               <div class="flex items-center justify-between text-slate-400">
                 <span>Normalized Center:</span>
                 <span class="font-mono text-slate-200">
-                  ({{ selectedEvent.hotspot.normCenterX }}, {{ selectedEvent.hotspot.normCenterY }})
+                  ({{ Number(selectedEvent.hotspot.normCenterX).toFixed(3) }}, {{ Number(selectedEvent.hotspot.normCenterY).toFixed(3) }})
                 </span>
               </div>
             </div>
