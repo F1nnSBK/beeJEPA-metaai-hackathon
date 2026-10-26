@@ -25,7 +25,17 @@ const events = ref([])
 const selectedEvent = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
-const videoPlayer = ref(null)
+// Animated floating bees for landing page background
+const floatingBees = [
+  { id: 1, src: '/bee.png', size: 46, top: 10, left: 12, delay: 0, duration: 18, anim: 'bee-wander-1', opacity: 0.42 },
+  { id: 2, src: '/bee_fluent3d.png', size: 54, top: 20, left: 82, delay: 2.5, duration: 22, anim: 'bee-wander-2', opacity: 0.38 },
+  { id: 3, src: '/bee_twemoji.svg', size: 38, top: 72, left: 10, delay: 1, duration: 16, anim: 'bee-wander-3', opacity: 0.35 },
+  { id: 4, src: '/bee.png', size: 34, top: 68, left: 86, delay: 4, duration: 20, anim: 'bee-wander-1', opacity: 0.32 },
+  { id: 5, src: '/bee_fluent3d.png', size: 48, top: 82, left: 38, delay: 1.5, duration: 24, anim: 'bee-wander-2', opacity: 0.30 },
+  { id: 6, src: '/bee_twemoji.svg', size: 40, top: 14, left: 58, delay: 3.5, duration: 17, anim: 'bee-wander-3', opacity: 0.36 },
+  { id: 7, src: '/bee.png', size: 32, top: 44, left: 5, delay: 5, duration: 19, anim: 'bee-wander-2', opacity: 0.28 },
+  { id: 8, src: '/bee_fluent3d.png', size: 38, top: 40, left: 91, delay: 2, duration: 21, anim: 'bee-wander-1', opacity: 0.34 }
+]
 
 onMounted(async () => {
   const token = localStorage.getItem('beejepa_token')
@@ -255,9 +265,37 @@ async function handleLogout() {
     <!-- VIEW 1: BEEKEEPER LOGIN                                           -->
     <!-- ================================================================= -->
     <div v-if="!isAuthenticated" class="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <!-- Ambient Glow Behind Modal -->
       <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div class="w-full max-w-md bg-[#0f172a] border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10">
+      <!-- Animated Floating Bees in Background -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div
+          v-for="bee in floatingBees"
+          :key="bee.id"
+          class="absolute select-none pointer-events-none transition-transform"
+          :style="{
+            top: `${bee.top}%`,
+            left: `${bee.left}%`,
+            width: `${bee.size}px`,
+            height: `${bee.size}px`,
+            opacity: bee.opacity,
+            animationName: bee.anim,
+            animationDuration: `${bee.duration}s`,
+            animationDelay: `${bee.delay}s`,
+            animationIterationCount: 'infinite',
+            animationTimingFunction: 'ease-in-out'
+          }"
+        >
+          <img
+            :src="bee.src"
+            alt="Bee"
+            class="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(245,158,11,0.35)]"
+          />
+        </div>
+      </div>
+
+      <div class="w-full max-w-md bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10">
         <!-- Logo & Title -->
         <div class="flex items-center gap-3 mb-6">
           <div class="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 p-1.5 flex items-center justify-center shrink-0">
@@ -638,3 +676,59 @@ async function handleLogout() {
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes bee-wander-1 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate3d(40px, -30px, 0) rotate(14deg) scale(1.06);
+  }
+  50% {
+    transform: translate3d(70px, 15px, 0) rotate(-8deg) scale(0.95);
+  }
+  75% {
+    transform: translate3d(25px, 45px, 0) rotate(12deg) scale(1.03);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes bee-wander-2 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  30% {
+    transform: translate3d(-45px, 35px, 0) rotate(-16deg) scale(0.94);
+  }
+  60% {
+    transform: translate3d(-20px, -40px, 0) rotate(12deg) scale(1.05);
+  }
+  85% {
+    transform: translate3d(30px, -15px, 0) rotate(-6deg) scale(1);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes bee-wander-3 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(30px, -40px, 0) rotate(10deg);
+  }
+  45% {
+    transform: translate3d(-35px, -18px, 0) rotate(-15deg);
+  }
+  75% {
+    transform: translate3d(40px, 30px, 0) rotate(12deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+</style>
