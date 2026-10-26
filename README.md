@@ -194,6 +194,7 @@ The server starts in **< 40 ms**, consumes minimal memory, and serves both the R
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/muse/status` | Connectivity and standby status for Meta Muse |
+| `POST` | `/api/v1/muse/acoustic-mirror` | Edge FFT & prosody analysis with Log-Normal response delay, streaming mirrored bee WAV |
 | `POST` | `/api/v1/muse/query-voice` | Zero-credit test query for voice interactions |
 | `GET` | `/api/v1/muse/voice?text=...` | Stream dynamically synthesized 22.05 kHz WAV bee voice audio |
 | `POST` | `/api/v1/muse/generate` | Dispatch inference request to Meta Muse |

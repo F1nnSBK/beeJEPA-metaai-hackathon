@@ -43,6 +43,47 @@ public class BeeAcousticSynthesizer {
         return encodeWav(samples);
     }
 
+    public byte[] synthesizeFromSpectralProfile(AudioSpectralAnalyzer.SpectralProfile profile) {
+        if (profile == null || profile.onsets().isEmpty()) {
+            return generateEmptyWav();
+        }
+
+        List<Float> samples = new ArrayList<>(SAMPLE_RATE * 3);
+        int syllables = profile.estimatedSyllables();
+        boolean isQuestion = profile.pitchTiltHz() > 25.0f;
+
+        // Map human vocal centroid (e.g. 150 - 1500 Hz) to biological honeybee range (210 - 450 Hz)
+        float baseF0 = 210.0f + Math.min(240.0f, Math.max(0.0f, (profile.meanCentroidHz() - 150.0f) * 0.25f));
+
+        for (int i = 0; i < syllables; i++) {
+            AudioSpectralAnalyzer.SyllableOnset onset = profile.onsets().get(Math.min(i, profile.onsets().size() - 1));
+
+            float syllableF = baseF0 + ((onset.centroidHz() % 35.0f) - 15.0f);
+            float startF = syllableF;
+            float endF = syllableF;
+
+            // Sentence prosody: mimic question pitch inflection
+            if (isQuestion && i == syllables - 1) {
+                endF += 58.0f;
+            } else if (i == syllables - 1) {
+                endF -= 28.0f; // Declarative drop
+            }
+
+            float durationS = Math.max(0.12f, Math.min(0.26f, 0.10f + onset.energy() * 0.12f));
+            float volume = Math.max(0.60f, Math.min(0.92f, 0.65f + profile.energyLevel() * 0.27f));
+            float modFreq = 26.0f + (i * 1.5f);
+
+            appendTone(samples, durationS, startF, endF, volume, modFreq);
+
+            if (i < syllables - 1) {
+                appendSilence(samples, 0.045f);
+            }
+        }
+
+        applyHiveCombResonance(samples);
+        return encodeWav(samples);
+    }
+
     private void synthesizeWord(String rawToken, boolean isLastWordInSentence, List<Float> samples) {
         String clean = rawToken.toLowerCase().replaceAll("[^a-z0-9]", "");
         if (clean.isBlank()) return;
