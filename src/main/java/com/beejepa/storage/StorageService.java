@@ -94,8 +94,10 @@ public class StorageService {
         status.put("isSymlink", isSymlink);
         status.put("targetRealPath", realTargetPath != null ? realTargetPath.toString() : null);
 
+        status.put("isMounted", isSymlink);
+
         File file = realTargetPath != null ? realTargetPath.toFile() : (dataDirectory != null ? dataDirectory.toFile() : null);
-        if (file != null && file.exists()) {
+        if (isSymlink && file != null && file.exists()) {
             long totalSpace = file.getTotalSpace();
             long freeSpace = file.getFreeSpace();
             long usableSpace = file.getUsableSpace();
@@ -106,6 +108,10 @@ public class StorageService {
             status.put("freeSpaceFormatted", formatBytes(usableSpace));
             status.put("totalSpaceFormatted", formatBytes(totalSpace));
             status.put("isWritable", file.canWrite());
+        } else {
+            status.put("freeSpaceFormatted", "Not Connected");
+            status.put("totalSpaceFormatted", "Not Connected");
+            status.put("isWritable", false);
         }
 
         Path dbPath = getDatabasePath();

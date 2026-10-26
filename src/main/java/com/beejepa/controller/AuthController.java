@@ -25,7 +25,12 @@ public class AuthController {
         this.authService = authService;
     }
 
+    @io.micronaut.core.annotation.Introspected
+    @io.micronaut.serde.annotation.Serdeable
     public record LoginRequest(String username, String password) {}
+
+    @io.micronaut.core.annotation.Introspected
+    @io.micronaut.serde.annotation.Serdeable
     public record RegisterRequest(String username, String password, String role) {}
 
     @Post("/login")

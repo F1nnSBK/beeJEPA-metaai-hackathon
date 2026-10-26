@@ -53,6 +53,8 @@ public class AuthService {
         }
     }
 
+    @io.micronaut.core.annotation.Introspected
+    @io.micronaut.serde.annotation.Serdeable
     public record AuthResponse(
             boolean success,
             String message,
