@@ -27,28 +27,11 @@ public class EventService {
     }
 
     private Path getEventsDirectory() {
-        Path dataDir = storageService.getDataDirectory();
-        Path eventsDir = dataDir.resolve("events");
-        if (!Files.exists(eventsDir)) {
-            // Check mock fallback
-            Path mockEvents = dataDir.resolve("mock/events");
-            if (Files.exists(mockEvents)) {
-                return mockEvents;
-            }
-        }
-        return eventsDir;
+        return storageService.getDataDirectory().resolve("events");
     }
 
     private Path getTimelineFile() {
-        Path dataDir = storageService.getDataDirectory();
-        Path timelineFile = dataDir.resolve("timeline_rec2123.json");
-        if (!Files.exists(timelineFile)) {
-            Path mockTimeline = dataDir.resolve("mock/timeline_rec2123.json");
-            if (Files.exists(mockTimeline)) {
-                return mockTimeline;
-            }
-        }
-        return timelineFile;
+        return storageService.getDataDirectory().resolve("timeline_rec2123.json");
     }
 
     public List<Map<String, Object>> listEvents() {

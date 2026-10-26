@@ -13,9 +13,9 @@ const isLoggingIn = ref(false)
 // Hardware & Storage state
 const hardware = ref('Raspberry Pi 4 Model B')
 const storageStatus = ref({
-  isMounted: true,
-  freeSpaceFormatted: 'Connected',
-  isWritable: true
+  isMounted: false,
+  freeSpaceFormatted: 'Not Connected',
+  isWritable: false
 })
 
 // Timeline & Events state
@@ -23,7 +23,7 @@ const timelineData = ref([])
 const timelineMeta = ref(null)
 const events = ref([])
 const selectedEvent = ref(null)
-const activeView = ref('comparison') // 'raw', 'comparison', 'sam'
+const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
 const videoPlayer = ref(null)
 
@@ -148,40 +148,46 @@ const hotspotBoxStyle = computed(() => {
   }
 })
 
-// SVG Fever curve path generator
-const svgCurvePath = computed(() => {
-  if (!timelineData.value || timelineData.value.length === 0) return ''
-  const maxTime = timelineMeta.value?.totalDurationSec || 2250
-  const width = 1000
-  const height = 80
-  const maxScore = 5.5
+const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 2250)
+const maxScore = 5.5
+const svgWidth = 1000
+const svgHeight = 100
 
+// Area path for gradient fill under the curve
+const svgAreaPath = computed(() => {
+  if (!timelineData.value || timelineData.value.length === 0) return ''
   const points = timelineData.value.map(pt => {
-    const x = (pt.timestampSec / maxTime) * width
-    const y = height - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (height - 10)
+    const x = (pt.timestampSec / maxDuration.value) * svgWidth
+    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
 
-  return `M 0,${height} L ${points.join(' L ')}`
+  return `M 0,${svgHeight} L ${points.join(' L ')} L ${svgWidth},${svgHeight} Z`
 })
 
-// Spikes on the timeline
+// Stroke path for the fever curve
+const svgCurvePath = computed(() => {
+  if (!timelineData.value || timelineData.value.length === 0) return ''
+  const points = timelineData.value.map(pt => {
+    const x = (pt.timestampSec / maxDuration.value) * svgWidth
+    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  return `M ${points.join(' L ')}`
+})
+
+// Spikes with exact HTML coordinates (to keep circles 100% round)
 const timelineSpikes = computed(() => {
   if (!timelineData.value) return []
-  const maxTime = timelineMeta.value?.totalDurationSec || 2250
-  const width = 1000
-  const height = 80
-  const maxScore = 5.5
-
   return timelineData.value
     .filter(pt => pt.eventId)
     .map(pt => {
-      const x = (pt.timestampSec / maxTime) * width
-      const y = height - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (height - 10)
+      const normY = 1.0 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * 0.84 - 0.08
       return {
         ...pt,
-        x,
-        y
+        normX: pt.timestampSec / maxDuration.value,
+        normY
       }
     })
 })
@@ -247,10 +253,10 @@ async function handleLogout() {
     <div v-if="!isAuthenticated" class="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
       <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div class="w-full max-w-md bg-[#0f172a] border border-slate-800 rounded-2xl p-8 shadow-2xl relative z-10">
+      <div class="w-full max-w-md bg-[#0f172a] border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10">
         <!-- Logo & Title -->
         <div class="flex items-center gap-3 mb-6">
-          <div class="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 p-1.5 flex items-center justify-center">
+          <div class="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 p-1.5 flex items-center justify-center shrink-0">
             <img :src="beeLogo" alt="BeeJEPA Logo" class="w-full h-full object-contain drop-shadow" />
           </div>
           <div>
@@ -309,41 +315,41 @@ async function handleLogout() {
     <!-- ================================================================= -->
     <!-- VIEW 2: AUTHENTICATED HACKATHON DASHBOARD                         -->
     <!-- ================================================================= -->
-    <div v-else class="flex-1 flex flex-col h-screen overflow-hidden">
-      <!-- Header -->
-      <header class="h-14 border-b border-slate-800/80 bg-[#0c121e] px-6 flex items-center justify-between shrink-0">
+    <div v-else class="flex-1 flex flex-col min-h-screen lg:h-screen lg:overflow-hidden bg-[#080c14]">
+      <!-- Responsive Header -->
+      <header class="border-b border-slate-800/80 bg-[#0c121e] px-4 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 p-1 flex items-center justify-center">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 p-1 flex items-center justify-center shrink-0">
             <img :src="beeLogo" alt="BeeJEPA Logo" class="w-full h-full object-contain drop-shadow" />
           </div>
           <div class="flex items-center gap-2">
             <h1 class="text-sm font-semibold text-white tracking-tight">BeeJEPA</h1>
-            <span class="text-[10px] font-mono uppercase bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
-              {{ hardware }}
+            <span class="text-[10px] font-mono uppercase bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 whitespace-nowrap">
+              <span class="hidden sm:inline">Raspberry </span>Pi 4
             </span>
           </div>
         </div>
 
-        <!-- Telemetry Badges -->
-        <div class="flex items-center gap-3 text-xs">
+        <!-- Telemetry Badges (Responsive row) -->
+        <div class="flex items-center gap-2 sm:gap-3 text-xs flex-wrap sm:flex-nowrap">
           <!-- SSD Storage Status -->
-          <div class="flex items-center gap-2 px-3 py-1 rounded-md bg-slate-900 border border-slate-800">
+          <div class="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
             <span class="w-2 h-2 rounded-full" :class="storageStatus.isMounted ? 'bg-emerald-400' : 'bg-slate-600'"></span>
             <span class="text-slate-400">SSD:</span>
-            <span class="font-mono text-slate-200">
-              {{ storageStatus.isMounted ? (storageStatus.freeSpaceFormatted === 'Not Connected' ? 'Mock Data (Ready)' : storageStatus.freeSpaceFormatted + ' free') : 'Disconnected' }}
+            <span class="font-mono text-slate-200 text-[11px]">
+              {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted + ' free' : 'Not Connected' }}
             </span>
           </div>
 
           <!-- Meta Model APIs Status -->
-          <div class="flex items-center gap-2 px-3 py-1 rounded-md bg-slate-900 border border-slate-800">
+          <div class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span class="text-slate-400">Meta APIs:</span>
-            <span class="font-mono text-slate-300 text-[11px]">SAM 3.1 & Muse Spark Ready</span>
+            <span class="font-mono text-slate-300 text-[11px]">SAM 3.1 & Muse Ready</span>
           </div>
 
           <!-- Beekeeper Profile & Logout -->
-          <div class="flex items-center gap-3 pl-3 border-l border-slate-800">
+          <div class="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-3 border-l border-slate-800">
             <span class="text-xs font-medium text-amber-400">{{ currentUser?.username || 'beekeeper' }}</span>
             <button
               @click="handleLogout"
@@ -356,37 +362,38 @@ async function handleLogout() {
       </header>
 
       <!-- Main Layout: Video Player + Meta AI Causal Analysis -->
-      <main class="flex-1 p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 overflow-hidden">
+      <main class="flex-1 p-3 sm:p-5 flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-5 overflow-y-auto lg:overflow-hidden">
         <!-- Left Column: Video & Event Viewer (7 Cols) -->
-        <div class="lg:col-span-7 flex flex-col bg-[#0f172a] rounded-xl border border-slate-800 overflow-hidden shadow-xl">
-          <!-- View Toggle Header -->
-          <div class="px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between shrink-0">
-            <div class="flex items-center gap-2">
+        <div class="lg:col-span-7 flex flex-col bg-[#0f172a] rounded-xl border border-slate-800 overflow-hidden shadow-xl shrink-0 lg:shrink">
+          <!-- View Toggle Header (Responsive) -->
+          <div class="px-3 sm:px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+            <!-- Tabs with Horizontal Scroll on Mobile -->
+            <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
               <button
                 @click="activeView = 'comparison'"
                 :class="activeView === 'comparison' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-3 py-1 text-xs rounded transition-colors"
+                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
               >
                 Side-by-Side: Pixel vs. V-JEPA
               </button>
               <button
                 @click="activeView = 'raw'"
                 :class="activeView === 'raw' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-3 py-1 text-xs rounded transition-colors"
+                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
               >
                 Raw 60fps Clip
               </button>
               <button
                 @click="activeView = 'sam'"
                 :class="activeView === 'sam' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-3 py-1 text-xs rounded transition-colors"
+                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
               >
                 SAM 3.1 Peak Frame
               </button>
             </div>
 
             <!-- Sequence & Time Info -->
-            <div v-if="selectedEvent" class="text-right text-[11px] font-mono text-slate-400">
+            <div v-if="selectedEvent" class="flex sm:block items-center justify-between text-right text-[11px] font-mono text-slate-400 shrink-0">
               <span class="text-amber-400 font-semibold">{{ selectedEvent.eventId }}</span>
               <span class="mx-1.5">•</span>
               <span>{{ formatTime(selectedEvent.timestampSec) }} (f{{ selectedEvent.frameIndex }})</span>
@@ -394,7 +401,7 @@ async function handleLogout() {
           </div>
 
           <!-- Video / Frame Canvas -->
-          <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+          <div class="relative w-full aspect-[4/3] sm:aspect-video lg:aspect-auto lg:flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[240px] sm:min-h-[300px]">
             <!-- Video Mode: Raw or Side-by-Side -->
             <video
               v-if="activeView !== 'sam' && activeMediaSource"
@@ -406,18 +413,18 @@ async function handleLogout() {
               muted
               playsinline
               controls
-              class="max-h-full max-w-full object-contain"
+              class="w-full h-full object-contain"
             ></video>
 
             <!-- SAM 3.1 Peak Frame Mode -->
-            <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative max-h-full max-w-full flex items-center justify-center">
-              <img :src="peakFrameUrl" alt="SAM Peak Frame" class="max-h-full max-w-full object-contain" />
+            <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative w-full h-full flex items-center justify-center">
+              <img :src="peakFrameUrl" alt="SAM Peak Frame" class="w-full h-full object-contain" />
               <!-- Hotspot Bounding Box Overlay -->
               <div
                 class="absolute border-2 border-amber-400 bg-amber-400/20 rounded shadow-lg pointer-events-none animate-pulse"
                 :style="hotspotBoxStyle"
               >
-                <div class="absolute -top-5 left-0 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-t">
+                <div class="absolute -top-5 left-0 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap">
                   SAM 3.1 Box Prompt
                 </div>
               </div>
@@ -434,7 +441,7 @@ async function handleLogout() {
         </div>
 
         <!-- Right Column: Meta AI Causal Analysis & Metrics (5 Cols) -->
-        <div class="lg:col-span-5 flex flex-col bg-[#0f172a] rounded-xl border border-slate-800 p-5 overflow-y-auto shadow-xl">
+        <div class="lg:col-span-5 flex flex-col bg-[#0f172a] rounded-xl border border-slate-800 p-4 sm:p-5 overflow-y-auto shadow-xl">
           <div class="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
             <h2 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Meta AI Causal Analysis</h2>
             <span
@@ -522,57 +529,105 @@ async function handleLogout() {
               </p>
             </div>
           </div>
+
+          <!-- Empty State when no event is selected / present -->
+          <div v-else class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 my-auto">
+            <div class="w-12 h-12 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-center text-slate-600 mb-3">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p class="text-xs font-mono text-slate-400">No Events Detected</p>
+            <p class="text-[11px] text-slate-500 max-w-xs mt-1">
+              Awaiting anomaly events on SSD storage.
+            </p>
+          </div>
         </div>
       </main>
 
-      <!-- Bottom: 37.5-Minute Anomaly Fever Curve -->
-      <footer class="h-32 border-t border-slate-800/80 bg-[#0c121e] px-6 py-2.5 flex flex-col justify-between shrink-0">
-        <div class="flex items-center justify-between text-xs">
-          <div class="flex items-center gap-3">
+      <!-- Bottom: 37.5-Minute Anomaly Fever Curve (High Quality & Responsive) -->
+      <footer class="border-t border-slate-800/80 bg-[#0c121e] px-4 sm:px-6 py-3 shrink-0">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2 text-xs">
+          <div class="flex items-center gap-2.5">
             <span class="font-semibold text-slate-200">37.5-Minute Latent Surprise Timeline (rec2123)</span>
-            <span class="text-[11px] text-slate-400 font-mono">Threshold τ = 3.0σ</span>
+            <span class="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
+              Threshold τ = 3.0σ
+            </span>
           </div>
-          <div class="text-[11px] text-slate-400 font-mono">
-            Click any peak to load event clip & SAM prompt
+          <div class="text-[11px] text-slate-400 font-mono hidden sm:block">
+            Click peak hotspot to inspect anomaly
           </div>
         </div>
 
-        <!-- SVG Timeline Curve Container -->
-        <div class="relative w-full h-16 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden">
-          <svg viewBox="0 0 1000 80" preserveAspectRatio="none" class="w-full h-full">
-            <!-- Threshold Line at 3.0σ (y = 80 - (3.0/5.5)*70 = 41.8) -->
-            <line x1="0" y1="42" x2="1000" y2="42" stroke="#f43f5e" stroke-dasharray="3 3" stroke-width="1" opacity="0.4" />
+        <!-- SVG Timeline Curve Container with Beautiful Gradient & Breathing Room -->
+        <div class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner">
+          <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs font-mono">
+            Awaiting timeline artifacts from SSD
+          </div>
 
-            <!-- Curve -->
+          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full">
+            <defs>
+              <!-- Gradient under the fever curve -->
+              <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+                <stop offset="60%" stop-color="#f59e0b" stop-opacity="0.08" />
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            <!-- Grid Lines -->
+            <line x1="0" y1="92" x2="1000" y2="92" stroke="#1e293b" stroke-width="1" />
+            <line x1="0" y1="54" x2="1000" y2="54" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1" opacity="0.4" />
+
+            <!-- Filled Area under Curve -->
+            <path
+              v-if="svgAreaPath"
+              :d="svgAreaPath"
+              fill="url(#curveGradient)"
+            />
+
+            <!-- Main Curve Line -->
             <path
               v-if="svgCurvePath"
               :d="svgCurvePath"
               fill="none"
               stroke="#f59e0b"
-              stroke-width="1.8"
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
             />
-
-            <!-- Event Spike Hotspots -->
-            <g v-for="spike in timelineSpikes" :key="spike.eventId">
-              <circle
-                :cx="spike.x"
-                :cy="spike.y"
-                r="5"
-                class="cursor-pointer transition-transform hover:scale-150"
-                :class="selectedEvent?.eventId === spike.eventId ? 'fill-rose-500 stroke-white stroke-2' : 'fill-amber-400 stroke-slate-900 stroke-1'"
-                @click="selectEventById(spike.eventId)"
-              />
-            </g>
           </svg>
+
+          <!-- Hotspot Interactive HTML Pins (100% Perfectly Round, Never Squished) -->
+          <div
+            v-for="spike in timelineSpikes"
+            :key="spike.eventId"
+            class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
+            :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
+            @click="selectEventById(spike.eventId)"
+          >
+            <!-- Pin Dot -->
+            <div class="relative flex items-center justify-center p-2">
+              <span v-if="selectedEvent?.eventId === spike.eventId" class="absolute w-6 h-6 rounded-full bg-rose-500/40 animate-ping"></span>
+              <span
+                class="w-3.5 h-3.5 rounded-full border-2 transition-transform group-hover:scale-125"
+                :class="selectedEvent?.eventId === spike.eventId ? 'bg-rose-500 border-white ring-2 ring-rose-400' : 'bg-amber-400 border-slate-900 shadow-md'"
+              ></span>
+            </div>
+
+            <!-- Tooltip Hover Badge -->
+            <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-slate-700 px-2 py-0.5 rounded text-[10px] font-mono text-amber-300 whitespace-nowrap shadow-xl pointer-events-none">
+              {{ spike.surpriseScoreL2 }}σ ({{ formatTime(spike.timestampSec) }})
+            </div>
+          </div>
         </div>
 
         <!-- Timeline Time Markers -->
-        <div class="flex justify-between text-[10px] font-mono text-slate-500 px-2 pt-0.5">
+        <div class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
           <span>0:00 (Start)</span>
-          <span>7:30</span>
+          <span class="hidden sm:inline">7:30</span>
           <span>15:00</span>
-          <span>22:30</span>
-          <span>30:00</span>
+          <span class="hidden sm:inline">22:30</span>
+          <span class="hidden sm:inline">30:00</span>
           <span>37:30 (End)</span>
         </div>
       </footer>
