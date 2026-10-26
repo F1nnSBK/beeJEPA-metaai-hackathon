@@ -146,7 +146,8 @@ public class MetaMuseService {
                     .connectTimeout(Duration.ofSeconds(5))
                     .build();
 
-            String base = config.getBaseUrl() != null ? config.getBaseUrl().trim().replaceAll("/+$", "") : "https://api.meta.ai";
+            String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
+            String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
             String targetUrl = base.endsWith("/v1") ? base + "/models" : base + "/v1/models";
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(targetUrl))

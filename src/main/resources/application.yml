@@ -14,8 +14,8 @@ micronaut:
 
 meta:
   muse:
-    base-url: ${META_MUSE_BASE_URL:${META_MODEL_BASE_URL:`https://api.meta.ai`}}
-    api-key: ${META_MUSE_API_KEY:${MODEL_API_KEY:${META_MODEL_API_KEY:`default_mock_key`}}}
+    base-url: ${META_MUSE_BASE_URL:https://api.meta.ai}
+    api-key: ${META_MUSE_API_KEY:default_mock_key}
     timeout: ${META_MUSE_TIMEOUT:30s}
 
 beejepa:

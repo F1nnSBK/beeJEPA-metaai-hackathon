@@ -1044,20 +1044,34 @@ async function handleLogout() {
       <footer class="border-t border-slate-800/80 bg-[#0c121e] px-4 sm:px-6 py-3 shrink-0">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2 text-xs">
           <div class="flex items-center gap-2.5">
-            <span class="font-semibold text-slate-200">37.5-Minute Latent Surprise Timeline (rec2123)</span>
-            <span class="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
-              Threshold τ = 3.0σ
+            <span class="font-semibold text-slate-200">
+              {{ timelineData && timelineData.length > 0
+                ? `${Math.round((timelineMeta?.totalDurationSec || 2250) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec'})`
+                : 'Latent Surprise Timeline' }}
+            </span>
+            <span
+              v-if="timelineData && timelineData.length > 0"
+              class="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded"
+            >
+              Threshold τ = {{ timelineMeta?.thresholdSigma || '3.0' }}σ
+            </span>
+            <span
+              v-else
+              class="text-[10px] font-mono text-slate-400 bg-slate-800/80 border border-slate-700 px-1.5 py-0.5 rounded"
+            >
+              Awaiting Data
             </span>
           </div>
           <div class="text-[11px] text-slate-400 font-mono hidden sm:block">
-            Click peak hotspot to inspect anomaly
+            {{ timelineData && timelineData.length > 0 ? 'Click peak hotspot to inspect anomaly' : 'Awaiting V-JEPA latent vectors' }}
           </div>
         </div>
 
         <!-- SVG Timeline Curve Container with Beautiful Gradient & Breathing Room -->
         <div class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner">
-          <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs font-mono">
-            Awaiting timeline artifacts from SSD
+          <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
+            <span>No timeline artifacts found on storage.</span>
+            <span class="text-[11px] text-slate-600">Connect SSD or populate ./data with sequence events.</span>
           </div>
 
           <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full">
@@ -1117,13 +1131,13 @@ async function handleLogout() {
         </div>
 
         <!-- Timeline Time Markers -->
-        <div class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
+        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
           <span>0:00 (Start)</span>
           <span class="hidden sm:inline">7:30</span>
           <span>15:00</span>
           <span class="hidden sm:inline">22:30</span>
           <span class="hidden sm:inline">30:00</span>
-          <span>37:30 (End)</span>
+          <span>{{ formatTime(timelineMeta?.totalDurationSec || 2250) }} (End)</span>
         </div>
       </footer>
     </div>
