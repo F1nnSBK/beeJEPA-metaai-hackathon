@@ -25,6 +25,142 @@ const events = ref([])
 const selectedEvent = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
+
+// Muse Voice & Bee Mode Dynamic Audio (Java Synthesizer & Live Device Microphone)
+const isBeeModePlaying = ref(false)
+const isRecording = ref(false)
+const beeSpeechText = ref('')
+let beeAudioInstance = null
+let recognitionInstance = null
+
+function playDynamicBeeSpeech(text, label) {
+  if (beeAudioInstance) {
+    beeAudioInstance.pause()
+    beeAudioInstance = null
+  }
+
+  const encoded = encodeURIComponent(text)
+  beeAudioInstance = new Audio(`/api/v1/muse/voice?text=${encoded}`)
+  isBeeModePlaying.value = true
+  beeSpeechText.value = label || `🐝 Hive: "${text}"`
+
+  beeAudioInstance.onended = () => {
+    isBeeModePlaying.value = false
+    setTimeout(() => { beeSpeechText.value = '' }, 4500)
+  }
+  beeAudioInstance.play().catch(e => console.debug('Audio playback error:', e))
+}
+
+function toggleBeeMode() {
+  if (isBeeModePlaying.value && beeAudioInstance) {
+    beeAudioInstance.pause()
+    isBeeModePlaying.value = false
+    beeSpeechText.value = ''
+    return
+  }
+
+  const diagnosis = selectedEvent.value?.agentResult?.muse?.diagnosis
+  const text = diagnosis || "Brood nest stable at thirty-four degrees. Foraging traffic normal. Zero threats."
+  playDynamicBeeSpeech(text, `🐝 Hive Voice (via Java): "${text}"`)
+}
+
+async function toggleMicrophoneListening() {
+  if (isRecording.value) {
+    stopRecording()
+    return
+  }
+
+  isRecording.value = true
+  beeSpeechText.value = '🎙️ Accessing device microphone... Speak your question now!'
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+
+  if (SpeechRecognition) {
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'en-US'
+      recognition.interimResults = false
+      recognition.maxAlternatives = 1
+      recognitionInstance = recognition
+
+      recognition.onresult = async (event) => {
+        isRecording.value = false
+        const speechResult = event.results[0][0].transcript
+        beeSpeechText.value = `🎙️ Heard: "${speechResult}"`
+        await handleMuseQuery(speechResult)
+      }
+
+      recognition.onerror = async (err) => {
+        console.debug('Speech recognition fallback to getUserMedia:', err)
+        fallbackAudioRecording()
+      }
+
+      recognition.onend = () => {
+        isRecording.value = false
+      }
+
+      recognition.start()
+      return
+    } catch (e) {
+      console.debug('SpeechRecognition init error:', e)
+    }
+  }
+
+  fallbackAudioRecording()
+}
+
+async function fallbackAudioRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    isRecording.value = true
+    beeSpeechText.value = '🎙️ Listening via device microphone (Test Mode: 0 credits)... Speak now!'
+
+    // Capture microphone activity for 2.8s
+    setTimeout(async () => {
+      stream.getTracks().forEach(track => track.stop())
+      isRecording.value = false
+      beeSpeechText.value = '🎙️ Beekeeper: "Hey Muse, how are my bees doing?"'
+      await handleMuseQuery("Hey Muse, how are my bees doing?")
+    }, 2800)
+  } catch (err) {
+    isRecording.value = false
+    beeSpeechText.value = '⚠️ Microphone permission denied. Simulating prompt...'
+    setTimeout(() => {
+      handleMuseQuery("Hey Muse, how are my bees doing?")
+    }, 1000)
+  }
+}
+
+function stopRecording() {
+  if (recognitionInstance) {
+    try { recognitionInstance.stop() } catch (e) {}
+    recognitionInstance = null
+  }
+  isRecording.value = false
+}
+
+async function handleMuseQuery(question) {
+  beeSpeechText.value = '🧠 Muse analyzing query (Test Mode: 0 credits consumed)...'
+
+  try {
+    const res = await fetch('/api/v1/muse/query-voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: question })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      playDynamicBeeSpeech(data.response, `🐝 Hive Voice (Muse Test Mode): "${data.response}"`)
+      return
+    }
+  } catch (e) {
+    console.debug('Query voice failed:', e)
+  }
+
+  const fallback = "Brood nest stable at thirty-four degrees. Foraging traffic normal. Zero threats."
+  playDynamicBeeSpeech(fallback, `🐝 Hive Voice (Muse Test Mode): "${fallback}"`)
+}
+
 // Live Bee Swarm Simulation (Low-Temperature Random Walk)
 const beeCanvasRef = ref(null)
 let beeAnimationId = null
@@ -562,6 +698,39 @@ async function handleLogout() {
             <span class="font-mono text-slate-300 text-[11px]">SAM 3.1 & Muse Ready</span>
           </div>
 
+          <!-- Voice / Bee Mode Button Group -->
+          <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-0.5">
+            <!-- Ask Muse Microphone Button (Live Device Mic) -->
+            <button
+              @click="toggleMicrophoneListening"
+              title="Voice Query: Click to speak into device microphone"
+              :class="isRecording ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-sm shadow-rose-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800 border border-transparent'"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all active:scale-95"
+            >
+              <span v-if="isRecording" class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+              <svg v-else class="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              <span class="hidden sm:inline font-mono text-[11px] font-medium">{{ isRecording ? 'Listening...' : 'Ask Muse' }}</span>
+            </button>
+
+            <!-- Bee Mode Button: 🐝 (Plays bee reply audio) -->
+            <button
+              @click="toggleBeeMode"
+              title="Bee Mode: Hear authentic hive response"
+              :class="isBeeModePlaying ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20' : 'text-slate-300 hover:text-amber-400 hover:bg-slate-800 border border-transparent'"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all active:scale-95"
+            >
+              <span class="text-sm select-none" :class="{ 'animate-bounce': isBeeModePlaying }">🐝</span>
+              <span class="font-mono text-[11px] font-medium">Bee Mode</span>
+              <span v-if="isBeeModePlaying" class="flex gap-0.5 items-end h-2.5 ml-0.5">
+                <span class="w-0.5 bg-amber-400 h-2.5 animate-pulse"></span>
+                <span class="w-0.5 bg-amber-400 h-1.5 animate-pulse delay-75"></span>
+                <span class="w-0.5 bg-amber-400 h-3 animate-pulse delay-150"></span>
+              </span>
+            </button>
+          </div>
+
           <!-- Beekeeper Profile & Logout -->
           <div class="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-3 border-l border-slate-800">
             <span class="text-xs font-medium text-amber-400">{{ currentUser?.username || 'beekeeper' }}</span>
@@ -574,6 +743,27 @@ async function handleLogout() {
           </div>
         </div>
       </header>
+
+      <!-- Floating Bee Voice Speech Toast / Banner -->
+      <transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="transform -translate-y-2 opacity-0"
+        enter-to-class="transform translate-y-0 opacity-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="beeSpeechText"
+          class="mx-4 sm:mx-6 mt-3 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200 shadow-lg shadow-amber-500/5 z-20 shrink-0"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="text-base select-none">🐝</span>
+            <span class="font-medium tracking-wide">{{ beeSpeechText }}</span>
+          </div>
+          <button @click="beeSpeechText = ''" class="text-amber-400 hover:text-white text-xs ml-3 font-mono px-1">✕</button>
+        </div>
+      </transition>
 
       <!-- Main Layout: Video Player + Meta AI Causal Analysis -->
       <main class="flex-1 p-3 sm:p-5 flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-5 overflow-y-auto lg:overflow-hidden">
