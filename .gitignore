@@ -1,0 +1,43 @@
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Data Repository & SSD Symlinks
+data
+data/
+data.backup
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Gradle Build Outputs
+.gradle/
+build/
+bin/
+out/
+
+# GraalVM Native Image Binaries
+/beejepa
+*.o
+
+# IDE & Editor Files
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# macOS & System Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

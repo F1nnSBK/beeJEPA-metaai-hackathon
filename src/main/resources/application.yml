@@ -1,0 +1,30 @@
+micronaut:
+  application:
+    name: beeJEPA
+  server:
+    port: ${PORT:8080}
+    thread-selection: AUTO
+    cors:
+      enabled: true
+
+meta:
+  muse:
+    base-url: ${META_MUSE_BASE_URL:`https://api.muse.meta.com`}
+    api-key: ${META_MUSE_API_KEY:`default_mock_key`}
+    timeout: ${META_MUSE_TIMEOUT:30s}
+
+beejepa:
+  data:
+    path: ${BEEJEPA_DATA_PATH:./data}
+    require-symlink: ${BEEJEPA_REQUIRE_SYMLINK:false}
+  sqlite:
+    filename: state.db
+    busy-timeout-ms: 5000
+
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+  info:
+    enabled: true
+    sensitive: false
