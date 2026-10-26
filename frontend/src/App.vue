@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import beeLogo from './assets/bee.png'
 
 // Auth state
@@ -25,24 +25,217 @@ const events = ref([])
 const selectedEvent = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
-// Animated floating bees for landing page background
-const floatingBees = [
-  { id: 1, src: '/bee.png', size: 46, top: 10, left: 12, delay: 0, duration: 18, anim: 'bee-wander-1', opacity: 0.42 },
-  { id: 2, src: '/bee_fluent3d.png', size: 54, top: 20, left: 82, delay: 2.5, duration: 22, anim: 'bee-wander-2', opacity: 0.38 },
-  { id: 3, src: '/bee_twemoji.svg', size: 38, top: 72, left: 10, delay: 1, duration: 16, anim: 'bee-wander-3', opacity: 0.35 },
-  { id: 4, src: '/bee.png', size: 34, top: 68, left: 86, delay: 4, duration: 20, anim: 'bee-wander-1', opacity: 0.32 },
-  { id: 5, src: '/bee_fluent3d.png', size: 48, top: 82, left: 38, delay: 1.5, duration: 24, anim: 'bee-wander-2', opacity: 0.30 },
-  { id: 6, src: '/bee_twemoji.svg', size: 40, top: 14, left: 58, delay: 3.5, duration: 17, anim: 'bee-wander-3', opacity: 0.36 },
-  { id: 7, src: '/bee.png', size: 32, top: 44, left: 5, delay: 5, duration: 19, anim: 'bee-wander-2', opacity: 0.28 },
-  { id: 8, src: '/bee_fluent3d.png', size: 38, top: 40, left: 91, delay: 2, duration: 21, anim: 'bee-wander-1', opacity: 0.34 }
+// Live Bee Swarm Simulation (Low-Temperature Random Walk)
+const beeCanvasRef = ref(null)
+let beeAnimationId = null
+
+const beeSprites = [
+  '/bee.png',
+  '/bee_fluent3d.png'
 ]
+
+function initBeeSwarm() {
+  const canvas = beeCanvasRef.value
+  if (!canvas) return
+
+  const ctx = canvas.getContext('2d')
+  let width = 0
+  let height = 0
+
+  const updateDimensions = () => {
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    width = rect.width || window.innerWidth
+    height = rect.height || window.innerHeight
+    canvas.width = width * dpr
+    canvas.height = height * dpr
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(dpr, dpr)
+  }
+  updateDimensions()
+  window.addEventListener('resize', updateDimensions)
+
+  // Preload premium 3D bee sprites
+  const loadedImages = beeSprites.map(src => {
+    const img = new Image()
+    img.src = src
+    return img
+  })
+
+  // 12 bees evenly distributed across a 3x4 stratified grid with organic jitter
+  const cols = 3
+  const rows = 4
+  const count = cols * rows
+  const bees = Array.from({ length: count }, (_, i) => {
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const cellW = (width || window.innerWidth) / cols
+    const cellH = (height || window.innerHeight) / rows
+
+    // Stratified position across screen zones with organic jitter
+    const spawnX = (col + 0.15 + Math.random() * 0.7) * cellW
+    const spawnY = (row + 0.15 + Math.random() * 0.7) * cellH
+
+    const angle = Math.random() * Math.PI * 2
+    const cruiseSpeed = 0.32 + Math.random() * 0.32 // calm, gentle drift
+    const z = 0.80 + Math.random() * 0.38
+
+    return {
+      x: spawnX,
+      y: spawnY,
+      z: z,
+      targetZ: z,
+      depthTimer: Math.floor(Math.random() * 300),
+      vx: Math.cos(angle) * cruiseSpeed,
+      vy: Math.sin(angle) * cruiseSpeed,
+      cruiseSpeed: cruiseSpeed,
+      baseSize: 32 + (i % 3) * 4, // 32px, 36px, 40px
+      imgIndex: i % loadedImages.length,
+      wobblePhase: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.13 + Math.random() * 0.05,
+      wanderPhase: Math.random() * Math.PI * 2,
+      wanderSpeed: 0.006 + Math.random() * 0.008
+    }
+  })
+
+  function animate() {
+    if (isAuthenticated.value) return
+    ctx.clearRect(0, 0, width, height)
+
+    // 1. Physics update: separation, wander, boundary avoidance & speed damping
+    for (let i = 0; i < bees.length; i++) {
+      const bee = bees[i]
+
+      // Organic smooth wandering curve (individual steer per bee)
+      bee.wanderPhase += bee.wanderSpeed
+      const wanderSteer = Math.sin(bee.wanderPhase) * 0.012
+      const perpX = -bee.vy
+      const perpY = bee.vx
+      const perpLen = Math.hypot(perpX, perpY) || 1
+      bee.vx += (perpX / perpLen) * wanderSteer
+      bee.vy += (perpY / perpLen) * wanderSteer
+
+      // Mutual separation force (Boids): ensures bees never clump or overlap
+      for (let j = 0; j < bees.length; j++) {
+        if (i === j) continue
+        const other = bees[j]
+        const dx = bee.x - other.x
+        const dy = bee.y - other.y
+        const distSq = dx * dx + dy * dy
+        const minDist = 110 // personal space radius in px
+        if (distSq < minDist * minDist && distSq > 0) {
+          const dist = Math.sqrt(distSq)
+          const repelForce = ((minDist - dist) / minDist) * 0.035
+          bee.vx += (dx / dist) * repelForce
+          bee.vy += (dy / dist) * repelForce
+        }
+      }
+
+      // Gentle avoidance of card center (encourages bees to circulate in visible perimeter)
+      const centerX = width / 2
+      const centerY = height / 2
+      const cdx = bee.x - centerX
+      const cdy = bee.y - centerY
+      const cardDist = Math.hypot(cdx, cdy)
+      const cardRadius = Math.min(width * 0.42, 220)
+      if (cardDist < cardRadius && cardDist > 0) {
+        const cardPush = ((cardRadius - cardDist) / cardRadius) * 0.02
+        bee.vx += (cdx / cardDist) * cardPush
+        bee.vy += (cdy / cardDist) * cardPush
+      }
+
+      // Smooth soft boundary steering away from screen edges
+      const margin = 45
+      if (bee.x < margin) bee.vx += 0.03
+      else if (bee.x > width - margin) bee.vx -= 0.03
+      if (bee.y < margin) bee.vy += 0.03
+      else if (bee.y > height - margin) bee.vy -= 0.03
+
+      // Normalize velocity towards calm cruise speed
+      const curSpeed = Math.hypot(bee.vx, bee.vy) || 0.001
+      const newSpeed = curSpeed + (bee.cruiseSpeed - curSpeed) * 0.04
+      bee.vx = (bee.vx / curSpeed) * newSpeed
+      bee.vy = (bee.vy / curSpeed) * newSpeed
+
+      // Very slow and gentle depth drift (changes target depth every 6-12s)
+      bee.depthTimer--
+      if (bee.depthTimer <= 0) {
+        bee.targetZ = 0.80 + Math.random() * 0.38
+        bee.depthTimer = 360 + Math.floor(Math.random() * 360)
+      }
+      bee.z += (bee.targetZ - bee.z) * 0.003
+
+      // Update position scaled subtly by depth
+      const depthSpeedScale = 0.75 + bee.z * 0.25
+      bee.x += bee.vx * depthSpeedScale
+      bee.y += bee.vy * depthSpeedScale
+
+      // Wing flutter phase
+      bee.wobblePhase += bee.wobbleSpeed
+    }
+
+    // 2. Sort by depth (distant bees behind, foreground bees on top)
+    bees.sort((a, b) => a.z - b.z)
+
+    // 3. Render each bee
+    for (const bee of bees) {
+      const img = loadedImages[bee.imgIndex]
+      if (!img.complete || img.naturalWidth === 0) continue
+
+      const jitterY = Math.sin(bee.wobblePhase) * (0.7 * bee.z)
+      const jitterRot = Math.cos(bee.wobblePhase * 1.2) * 0.03
+
+      const currentSize = bee.baseSize * bee.z
+      const currentOpacity = 0.30 + (bee.z - 0.80) * 0.22 // subtle ambient opacity
+
+      ctx.save()
+      ctx.globalAlpha = currentOpacity
+      ctx.translate(bee.x, bee.y + jitterY)
+
+      // Flight heading & pitch tilt
+      const flyingRight = bee.vx > 0
+      if (flyingRight) {
+        ctx.scale(-1, 1) // flip horizontally to face right
+        ctx.rotate(-Math.atan2(bee.vy, bee.vx) + jitterRot)
+      } else {
+        ctx.rotate(Math.atan2(bee.vy, -bee.vx) + jitterRot)
+      }
+
+      ctx.drawImage(img, -currentSize / 2, -currentSize / 2, currentSize, currentSize)
+      ctx.restore()
+    }
+
+    beeAnimationId = requestAnimationFrame(animate)
+  }
+
+  beeAnimationId = requestAnimationFrame(animate)
+}
+
+watch(isAuthenticated, (val) => {
+  if (!val) {
+    nextTick(() => initBeeSwarm())
+  } else if (beeAnimationId) {
+    cancelAnimationFrame(beeAnimationId)
+    beeAnimationId = null
+  }
+})
 
 onMounted(async () => {
   const token = localStorage.getItem('beejepa_token')
   if (token) {
     await fetchUserProfile(token)
   }
+  if (!isAuthenticated.value) {
+    nextTick(() => initBeeSwarm())
+  }
   await loadSystemAndData()
+})
+
+onUnmounted(() => {
+  if (beeAnimationId) {
+    cancelAnimationFrame(beeAnimationId)
+  }
 })
 
 async function fetchUserProfile(token) {
@@ -268,32 +461,11 @@ async function handleLogout() {
       <!-- Ambient Glow Behind Modal -->
       <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <!-- Animated Floating Bees in Background -->
-      <div class="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        <div
-          v-for="bee in floatingBees"
-          :key="bee.id"
-          class="absolute select-none pointer-events-none transition-transform"
-          :style="{
-            top: `${bee.top}%`,
-            left: `${bee.left}%`,
-            width: `${bee.size}px`,
-            height: `${bee.size}px`,
-            opacity: bee.opacity,
-            animationName: bee.anim,
-            animationDuration: `${bee.duration}s`,
-            animationDelay: `${bee.delay}s`,
-            animationIterationCount: 'infinite',
-            animationTimingFunction: 'ease-in-out'
-          }"
-        >
-          <img
-            :src="bee.src"
-            alt="Bee"
-            class="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(245,158,11,0.35)]"
-          />
-        </div>
-      </div>
+      <!-- Animated Real-Time Bee Swarm Simulation Canvas -->
+      <canvas
+        ref="beeCanvasRef"
+        class="absolute inset-0 w-full h-full pointer-events-none z-0"
+      ></canvas>
 
       <div class="w-full max-w-md bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10">
         <!-- Logo & Title -->
@@ -676,59 +848,3 @@ async function handleLogout() {
     </div>
   </div>
 </template>
-
-<style scoped>
-@keyframes bee-wander-1 {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  25% {
-    transform: translate3d(40px, -30px, 0) rotate(14deg) scale(1.06);
-  }
-  50% {
-    transform: translate3d(70px, 15px, 0) rotate(-8deg) scale(0.95);
-  }
-  75% {
-    transform: translate3d(25px, 45px, 0) rotate(12deg) scale(1.03);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-}
-
-@keyframes bee-wander-2 {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  30% {
-    transform: translate3d(-45px, 35px, 0) rotate(-16deg) scale(0.94);
-  }
-  60% {
-    transform: translate3d(-20px, -40px, 0) rotate(12deg) scale(1.05);
-  }
-  85% {
-    transform: translate3d(30px, -15px, 0) rotate(-6deg) scale(1);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-}
-
-@keyframes bee-wander-3 {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-  20% {
-    transform: translate3d(30px, -40px, 0) rotate(10deg);
-  }
-  45% {
-    transform: translate3d(-35px, -18px, 0) rotate(-15deg);
-  }
-  75% {
-    transform: translate3d(40px, 30px, 0) rotate(12deg);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-}
-</style>
