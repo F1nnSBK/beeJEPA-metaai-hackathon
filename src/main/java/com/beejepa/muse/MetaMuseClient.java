@@ -11,6 +11,23 @@ import io.micronaut.http.client.annotation.Client;
 @Client("${meta.muse.base-url}")
 public interface MetaMuseClient {
 
+    @io.micronaut.http.annotation.Get("/models")
+    HttpResponse<String> listModels(
+            @Header("Authorization") String authorization
+    );
+
+    @Post("/responses")
+    HttpResponse<String> createResponse(
+            @Header("Authorization") String authorization,
+            @Body String requestJson
+    );
+
+    @Post("/chat/completions")
+    HttpResponse<String> chatCompletions(
+            @Header("Authorization") String authorization,
+            @Body String requestJson
+    );
+
     @Post("/v1/models/muse/generate")
     HttpResponse<MuseInferenceResponse> infer(
             @Header("Authorization") String authorization,

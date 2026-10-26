@@ -9,7 +9,7 @@ import java.time.Duration;
 @ConfigurationProperties("meta.muse")
 public class MetaMuseConfig {
 
-    private String baseUrl = "https://api.muse.meta.com";
+    private String baseUrl = "https://api.meta.ai";
     private String apiKey = "";
     private Duration timeout = Duration.ofSeconds(30);
 

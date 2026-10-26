@@ -33,6 +33,29 @@ const isProcessing = ref(false)
 let beeAudioInstance = null
 let activeStopRecording = null
 
+// Meta Model API Health state
+const metaHealth = ref({
+  configured: false,
+  liveConnection: false,
+  status: 'CHECKING',
+  statusCode: 200,
+  latencyMs: 0,
+  baseUrl: '',
+  availableModels: [],
+  message: 'Prüfe Meta Model API...'
+})
+
+async function checkMetaHealth() {
+  try {
+    const res = await fetch('/api/v1/muse/health')
+    if (res.ok) {
+      metaHealth.value = await res.json()
+    }
+  } catch (e) {
+    console.debug('Failed to check Meta API health:', e)
+  }
+}
+
 function encodeWavBuffer(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buffer)
@@ -486,6 +509,7 @@ async function loadSystemAndData() {
         selectEvent(list[0])
       }
     }
+    checkMetaHealth()
   } catch (err) {
     console.debug('Failed loading initial data:', err)
   }
@@ -766,12 +790,21 @@ async function handleLogout() {
             </span>
           </div>
 
-          <!-- Meta Model APIs Status -->
-          <div class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span class="text-slate-400">Meta APIs:</span>
-            <span class="font-mono text-slate-300 text-[11px]">SAM 3.1 & Muse Ready</span>
-          </div>
+          <!-- Meta Model APIs Status Badge -->
+          <button
+            @click="checkMetaHealth"
+            :title="metaHealth.message + ' (Klicken zum erneuten Testen)'"
+            class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer text-left"
+          >
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="metaHealth.liveConnection ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : (metaHealth.configured ? 'bg-amber-400 animate-pulse' : 'bg-slate-500')"
+            ></span>
+            <span class="text-slate-400">Meta API:</span>
+            <span class="font-mono text-slate-300 text-[11px]">
+              {{ metaHealth.liveConnection ? 'Live (' + metaHealth.latencyMs + 'ms)' : (metaHealth.configured ? metaHealth.status : 'Mock (0 Credits)') }}
+            </span>
+          </button>
 
           <!-- Voice / Bee Mode Button Group -->
           <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-0.5">

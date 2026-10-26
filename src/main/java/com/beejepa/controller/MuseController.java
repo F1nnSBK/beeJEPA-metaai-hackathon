@@ -63,15 +63,24 @@ public class MuseController {
                 .header("Cache-Control", "no-cache");
     }
 
+    @Get("/health")
+    public com.beejepa.muse.dto.MetaHealthCheckResult checkHealth() {
+        return museService.checkHealth();
+    }
+
     @Get("/status")
     public Map<String, Object> getStatus() {
-        boolean configured = museService.getConfig().isConfigured();
+        com.beejepa.muse.dto.MetaHealthCheckResult health = museService.checkHealth();
         return Map.of(
-                "configured", configured,
-                "baseUrl", museService.getConfig().getBaseUrl(),
-                "status", configured ? "STANDBY" : "DORMANT_OFFLINE",
+                "configured", health.configured(),
+                "liveConnection", health.liveConnection(),
+                "baseUrl", health.baseUrl(),
+                "status", health.status(),
+                "statusCode", health.statusCode(),
+                "latencyMs", health.latencyMs(),
+                "availableModels", health.availableModels(),
                 "creditsConsumed", 0,
-                "message", configured ? "Key detected. Ready for manual triggers." : "No active API key set. Zero credits consumed.",
+                "message", health.message(),
                 "thread", Thread.currentThread().toString()
         );
     }
