@@ -149,12 +149,6 @@ async function handleLogout() {
           </div>
         </div>
 
-        <!-- Hardware Tag -->
-        <div class="mb-6 p-3 bg-slate-900/80 rounded-lg border border-slate-800 text-xs flex items-center justify-between text-slate-400">
-          <span>Target Device:</span>
-          <span class="font-mono text-amber-400 font-semibold">{{ hardware }}</span>
-        </div>
-
         <!-- Error Banner -->
         <div v-if="loginError" class="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">
           {{ loginError }}

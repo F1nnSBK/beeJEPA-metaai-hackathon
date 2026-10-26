@@ -125,6 +125,6 @@ public class StorageService {
         if (bytes < 1024) return bytes + " B";
         int exp = (int) (Math.log(bytes) / Math.log(1024));
         char pre = "KMGTPE".charAt(exp - 1);
-        return String.format("%.2f %siB", bytes / Math.pow(1024, exp), pre);
+        return String.format(java.util.Locale.US, "%.2f %siB", bytes / Math.pow(1024, exp), pre);
     }
 }
