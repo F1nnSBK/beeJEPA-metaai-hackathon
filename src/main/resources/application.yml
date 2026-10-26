@@ -6,6 +6,11 @@ micronaut:
     thread-selection: AUTO
     cors:
       enabled: true
+  router:
+    static-resources:
+      frontend:
+        paths: classpath:public
+        mapping: /**
 
 meta:
   muse:

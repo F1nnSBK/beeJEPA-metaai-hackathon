@@ -20,6 +20,16 @@ build/
 bin/
 out/
 
+# Node & Frontend Build Outputs
+node_modules/
+*/node_modules/
+frontend/dist/
+src/main/resources/public/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # GraalVM Native Image Binaries
 /beejepa
 *.o
