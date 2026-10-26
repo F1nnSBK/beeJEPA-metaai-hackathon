@@ -35,11 +35,13 @@ public class MetaMuseService {
     private final MetaMuseClient client;
     private final MetaMuseConfig config;
     private final StateRepository stateRepository;
+    private final com.beejepa.event.EventService eventService;
 
-    public MetaMuseService(MetaMuseClient client, MetaMuseConfig config, StateRepository stateRepository) {
+    public MetaMuseService(MetaMuseClient client, MetaMuseConfig config, StateRepository stateRepository, com.beejepa.event.EventService eventService) {
         this.client = client;
         this.config = config;
         this.stateRepository = stateRepository;
+        this.eventService = eventService;
     }
 
     public MuseInferenceResponse callInference(MuseInferenceRequest request) {
@@ -220,6 +222,113 @@ public class MetaMuseService {
             models.add(m.group(1));
         }
         return models;
+    }
+
+    public com.beejepa.muse.dto.StagedMuseRequest prepareMuseQuery(com.beejepa.muse.dto.PrepareMuseQueryRequest request) {
+        String eventId = request != null ? request.eventId() : null;
+        Map<String, Object> eventData = (request != null && request.eventData() != null)
+                ? new java.util.HashMap<>(request.eventData())
+                : new java.util.HashMap<>();
+
+        if (eventData.isEmpty() && eventId != null && !eventId.isBlank()) {
+            eventService.getEvent(eventId).ifPresent(ev -> {
+                Object rawEvent = ev.get("event");
+                if (rawEvent instanceof com.beejepa.event.AnomalyEvent ae) {
+                    eventData.put("eventId", ae.eventId());
+                    eventData.put("sequenceId", ae.sequenceId());
+                    eventData.put("timestampSec", ae.timestampSec());
+                    eventData.put("frameIndex", ae.frameIndex());
+                    eventData.put("surpriseScoreL2", ae.surpriseScoreL2());
+                    eventData.put("pixelDiffBaseline", ae.pixelDiffBaseline());
+                    eventData.put("hotspot", ae.hotspot());
+                }
+                if (ev.containsKey("agentResult")) {
+                    eventData.put("agentResult", ev.get("agentResult"));
+                }
+            });
+        }
+
+        String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
+        String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
+        String targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
+
+        String maskedKey = "UNCONFIGURED_KEY";
+        if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+            String key = config.getApiKey();
+            maskedKey = (key.length() > 14 ? key.substring(0, 14) : key) + "****************";
+        }
+
+        Map<String, String> headers = Map.of(
+                "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
+                "Content-Type", "application/json",
+                "Accept", "application/json",
+                "X-Meta-Client", "beeJEPA-V-JEPA-Integration/1.0"
+        );
+
+        String userQuestion = (request != null && request.question() != null && !request.question().isBlank())
+                ? request.question()
+                : "Explain this anomaly event: What physical interaction occurred in this tubelet region and what is the threat assessment?";
+
+        // Grounded prompt with complete causal physics and event telemetry
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("System: You are Meta Muse (multimodal world-model reasoning system), integrated into the BeeJEPA real-time hive entrance surveillance pipeline.\n");
+        promptBuilder.append("Your role is to diagnose physical anomalies in video sequences using V-JEPA latent surprise dynamics and SAM 3.1 visual grounding.\n\n");
+        promptBuilder.append("### Active Anomaly Telemetry:\n");
+
+        if (!eventData.isEmpty()) {
+            promptBuilder.append(String.format("- Event Identifier: %s\n", eventData.getOrDefault("eventId", eventId != null ? eventId : "evt_active")));
+            if (eventData.containsKey("surpriseScoreL2")) {
+                promptBuilder.append(String.format(java.util.Locale.US, "- V-JEPA Latent Surprise Error (sigma): %.2f sigma\n", Double.parseDouble(String.valueOf(eventData.get("surpriseScoreL2")))));
+            }
+            if (eventData.containsKey("pixelDiffBaseline")) {
+                promptBuilder.append(String.format(java.util.Locale.US, "- Baseline Frame Pixel Difference: %.4f (Low pixel shift vs high latent surprise confirms semantic action)\n", Double.parseDouble(String.valueOf(eventData.get("pixelDiffBaseline")))));
+            }
+            if (eventData.containsKey("frameIndex") && eventData.containsKey("timestampSec")) {
+                promptBuilder.append(String.format(java.util.Locale.US, "- Temporal Coordinates: Peak frame #%s at %.2f seconds\n", eventData.get("frameIndex"), Double.parseDouble(String.valueOf(eventData.get("timestampSec")))));
+            }
+            if (eventData.get("hotspot") != null) {
+                promptBuilder.append(String.format("- Spatial Hotspot Tubelet: %s\n", eventData.get("hotspot")));
+            }
+            if (eventData.get("agentResult") != null) {
+                promptBuilder.append(String.format("- SAM 3.1 Visual Segmentation: %s\n", eventData.get("agentResult")));
+            }
+        } else {
+            promptBuilder.append("- Event Context: Real-time Live Hive Entrance Stream (No historical anomaly selected)\n");
+            promptBuilder.append("- Monitoring: Standard foraging traffic at 60 FPS\n");
+        }
+
+        promptBuilder.append("\n### Beekeeper Query:\n");
+        promptBuilder.append(userQuestion).append("\n\n");
+        promptBuilder.append("### Instructions for Muse:\n");
+        promptBuilder.append("1. Provide a concise, physics-grounded diagnosis of the bee flight trajectory and interaction.\n");
+        promptBuilder.append("2. Classify the threat level (Normal Hive Traffic, Mid-Air Collision, Wasps/Hornet Predation, Swarming Behavior).\n");
+        promptBuilder.append("3. Provide one immediate action recommendation for the beekeeper.");
+
+        String fullPrompt = promptBuilder.toString();
+        int estimatedTokens = Math.max(20, fullPrompt.length() / 4);
+
+        Map<String, Object> payload = Map.of(
+                "model", "muse-wonder-1.0",
+                "reasoning", Map.of("effort", "high"),
+                "input", fullPrompt
+        );
+
+        return new com.beejepa.muse.dto.StagedMuseRequest(
+                true,                          // staged
+                false,                         // sent: explicitly NOT sent
+                targetUrl,
+                "POST",
+                "muse-wonder-1.0",
+                headers,
+                payload,
+                fullPrompt,
+                eventId != null ? eventId : (String) eventData.get("eventId"),
+                eventData,
+                estimatedTokens,
+                0L,                            // 0 credits consumed
+                "Payload prepared with event telemetry. Staged for Meta Muse endpoint (Not transmitted - 0 credits consumed).",
+                Instant.now().toString()
+        );
     }
 
     public MetaMuseConfig getConfig() {

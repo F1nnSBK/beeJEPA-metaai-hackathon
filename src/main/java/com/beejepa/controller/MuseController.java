@@ -120,6 +120,12 @@ public class MuseController {
         );
     }
 
+    @Post("/prepare-query")
+    public HttpResponse<com.beejepa.muse.dto.StagedMuseRequest> prepareQuery(@Body com.beejepa.muse.dto.PrepareMuseQueryRequest request) {
+        com.beejepa.muse.dto.StagedMuseRequest staged = museService.prepareMuseQuery(request);
+        return HttpResponse.ok(staged);
+    }
+
     @Post("/embeddings")
     public MuseInferenceResponse embeddings(@Body MuseInferenceRequest request) {
         return museService.callEmbedding(request);
