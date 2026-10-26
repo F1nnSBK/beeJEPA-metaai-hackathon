@@ -278,7 +278,7 @@ async function handleLogout() {
               type="text"
               required
               autocomplete="username"
-              class="w-full px-3.5 py-2.5 bg-[#0b0f19] border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
+              class="w-full px-3.5 py-2.5 bg-[#0b0f19] border border-slate-700 rounded-lg text-base sm:text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
               placeholder="beekeeper"
             />
           </div>
@@ -290,7 +290,7 @@ async function handleLogout() {
               type="password"
               required
               autocomplete="current-password"
-              class="w-full px-3.5 py-2.5 bg-[#0b0f19] border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
+              class="w-full px-3.5 py-2.5 bg-[#0b0f19] border border-slate-700 rounded-lg text-base sm:text-sm text-white focus:outline-none focus:border-amber-400 transition-colors"
               placeholder="••••••••••••"
             />
           </div>
