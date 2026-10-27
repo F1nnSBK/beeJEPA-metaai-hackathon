@@ -840,7 +840,7 @@ async function handleLogout() {
               class="w-2 h-2 rounded-full"
               :class="metaHealth.liveConnection ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : (metaHealth.configured ? 'bg-amber-400 animate-pulse' : 'bg-slate-500')"
             ></span>
-            <span class="text-slate-400">Meta API:</span>
+            <span class="text-slate-400">Baseten Muse:</span>
             <span class="font-mono text-slate-300 text-[11px]">
               {{ metaHealth.liveConnection ? 'Live (' + metaHealth.latencyMs + 'ms)' : (metaHealth.configured ? metaHealth.status : 'Mock (0 Credits)') }}
             </span>
@@ -1055,17 +1055,17 @@ async function handleLogout() {
               <div class="flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
                   <span>🐝</span>
-                  <span>Meta Muse Payload Bereitgestellt</span>
+                  <span>Muse Spark Open Staged (Baseten)</span>
                 </span>
                 <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                   Staged (0 Credits)
                 </span>
               </div>
               <p class="text-[11px] text-slate-300">
-                Grounded an Event: <span class="font-mono text-amber-300">{{ stagedMuseQuery.eventId || 'Active' }}</span> ({{ stagedMuseQuery.estimatedTokens }} Tokens)
+                Grounded: SAM Mask + V-JEPA Event <span class="font-mono text-amber-300">{{ stagedMuseQuery.eventId || 'Active' }}</span> ({{ stagedMuseQuery.estimatedTokens }} Tokens)
               </p>
               <div class="flex items-center justify-between pt-1 text-[11px]">
-                <span class="text-slate-400 font-mono text-[10px]">POST /v1/responses</span>
+                <span class="text-slate-400 font-mono text-[10px]">{{ stagedMuseQuery.httpMethod || 'POST' }} {{ stagedMuseQuery.model || 'meta-models/muse-spark-open' }}</span>
                 <button
                   @click="stagedMuseModalOpen = true"
                   class="font-medium text-amber-400 hover:text-amber-300 underline underline-offset-2"
@@ -1230,13 +1230,13 @@ async function handleLogout() {
           <div>
             <div class="flex items-center gap-2">
               <span class="text-base select-none">🐝</span>
-              <h3 class="text-sm sm:text-base font-semibold text-white">Meta Muse Query Staging</h3>
+              <h3 class="text-sm sm:text-base font-semibold text-white">Muse Spark Open Staging (Baseten)</h3>
               <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 Bereitgestellt • Noch nicht abgesendet
               </span>
             </div>
             <p class="text-xs text-slate-400 mt-1">
-              Event-Daten gebunden an den Meta Muse Endpoint (<code class="font-mono text-amber-300/90">{{ stagedMuseQuery?.targetUrl || 'https://api.meta.ai/v1/responses' }}</code>)
+              Event- & SAM 3.1 Maskendaten gebunden an Baseten Model API (<code class="font-mono text-amber-300/90">{{ stagedMuseQuery?.targetUrl || 'https://inference.baseten.co/v1/chat/completions' }}</code>)
             </p>
           </div>
           <button
@@ -1259,7 +1259,7 @@ async function handleLogout() {
                 Budget-Schutz aktiv • 0 Credits verbraucht
               </div>
               <p class="text-slate-300 text-[11px] leading-relaxed">
-                Die Anfrage ist vollständig formatiert und mit den V-JEPA Event-Metadaten verknüpft. Sie liegt im Staging-Modus und wird <span class="text-amber-200 font-medium">noch nicht</span> an den externen Meta API Host übertragen.
+                Die Anfrage ist vollständig formatiert: Zuerst SAM 3.1 Instanzsegmentierung, dann Maske & SAM-Eingangsdaten gebunden in den OpenAI-kompatiblen Payload für <span class="text-amber-200 font-semibold">{{ stagedMuseQuery?.model || 'meta-models/muse-spark-open' }}</span>. Liegt im Staging-Modus und wird <span class="text-amber-200 font-medium">noch nicht</span> an Baseten gesendet.
               </p>
             </div>
           </div>

@@ -176,6 +176,18 @@ public class EventService {
         samResult.put("instanceCount", 2);
         samResult.put("segmentationMaskRle", "compact_rle_instance_0");
         samResult.put("segmentedObject", "Bee Collision Pair");
+        samResult.put("targetFrame", "peak_frame.jpg");
+
+        // Attach input parameters that went into SAM 3.1
+        getEvent(eventId).ifPresent(ev -> {
+            Object rawEvent = ev.get("event");
+            if (rawEvent instanceof AnomalyEvent ae) {
+                samResult.put("boxPrompt", ae.hotspot());
+                samResult.put("frameIndex", ae.frameIndex());
+                samResult.put("timestampSec", ae.timestampSec());
+                samResult.put("surpriseScoreL2", ae.surpriseScoreL2());
+            }
+        });
         result.put("sam", samResult);
 
         Map<String, Object> museResult = new HashMap<>();
