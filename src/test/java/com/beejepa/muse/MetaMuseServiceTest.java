@@ -227,4 +227,17 @@ class MetaMuseServiceTest {
         Assertions.assertEquals(0, ((Number) trans.get("creditsConsumed")).intValue());
         Assertions.assertNotNull(trans.get("transcript"));
     }
+
+    @Test
+    void testCleanMuseOutput() {
+        String rawOutput = "<|start|>assistant to=commentary<|message|>Here is internal commentary.<|eom|>"
+                + "Normal beekeeper report: Hive traffic is calm."
+                + "<|start|>assistant to=thought<|message|>hidden thought<|eot|>";
+
+        String cleaned = MetaMuseService.cleanMuseOutput(rawOutput);
+        Assertions.assertTrue(cleaned.contains("Here is internal commentary."));
+        Assertions.assertTrue(cleaned.contains("Normal beekeeper report: Hive traffic is calm."));
+        Assertions.assertFalse(cleaned.contains("assistant to="));
+        Assertions.assertFalse(cleaned.contains("hidden thought"));
+    }
 }

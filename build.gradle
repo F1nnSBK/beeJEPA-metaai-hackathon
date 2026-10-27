@@ -26,6 +26,7 @@ dependencies {
     implementation("io.micronaut.micrometer:micronaut-micrometer-core")
     implementation("io.micronaut.micrometer:micronaut-micrometer-registry-prometheus")
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
+    implementation("com.openai:openai-java:4.93.0")
 
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")

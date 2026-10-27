@@ -25,30 +25,94 @@ import java.time.Instant;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.beejepa.muse.SamGeometry.BoundingBox;
+import com.beejepa.muse.SamGeometry.ContainedBee;
+import com.beejepa.muse.SamGeometry.EventSpatialSummary;
+import com.beejepa.muse.VisualCropRenderer.RenderedVisuals;
+import com.fasterxml.jackson.annotation.JsonClassDescription;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
+import com.openai.core.JsonSchemaLocalValidation;
+import com.openai.errors.OpenAIServiceException;
+import com.openai.models.chat.completions.ChatCompletion;
+import com.openai.models.chat.completions.ChatCompletionContentPart;
+import com.openai.models.chat.completions.ChatCompletionContentPartImage;
+import com.openai.models.chat.completions.ChatCompletionContentPartText;
+import com.openai.models.chat.completions.ChatCompletionCreateParams;
+import com.openai.models.chat.completions.ChatCompletionMessage;
+import com.openai.models.chat.completions.ChatCompletionMessageFunctionToolCall;
+import com.openai.models.chat.completions.ChatCompletionMessageToolCall;
+import com.openai.models.chat.completions.ChatCompletionToolMessageParam;
+import java.awt.image.BufferedImage;
+import java.nio.file.Path;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @Singleton
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class MetaMuseService {
 
     private static final Logger LOG = LoggerFactory.getLogger(MetaMuseService.class);
+    private static final String BASETEN_MODEL = "meta-models/muse-spark-open-1026";
+    private static final Pattern COMMENTARY_BLOCK =
+            Pattern.compile("<\\|start\\|>assistant to=commentary<\\|message\\|>(.*?)<\\|eom\\|>", Pattern.DOTALL);
+    private static final Pattern INTERNAL_TAG_BLOCK =
+            Pattern.compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eot\\|>|$)", Pattern.DOTALL);
 
     private final MetaMuseClient client;
     private final MetaMuseConfig config;
     private final BasetenConfig basetenConfig;
     private final StateRepository stateRepository;
     private final com.beejepa.event.EventService eventService;
+    private final Sam31Client sam31Client;
+    private final ObjectMapper objectMapper;
+    private final OpenAIClient basetenClient;
+    private final String fallbackApiKey;
+    private final Map<String, EventSpatialSummary> spatialCache = new ConcurrentHashMap<>();
 
     @Inject
     public MetaMuseService(MetaMuseClient client,
                            MetaMuseConfig config,
                            BasetenConfig basetenConfig,
                            StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService) {
+                           com.beejepa.event.EventService eventService,
+                           Sam31Client sam31Client,
+                           ObjectMapper objectMapper) {
         this.client = client;
         this.config = config;
         this.basetenConfig = basetenConfig != null ? basetenConfig : new BasetenConfig();
         this.stateRepository = stateRepository;
         this.eventService = eventService;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+        this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper);
+
+        String primaryKey = Optional.ofNullable(System.getenv("BASETEN_API_KEY1"))
+                .or(() -> Optional.ofNullable(this.basetenConfig.getApiKey()))
+                .orElse("");
+        this.fallbackApiKey = Optional.ofNullable(System.getenv("BASETEN_API_KEY2")).orElse("");
+        String baseUrl = Optional.ofNullable(System.getenv("BASETEN_BASE_URL"))
+                .or(() -> Optional.ofNullable(this.basetenConfig.getBaseUrl()))
+                .orElse("https://inference.baseten.co/v1");
+
+        this.basetenClient = OpenAIOkHttpClient.builder()
+                .baseUrl(baseUrl)
+                .apiKey(primaryKey.isBlank() ? "dummy-key-standby" : primaryKey)
+                .timeout(Duration.ofSeconds(90))
+                .maxRetries(2)
+                .disableTelemetry(true)
+                .build();
+    }
+
+    public MetaMuseService(MetaMuseClient client,
+                           MetaMuseConfig config,
+                           BasetenConfig basetenConfig,
+                           StateRepository stateRepository,
+                           com.beejepa.event.EventService eventService) {
+        this(client, config, basetenConfig, stateRepository, eventService, new Sam31Client(new ObjectMapper()), new ObjectMapper());
     }
 
     public MetaMuseService(MetaMuseClient client,
@@ -851,6 +915,222 @@ public class MetaMuseService {
                 "transcript", "What happened at the hive entrance? Analyze the segmented anomaly.",
                 "note", "Voice input captured and ready to be bound dynamically as prompt for SAM 3.1 & Muse."
         );
+    }
+
+    public record ManifestEventInput(
+            String eventId,
+            String formattedTime,
+            double surpriseScore,
+            String severity,
+            Path keyframePath
+    ) {}
+
+    @JsonTypeName("query_sam31_concept")
+    @JsonClassDescription("Calls Meta SAM 3.1 Segment API on a specific event keyframe to verify and count instances of a short concrete noun concept (e.g. 'bee', 'wasp', 'fly').")
+    public static class QuerySam31Concept {
+        @JsonProperty("event_id")
+        public String eventId;
+
+        @JsonProperty("concept_prompt")
+        public String conceptPrompt;
+
+        @JsonProperty("include_baseline_bee_count")
+        public boolean includeBaselineBeeCount;
+    }
+
+    public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
+        return spatialCache.computeIfAbsent(evt.eventId(), id -> {
+            try {
+                BufferedImage canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
+                String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
+
+                List<BoundingBox> boardBees = sam31Client.queryConcept("bee", frameB64, true);
+                BoundingBox hotspot = SamGeometry.defaultEntranceHotspot();
+                List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
+                String preClass = SamGeometry.classifyHotspot(contained);
+
+                RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(
+                        canonical, hotspot, boardBees, contained, 35
+                );
+
+                return new EventSpatialSummary(
+                        evt.eventId(),
+                        evt.formattedTime(),
+                        Math.round(evt.surpriseScore() * 100.0) / 100.0,
+                        evt.severity(),
+                        boardBees.size(),
+                        contained.size(),
+                        preClass,
+                        contained,
+                        visuals.canonicalFrameB64(),
+                        visuals.upscaledCropB64()
+                );
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to analyze event " + evt.eventId(), e);
+            }
+        });
+    }
+
+    public List<EventSpatialSummary> analyzeEventsInParallel(List<ManifestEventInput> topEvents) {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<EventSpatialSummary>> futures = topEvents.stream()
+                    .map(evt -> executor.submit(() -> analyzeSingleEvent(evt)))
+                    .toList();
+
+            List<EventSpatialSummary> results = new ArrayList<>(futures.size());
+            for (Future<EventSpatialSummary> f : futures) {
+                results.add(f.get());
+            }
+            return results;
+        } catch (Exception e) {
+            throw new RuntimeException("Parallel SAM 3.1 event processing failed", e);
+        }
+    }
+
+    public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> topEvents) {
+        List<EventSpatialSummary> summaries = analyzeEventsInParallel(topEvents);
+
+        List<Map<String, Object>> digestList = summaries.stream().map(s -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("event_id", s.eventId());
+            m.put("timestamp", s.timestamp());
+            m.put("surprise_score_sigma", s.surpriseScoreSigma());
+            m.put("severity", s.severity());
+            m.put("landing_board_bee_count", s.landingBoardBeeCount());
+            m.put("bees_inside_hotspot_count", s.beesInsideHotspotCount());
+            m.put("geometric_pre_classification", s.geometricPreClassification());
+            return m;
+        }).toList();
+
+        List<ChatCompletionContentPart> userParts = new ArrayList<>();
+        try {
+            String headerText = "Beekeeper Question: " + beekeeperQuestion + "\n\n"
+                    + "Daily Hive Event Digest (" + digestList.size() + " peak events):\n"
+                    + objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(digestList);
+            userParts.add(ChatCompletionContentPart.ofText(
+                    ChatCompletionContentPartText.builder().text(headerText).build()
+            ));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        for (EventSpatialSummary s : summaries) {
+            userParts.add(ChatCompletionContentPart.ofText(
+                    ChatCompletionContentPartText.builder()
+                            .text("Hotspot Crop for " + s.eventId() + " at " + s.timestamp()
+                                    + " (Surprise: " + s.surpriseScoreSigma() + " sigma):")
+                            .build()
+            ));
+            userParts.add(ChatCompletionContentPart.ofImageUrl(
+                    ChatCompletionContentPartImage.builder()
+                            .imageUrl(ChatCompletionContentPartImage.ImageUrl.builder()
+                                    .url("data:image/jpeg;base64," + s.cropBase64())
+                                    .build())
+                            .build()
+            ));
+        }
+
+        String systemPrompt = "You are an autonomous apiculture assistant powered by Meta Muse Spark. "
+                + "The beekeeper is asking for a holistic summary of what happened at their hive today. "
+                + "You receive a chronological JSON digest of the highest V-JEPA kinematic surprise events, "
+                + "SAM 3.1 landing-board bee counts, hotspot bee containment counts, and the visual hotspot crops.\n\n"
+                + "Rules:\n"
+                + "1. Summarize overall flight traffic trends (minimum/maximum bee counts on the landing board).\n"
+                + "2. Explain each peak event chronologically (whether caused by dense bee congestion/guarding or a non-bee intruder).\n"
+                + "3. Only invoke `query_sam31_concept` if an event has `potential_non_bee_anomaly` or a visible non-bee organism.";
+
+        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+                .model(BASETEN_MODEL)
+                .maxCompletionTokens(4096)
+                .addSystemMessage(systemPrompt)
+                .addUserMessageOfArrayOfContentParts(userParts)
+                .addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO);
+
+        ChatCompletion firstTurn = executeWithKeyFailover(paramsBuilder.build());
+        ChatCompletionMessage assistantMsg = firstTurn.choices().getFirst().message();
+
+        List<ChatCompletionMessageToolCall> toolCalls = assistantMsg.toolCalls()
+                .stream()
+                .flatMap(Collection::stream)
+                .toList();
+
+        if (toolCalls.isEmpty()) {
+            return cleanMuseOutput(assistantMsg.content().orElse(""));
+        }
+
+        paramsBuilder.addMessage(assistantMsg);
+        for (ChatCompletionMessageToolCall tc : toolCalls) {
+            if (!tc.isFunction()) {
+                continue;
+            }
+            ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
+            QuerySam31Concept args = ftc.function().arguments(QuerySam31Concept.class);
+            EventSpatialSummary targetEvent = summaries.stream()
+                    .filter(s -> s.eventId().equals(args.eventId))
+                    .findFirst()
+                    .orElse(summaries.getFirst());
+
+            boolean isBeeConcept = args.conceptPrompt != null
+                    && List.of("bee", "bees", "honey bee", "honeybee").contains(args.conceptPrompt.trim().toLowerCase());
+            List<BoundingBox> matches = sam31Client.queryConcept(
+                    args.conceptPrompt, targetEvent.frameBase64(), isBeeConcept
+            );
+
+            Map<String, Object> toolResult = Map.of(
+                    "event_id", targetEvent.eventId(),
+                    "queried_concept", args.conceptPrompt,
+                    "matches", matches.size(),
+                    "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
+                    "bees_inside_hotspot_count", targetEvent.beesInsideHotspotCount(),
+                    "instruction", "Tool verification complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
+            );
+
+            paramsBuilder.addMessage(
+                    ChatCompletionToolMessageParam.builder()
+                            .toolCallId(ftc.id())
+                            .contentAsJson(toolResult)
+                            .build()
+            );
+        }
+
+        ChatCompletion secondTurn = executeWithKeyFailover(paramsBuilder.build());
+        return cleanMuseOutput(secondTurn.choices().getFirst().message().content().orElse(""));
+    }
+
+    private ChatCompletion executeWithKeyFailover(ChatCompletionCreateParams params) {
+        try {
+            return basetenClient.chat().completions().create(params);
+        } catch (OpenAIServiceException e) {
+            if ((e.statusCode() == 401 || e.statusCode() == 403 || e.statusCode() == 429)
+                    && !fallbackApiKey.isBlank()) {
+                return basetenClient
+                        .withOptions(opts -> opts.apiKey(fallbackApiKey))
+                        .chat()
+                        .completions()
+                        .create(params);
+            }
+            throw e;
+        }
+    }
+
+    public static String cleanMuseOutput(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String cleaned = COMMENTARY_BLOCK.matcher(raw).replaceAll("$1\n\n");
+        cleaned = INTERNAL_TAG_BLOCK.matcher(cleaned).replaceAll("");
+        if (cleaned.contains("</think>")) {
+            cleaned = cleaned.substring(cleaned.indexOf("</think>") + 8).trim();
+        }
+        return cleaned.trim();
+    }
+
+    public Map<String, EventSpatialSummary> getSpatialCache() {
+        return spatialCache;
+    }
+
+    public Sam31Client getSam31Client() {
+        return sam31Client;
     }
 
     public MetaMuseConfig getConfig() {
