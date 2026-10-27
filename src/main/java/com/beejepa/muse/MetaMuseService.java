@@ -219,6 +219,20 @@ public class MetaMuseService {
             long latency = System.currentTimeMillis() - startTime;
             int code = response.statusCode();
 
+            if ((code == 401 || code == 403) && !basetenConfig.getFallbackApiKey().isBlank() && !basetenConfig.getFallbackApiKey().equals(basetenConfig.getApiKey())) {
+                LOG.info("Baseten primary API key returned HTTP {}. Retrying with secondary API key fallback...", code);
+                request = HttpRequest.newBuilder()
+                        .uri(URI.create(targetUrl))
+                        .header("Authorization", "Bearer " + basetenConfig.getFallbackApiKey())
+                        .header("Accept", "application/json")
+                        .timeout(Duration.ofSeconds(6))
+                        .GET()
+                        .build();
+                response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                latency = System.currentTimeMillis() - startTime;
+                code = response.statusCode();
+            }
+
             if (code >= 200 && code < 300) {
                 List<String> models = parseModelIds(response.body());
                 boolean hasMuseSpark = models.contains("meta-models/muse-spark-open") || models.contains("meta-models/muse-spark-open-1026");
@@ -496,22 +510,65 @@ public class MetaMuseService {
                     "X-Provider", "Baseten-Model-APIs (OpenAI- & Meta-compatible)"
             );
 
-            // 1. OpenAI-compatible Chat Completion payload structure (/v1/chat/completions)
+            Map<String, Object> samTool = Map.of(
+                    "type", "function",
+                    "function", Map.of(
+                            "name", "query_sam31_concept",
+                            "description", "Calls the Meta SAM 3.1 Segment API on the 4-second video clip to segment, track, and count instances of a specific visual concept across all frames.",
+                            "parameters", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "event_id", Map.of("type", "string"),
+                                            "concept_prompt", Map.of(
+                                                    "type", "string",
+                                                    "description", "Open-vocabulary noun phrase describing the target object to segment and track (derived from visual inspection of the frame)."
+                                            ),
+                                            "include_baseline_bee_count", Map.of(
+                                                    "type", "boolean",
+                                                    "description", "Whether to simultaneously segment and count all 'honey bee' instances for traffic context."
+                                            )
+                                    ),
+                                    "required", List.of("event_id", "concept_prompt", "include_baseline_bee_count")
+                            )
+                    )
+            );
+
+            String safeEventId = eventId != null ? eventId : (String) eventData.getOrDefault("eventId", "evt_rec2125_seq000_f0000");
+            String peakFrameOverviewUrl = "/api/v1/events/" + safeEventId + "/media/peak_frame.jpg";
+            String peakFrameCropUrl = "/api/v1/events/" + safeEventId + "/media/peak_frame.jpg?crop=anomaly";
+
+            // 1. OpenAI-compatible Chat Completion payload structure (/v1/chat/completions) with Muse Spark Open tool-use
             payload = Map.of(
                     "model", modelName,
                     "messages", List.of(
                             Map.of(
                                     "role", "system",
-                                    "content", "You are Meta Muse Spark Open, an advanced multimodal world-model reasoning system integrated into BeeJEPA's real-time hive entrance surveillance pipeline. Your role is to diagnose physical anomalies in video sequences using V-JEPA latent surprise dynamics and SAM 3.1 visual segmentation masks."
+                                    "content", "You are an autonomous apiculture monitoring agent powered by Meta Muse Spark. " +
+                                            "You receive latent kinematics telemetry (V-JEPA surprise peaks) and two images: " +
+                                            "(1) the full hive entrance view with the anomaly region marked in red for scale reference against worker bees (Apis mellifera), " +
+                                            "and (2) a high-resolution crop of the anomaly region.\n\n" +
+                                            "Your task:\n" +
+                                            "1. Visually inspect the organism or phenomenon inside the red box. Compare its morphology " +
+                                            "(body size relative to surrounding honeybees, wing posture, abdomen shape, coloration) and behavior.\n" +
+                                            "2. Determine whether the anomaly is caused by unusual honeybee behavior (e.g., guarding fight, crowding, collision) " +
+                                            "or a non-bee organism/object.\n" +
+                                            "3. Invoke `query_sam31_concept` with the exact open-vocabulary concept name you identified so SAM 3.1 can track " +
+                                            "its trajectory across the clip and count baseline bee traffic."
                             ),
                             Map.of(
                                     "role", "user",
-                                    "content", fullPrompt
+                                    "content", List.of(
+                                            Map.of("type", "text", "text", fullPrompt),
+                                            Map.of("type", "image_url", "image_url", Map.of("url", peakFrameOverviewUrl)),
+                                            Map.of("type", "image_url", "image_url", Map.of("url", peakFrameCropUrl))
+                                    )
                             )
                     ),
-                    "temperature", 0.7,
-                    "max_tokens", 1000,
-                    "top_p", 1.0,
+                    "tools", List.of(samTool),
+                    "tool_choice", "auto",
+                    "reasoning_effort", "high",
+                    "temperature", 0.8,
+                    "max_tokens", 4096,
                     "stream", false
             );
 
@@ -519,14 +576,16 @@ public class MetaMuseService {
             responsesPayload = Map.of(
                     "model", modelName,
                     "input", fullPrompt,
-                    "reasoning", Map.of("effort", "high")
+                    "reasoning", Map.of("effort", "high"),
+                    "max_tokens", 4096,
+                    "temperature", 0.8
             );
         } else {
             // Legacy / fallback Meta API staging
             String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
             String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
             targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
-            modelName = "muse-wonder-1.0";
+            modelName = "muse-spark-1.3";
 
             headers = Map.of(
                     "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
@@ -689,14 +748,21 @@ public class MetaMuseService {
                 "type", "function",
                 "function", Map.of(
                         "name", "query_sam31_concept",
-                        "description", "Runs dynamic open-vocabulary SAM 3.1 concept segmentation and tracking on a 4-second peak clip (e.g., 'fly', 'wasp', 'pollen basket', 'fighting bees').",
+                        "description", "Calls the Meta SAM 3.1 Segment API on the 4-second video clip to segment, track, and count instances of a specific visual concept across all frames.",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
                                         "event_id", Map.of("type", "string"),
-                                        "concept_prompt", Map.of("type", "string")
+                                        "concept_prompt", Map.of(
+                                                "type", "string",
+                                                "description", "Open-vocabulary noun phrase describing the target object to segment and track (derived from visual inspection of the frame)."
+                                        ),
+                                        "include_baseline_bee_count", Map.of(
+                                                "type", "boolean",
+                                                "description", "Whether to simultaneously segment and count all 'honey bee' instances for traffic context."
+                                        )
                                 ),
-                                "required", List.of("event_id", "concept_prompt")
+                                "required", List.of("event_id", "concept_prompt", "include_baseline_bee_count")
                         )
                 )
         );

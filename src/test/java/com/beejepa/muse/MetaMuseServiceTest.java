@@ -72,7 +72,7 @@ class MetaMuseServiceTest {
         // Verify OpenAI-compatible payload format for Baseten Model API
         Assertions.assertEquals("meta-models/muse-spark-open", staged.payload().get("model"));
         Assertions.assertTrue(staged.payload().containsKey("messages"));
-        List<Map<String, String>> messages = (List<Map<String, String>>) staged.payload().get("messages");
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) staged.payload().get("messages");
         Assertions.assertEquals(2, messages.size());
 
         // Verify Meta Responses API payload format
@@ -81,7 +81,22 @@ class MetaMuseServiceTest {
         Assertions.assertEquals(prompt, staged.responsesPayload().get("input"));
         Assertions.assertEquals("system", messages.get(0).get("role"));
         Assertions.assertEquals("user", messages.get(1).get("role"));
-        Assertions.assertEquals(prompt, messages.get(1).get("content"));
+
+        // Multimodal user content: text, overview image with scale reference, and anomaly crop
+        Object userContent = messages.get(1).get("content");
+        Assertions.assertTrue(userContent instanceof List<?>);
+        List<Map<String, Object>> contentParts = (List<Map<String, Object>>) userContent;
+        Assertions.assertEquals(3, contentParts.size());
+        Assertions.assertEquals("text", contentParts.get(0).get("type"));
+        Assertions.assertEquals(prompt, contentParts.get(0).get("text"));
+        Assertions.assertEquals("image_url", contentParts.get(1).get("type"));
+        Assertions.assertEquals("image_url", contentParts.get(2).get("type"));
+
+        // Verify tool calling and reasoning configuration
+        Assertions.assertEquals(4096, staged.payload().get("max_tokens"));
+        Assertions.assertEquals(0.8, staged.payload().get("temperature"));
+        Assertions.assertEquals("high", staged.payload().get("reasoning_effort"));
+        Assertions.assertTrue(staged.payload().containsKey("tools"));
 
         // Verify masked authorization header
         String authHeader = staged.headers().get("Authorization");
@@ -101,8 +116,7 @@ class MetaMuseServiceTest {
 
         MuseInferenceResponse response = service.callInference(new MuseInferenceRequest("Diagnose collision"));
 
-        Assertions.assertNotNull(response);
-        Assertions.assertEquals("meta-models/muse-spark-open", response.model());
+        Assertions.assertEquals(basetenConfig.getModel(), response.model());
         Assertions.assertEquals("standby_zero_credits", response.metadata().get("status"));
         Assertions.assertEquals("baseten", response.metadata().get("provider"));
     }
