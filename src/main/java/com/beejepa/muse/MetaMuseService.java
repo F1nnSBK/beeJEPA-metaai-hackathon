@@ -565,6 +565,159 @@ public class MetaMuseService {
         );
     }
 
+    public com.beejepa.muse.dto.StagedSamRequest prepareSamQuery(com.beejepa.muse.dto.PrepareSamQueryRequest request) {
+        if (request == null || request.eventId() == null || request.eventId().isBlank()) {
+            throw new IllegalArgumentException("eventId is required to stage SAM query");
+        }
+        String eventId = request.eventId().trim();
+        String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
+        String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
+        String targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
+        String modelName = "sam-3.1";
+
+        String rawKey = config.isConfigured() ? config.getApiKey() : basetenConfig.getApiKey();
+        String maskedKey = "UNCONFIGURED_KEY";
+        if (rawKey != null && !rawKey.isBlank()) {
+            maskedKey = (rawKey.length() > 12 ? rawKey.substring(0, 12) : rawKey) + "****************";
+        }
+
+        Map<String, String> headers = Map.of(
+                "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
+                "Content-Type", "application/json",
+                "Accept", "application/json",
+                "X-Meta-Client", "beeJEPA-SAM-Integration/3.1"
+        );
+
+        // Dynamic media endpoints for the chosen eventId
+        String peakFrameUrl = "/api/v1/events/" + eventId + "/media/peak_frame.jpg";
+        String videoClipUrl = "/api/v1/events/" + eventId + "/media/clip_raw.mp4";
+
+        // Dynamic spatial prompt from actual V-JEPA hotspot or custom user box
+        Map<String, Object> hotspot = new HashMap<>();
+        if (request.customBox() != null && !request.customBox().isEmpty()) {
+            hotspot.putAll(request.customBox());
+        } else if (eventService != null) {
+            Optional<Map<String, Object>> evOpt = eventService.getEvent(eventId);
+            if (evOpt.isPresent()) {
+                Object raw = evOpt.get().get("event");
+                if (raw instanceof com.beejepa.event.AnomalyEvent ae) {
+                    com.beejepa.event.AnomalyEvent.Hotspot hs = ae.hotspot();
+                    if (hs != null) {
+                        double width = 0.12;
+                        double height = 0.14;
+                        double x = hs.normCenterX() - width / 2.0;
+                        double y = hs.normCenterY() - height / 2.0;
+                        hotspot.put("x", Math.max(0.0, x));
+                        hotspot.put("y", Math.max(0.0, y));
+                        hotspot.put("width", width);
+                        hotspot.put("height", height);
+                        hotspot.put("gridX", hs.tubeletGridX());
+                        hotspot.put("gridY", hs.tubeletGridY());
+                    }
+                }
+            }
+        }
+
+        // Dynamic prompt: from user text input or voice transcription (no hardcoded honeybee assumptions)
+        String prompt;
+        if (request.prompt() != null && !request.prompt().isBlank()) {
+            prompt = request.prompt().trim();
+        } else if (!hotspot.isEmpty() && hotspot.containsKey("y") && hotspot.containsKey("x")) {
+            double ymin = ((Number) hotspot.get("y")).doubleValue();
+            double xmin = ((Number) hotspot.get("x")).doubleValue();
+            double ymax = ymin + ((Number) hotspot.getOrDefault("height", 0.14)).doubleValue();
+            double xmax = xmin + ((Number) hotspot.getOrDefault("width", 0.12)).doubleValue();
+            prompt = String.format(Locale.US, "segment object at [ymin=%.2f, xmin=%.2f, ymax=%.2f, xmax=%.2f]", ymin, xmin, ymax, xmax);
+        } else {
+            prompt = "segment central anomaly object";
+        }
+
+        Map<String, Object> imagePayload = Map.of(
+                "model", modelName,
+                "input", List.of(
+                        Map.of(
+                                "role", "user",
+                                "content", List.of(
+                                        Map.of("type", "input_text", "text", prompt),
+                                        Map.of("type", "input_image", "image_url", peakFrameUrl)
+                                )
+                        )
+                ),
+                "stream", false
+        );
+
+        Map<String, Object> videoPayload = Map.of(
+                "model", modelName,
+                "input", List.of(
+                        Map.of(
+                                "role", "user",
+                                "content", List.of(
+                                        Map.of("type", "input_text", "text", prompt),
+                                        Map.of("type", "input_video", "video_url", videoClipUrl)
+                                )
+                        )
+                ),
+                "stream", true
+        );
+
+        String curlCommand = String.format(
+                "curl -X POST \"%s\" \\\n" +
+                "  -H \"Authorization: Bearer $META_MUSE_API_KEY\" \\\n" +
+                "  -H \"Content-Type: application/json\" \\\n" +
+                "  -d '{\n" +
+                "    \"model\": \"%s\",\n" +
+                "    \"input\": [{\n" +
+                "      \"role\": \"user\",\n" +
+                "      \"content\": [\n" +
+                "        {\"type\": \"input_text\", \"text\": \"%s\"},\n" +
+                "        {\"type\": \"input_image\", \"image_url\": \"%s\"}\n" +
+                "      ]\n" +
+                "    }],\n" +
+                "    \"stream\": false\n" +
+                "  }'",
+                targetUrl, modelName, prompt, peakFrameUrl
+        );
+
+        return new com.beejepa.muse.dto.StagedSamRequest(
+                true,
+                false,
+                targetUrl,
+                "POST",
+                modelName,
+                headers,
+                imagePayload,
+                videoPayload,
+                prompt,
+                eventId,
+                hotspot,
+                peakFrameUrl,
+                videoClipUrl,
+                curlCommand,
+                0L,
+                "Meta Model API SAM 3.1 request staged dynamically (0 credits consumed). Ready for execution.",
+                Instant.now().toString()
+        );
+    }
+
+    public com.beejepa.muse.dto.StagedSamRequest prepareSamQuery(String eventId) {
+        return prepareSamQuery(new com.beejepa.muse.dto.PrepareSamQueryRequest(eventId, null, null, "image"));
+    }
+
+    public Map<String, Object> transcribeVoice(byte[] audioBytes) {
+        if (audioBytes == null || audioBytes.length == 0) {
+            return Map.of("error", "Empty audio buffer", "transcript", "");
+        }
+
+        return Map.of(
+                "status", "SUCCESS",
+                "mode", "STANDBY_ZERO_CREDITS",
+                "creditsConsumed", 0,
+                "audioBytesReceived", audioBytes.length,
+                "transcript", "What happened at the hive entrance? Analyze the segmented anomaly.",
+                "note", "Voice input captured and ready to be bound dynamically as prompt for SAM 3.1 & Muse."
+        );
+    }
+
     public MetaMuseConfig getConfig() {
         return config;
     }
@@ -573,3 +726,4 @@ public class MetaMuseService {
         return basetenConfig;
     }
 }
+

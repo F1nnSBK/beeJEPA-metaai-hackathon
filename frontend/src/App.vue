@@ -630,17 +630,27 @@ const hotspotBoxStyle = computed(() => {
   }
 })
 
-const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 2250)
-const maxScore = 5.5
+const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 300)
+const minScore = computed(() => Number(timelineMeta.value?.minSurprise ?? 9.5))
+const maxScore = computed(() => Number(timelineMeta.value?.maxSurprise ?? 16.5))
 const svgWidth = 1000
 const svgHeight = 100
+
+const tauY = computed(() => {
+  const range = Math.max(1.0, maxScore.value - minScore.value)
+  const tau = Number(timelineMeta.value?.decisionThreshold || 10.2)
+  const clamped = Math.max(minScore.value, Math.min(tau, maxScore.value))
+  return (svgHeight - 8 - ((clamped - minScore.value) / range) * (svgHeight - 16)).toFixed(1)
+})
 
 // Area path for gradient fill under the curve
 const svgAreaPath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
     const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
+    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
 
@@ -650,9 +660,11 @@ const svgAreaPath = computed(() => {
 // Stroke path for the fever curve
 const svgCurvePath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
     const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
+    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
 
@@ -662,10 +674,12 @@ const svgCurvePath = computed(() => {
 // Spikes with exact HTML coordinates (to keep circles 100% round)
 const timelineSpikes = computed(() => {
   if (!timelineData.value) return []
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   return timelineData.value
     .filter(pt => pt.eventId)
     .map(pt => {
-      const normY = 1.0 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * 0.84 - 0.08
+      const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+      const normY = 1.0 - ((clampedScore - minScore.value) / range) * 0.84 - 0.08
       return {
         ...pt,
         normX: pt.timestampSec / maxDuration.value,
@@ -1129,7 +1143,7 @@ async function handleLogout() {
               v-if="timelineData && timelineData.length > 0"
               class="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded"
             >
-              Threshold τ = {{ timelineMeta?.thresholdSigma || '3.0' }}σ
+              Threshold τ = {{ timelineMeta?.decisionThreshold || timelineMeta?.thresholdSigma || '10.2' }}σ
             </span>
             <span
               v-else
@@ -1162,7 +1176,7 @@ async function handleLogout() {
 
             <!-- Grid Lines -->
             <line x1="0" y1="92" x2="1000" y2="92" stroke="#1e293b" stroke-width="1" />
-            <line x1="0" y1="54" x2="1000" y2="54" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1" opacity="0.4" />
+            <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
 
             <!-- Filled Area under Curve -->
             <path
