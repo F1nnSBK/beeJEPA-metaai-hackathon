@@ -74,6 +74,11 @@ class MetaMuseServiceTest {
         Assertions.assertTrue(staged.payload().containsKey("messages"));
         List<Map<String, String>> messages = (List<Map<String, String>>) staged.payload().get("messages");
         Assertions.assertEquals(2, messages.size());
+
+        // Verify Meta Responses API payload format
+        Assertions.assertNotNull(staged.responsesPayload());
+        Assertions.assertEquals("meta-models/muse-spark-open", staged.responsesPayload().get("model"));
+        Assertions.assertEquals(prompt, staged.responsesPayload().get("input"));
         Assertions.assertEquals("system", messages.get(0).get("role"));
         Assertions.assertEquals("user", messages.get(1).get("role"));
         Assertions.assertEquals(prompt, messages.get(1).get("content"));

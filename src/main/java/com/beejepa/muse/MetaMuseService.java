@@ -477,6 +477,8 @@ public class MetaMuseService {
             maskedKey = (rawKey.length() > 12 ? rawKey.substring(0, 12) : rawKey) + "****************";
         }
 
+        Map<String, Object> responsesPayload;
+
         if (basetenConfig.isConfigured()) {
             String rawBase = basetenConfig.getBaseUrl() != null ? basetenConfig.getBaseUrl().trim() : "https://inference.baseten.co/v1";
             String base = rawBase.replaceAll("/+$", "");
@@ -489,10 +491,10 @@ public class MetaMuseService {
                     "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
                     "Content-Type", "application/json",
                     "Accept", "application/json",
-                    "X-Provider", "Baseten-Model-APIs (OpenAI-compatible)"
+                    "X-Provider", "Baseten-Model-APIs (OpenAI- & Meta-compatible)"
             );
 
-            // OpenAI-compatible Chat Completion payload structure
+            // 1. OpenAI-compatible Chat Completion payload structure (/v1/chat/completions)
             payload = Map.of(
                     "model", modelName,
                     "messages", List.of(
@@ -510,6 +512,13 @@ public class MetaMuseService {
                     "top_p", 1.0,
                     "stream", false
             );
+
+            // 2. Meta Responses API payload structure (/v1/responses) as supported by Baseten & Meta Model API
+            responsesPayload = Map.of(
+                    "model", modelName,
+                    "input", fullPrompt,
+                    "reasoning", Map.of("effort", "high")
+            );
         } else {
             // Legacy / fallback Meta API staging
             String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
@@ -524,15 +533,17 @@ public class MetaMuseService {
                     "X-Meta-Client", "beeJEPA-V-JEPA-Integration/1.0"
             );
 
-            payload = Map.of(
+            responsesPayload = Map.of(
                     "model", modelName,
                     "reasoning", Map.of("effort", "high"),
                     "input", fullPrompt
             );
+
+            payload = responsesPayload;
         }
 
         String statusMsg = basetenConfig.isConfigured()
-                ? "OpenAI-compatible payload staged for Baseten Muse Spark Open (0 credits consumed). Pipeline: V-JEPA Anomaly -> SAM 3.1 Mask -> Muse Spark Open."
+                ? "OpenAI- & Meta-compatible payload staged for Baseten Muse Spark Open (0 credits consumed). Pipeline: V-JEPA Anomaly -> SAM 3.1 Mask -> Muse Spark Open."
                 : "Payload prepared with event telemetry. Staged for Meta Muse endpoint (Not transmitted - 0 credits consumed).";
 
         return new StagedMuseRequest(
@@ -543,6 +554,7 @@ public class MetaMuseService {
                 modelName,
                 headers,
                 payload,
+                responsesPayload,
                 fullPrompt,
                 eventId != null ? eventId : (String) eventData.get("eventId"),
                 eventData,

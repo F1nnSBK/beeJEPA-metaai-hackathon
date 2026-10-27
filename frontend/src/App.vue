@@ -1327,32 +1327,39 @@ async function handleLogout() {
 
           <!-- Staging Inspector Tabs -->
           <div class="border-t border-slate-800 pt-3 space-y-2">
-            <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <div class="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
               <button
                 @click="stagedTab = 'prompt'"
                 :class="stagedTab === 'prompt' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors"
+                class="px-2 py-1 text-xs transition-colors shrink-0"
               >
                 Grounded Prompt
               </button>
               <button
                 @click="stagedTab = 'payload'"
                 :class="stagedTab === 'payload' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors"
+                class="px-2 py-1 text-xs transition-colors shrink-0"
               >
-                Raw JSON Payload
+                Chat Completions (/chat/completions)
+              </button>
+              <button
+                @click="stagedTab = 'responses'"
+                :class="stagedTab === 'responses' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
+                class="px-2 py-1 text-xs transition-colors shrink-0"
+              >
+                Meta Responses (/responses)
               </button>
               <button
                 @click="stagedTab = 'headers'"
                 :class="stagedTab === 'headers' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors"
+                class="px-2 py-1 text-xs transition-colors shrink-0"
               >
                 HTTP Headers
               </button>
               <button
                 @click="stagedTab = 'event'"
                 :class="stagedTab === 'event' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors"
+                class="px-2 py-1 text-xs transition-colors shrink-0"
               >
                 Event Telemetry
               </button>
@@ -1363,9 +1370,14 @@ async function handleLogout() {
               {{ stagedMuseQuery?.prompt || 'Kein Prompt generiert' }}
             </div>
 
-            <!-- Tab: Raw JSON Payload -->
+            <!-- Tab: OpenAI Chat Completions Payload -->
             <div v-if="stagedTab === 'payload'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
               {{ JSON.stringify(stagedMuseQuery?.payload, null, 2) }}
+            </div>
+
+            <!-- Tab: Meta Responses API Payload -->
+            <div v-if="stagedTab === 'responses'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-cyan-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
+              {{ JSON.stringify(stagedMuseQuery?.responsesPayload || { model: stagedMuseQuery?.model, input: stagedMuseQuery?.prompt, reasoning: { effort: 'high' } }, null, 2) }}
             </div>
 
             <!-- Tab: HTTP Headers -->
