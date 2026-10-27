@@ -28,8 +28,8 @@ const videoPlayer = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
 
-// Muse Voice & Bee Mode Dynamic Audio (Java Synthesizer & Live Device Microphone)
-const beeModeActive = ref(true) // Bee Mode: Hive answers with bioacoustic buzzing
+// Muse Voice & Natural Speech TTS (Browser SpeechSynthesis & Microphone Input)
+const beeModeActive = ref(false) // Bee Mode: OFF by default in favor of natural TTS
 const isBeeModePlaying = ref(false)
 const isRecording = ref(false)
 const isProcessing = ref(false)
@@ -393,7 +393,11 @@ async function askMuse(question = null) {
     const res = await fetch('/api/v1/muse/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, maxEvents: 3 })
+      body: JSON.stringify({
+        question: q,
+        eventId: selectedEvent.value?.eventId,
+        maxEvents: 3
+      })
     })
     if (res.ok) {
       const data = await res.json()
@@ -414,26 +418,99 @@ async function askMuse(question = null) {
   }
 }
 
-function readAloud(text = null) {
-  if (!('speechSynthesis' in window)) return
-  window.speechSynthesis.cancel()
-  const content = text || museDiagnosis.value?.spokenSummary || ''
+let ttsAudioInstance = null
+
+async function readAloud(text = null) {
+  if (isSpeakingAloud.value) {
+    stopReadAloud()
+    return
+  }
+
+  const content = text || museDiagnosis.value?.spokenSummary || museDiagnosis.value?.diagnosis || ''
   if (!content) return
-  const utterance = new SpeechSynthesisUtterance(content)
-  utterance.lang = 'en-US'
-  utterance.rate = 1.05
-  utterance.pitch = 1.0
-  isSpeakingAloud.value = true
-  utterance.onend = () => { isSpeakingAloud.value = false }
-  utterance.onerror = () => { isSpeakingAloud.value = false }
-  window.speechSynthesis.speak(utterance)
+
+  try {
+    if (ttsAudioInstance) {
+      ttsAudioInstance.pause()
+      ttsAudioInstance = null
+    }
+    isSpeakingAloud.value = true
+    const url = '/api/v1/muse/tts?text=' + encodeURIComponent(content)
+    ttsAudioInstance = new Audio(url)
+    ttsAudioInstance.onended = () => {
+      isSpeakingAloud.value = false
+      ttsAudioInstance = null
+    }
+    ttsAudioInstance.onerror = (err) => {
+      console.warn('TTS playback error:', err)
+      isSpeakingAloud.value = false
+      ttsAudioInstance = null
+    }
+    await ttsAudioInstance.play()
+  } catch (err) {
+    console.warn('Failed to play TTS audio:', err)
+    isSpeakingAloud.value = false
+    ttsAudioInstance = null
+  }
 }
 
 function stopReadAloud() {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel()
+  if (ttsAudioInstance) {
+    ttsAudioInstance.pause()
+    ttsAudioInstance = null
   }
   isSpeakingAloud.value = false
+}
+
+function formatMarkdownReport(md) {
+  if (!md) return ''
+  let text = md.trim()
+
+  // Escape HTML characters to prevent injection
+  text = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  // Headers: ###, ##, #
+  text = text.replace(/^###\s*(.*)$/gm, '<h4 class="text-xs font-bold text-amber-400 mt-2 mb-0.5">$1</h4>')
+  text = text.replace(/^##\s*(.*)$/gm, '<h3 class="text-xs font-bold text-amber-300 mt-2.5 mb-1">$1</h3>')
+  text = text.replace(/^#\s*(.*)$/gm, '<h2 class="text-sm font-bold text-amber-300 mt-3 mb-1">$1</h2>')
+
+  // Bold & Italic
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-100">$1</strong>')
+  text = text.replace(/\*(.*?)\*/g, '<em class="italic text-slate-300">$1</em>')
+
+  // Convert list items
+  const lines = text.split('\n')
+  let inList = false
+  const result = []
+
+  for (const line of lines) {
+    const listMatch = line.match(/^\s*[-*]\s+(.*)$/)
+    if (listMatch) {
+      if (!inList) {
+        result.push('<ul class="list-disc pl-4 space-y-0.5 my-1 text-slate-300 text-xs">')
+        inList = true
+      }
+      result.push(`<li>${listMatch[1]}</li>`)
+    } else {
+      if (inList) {
+        result.push('</ul>')
+        inList = false
+      }
+      if (line.trim().length > 0 && !line.startsWith('<h')) {
+        result.push(`<p class="my-1 text-slate-200 leading-relaxed text-xs">${line}</p>`)
+      } else if (line.trim().length > 0) {
+        result.push(line)
+      }
+    }
+  }
+  if (inList) {
+    result.push('</ul>')
+  }
+
+  return result.join('')
 }
 
 async function playBeeBuzz(text = null) {
@@ -659,6 +736,7 @@ watch(isAuthenticated, (val) => {
 })
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleGlobalKeydown)
   const token = localStorage.getItem('beejepa_token')
   if (token) {
     await fetchUserProfile(token)
@@ -670,6 +748,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
   if (beeAnimationId) {
     cancelAnimationFrame(beeAnimationId)
   }
@@ -1021,6 +1100,26 @@ function onVideoEnded() {
   }
 }
 
+function toggleVideoPlayPause() {
+  if (!videoPlayer.value) return
+  if (videoPlayer.value.paused) {
+    videoPlayer.value.play().catch(() => {})
+  } else {
+    videoPlayer.value.pause()
+  }
+}
+
+function handleGlobalKeydown(e) {
+  if (e.code === 'Space' || e.key === ' ') {
+    const activeTag = document.activeElement?.tagName?.toLowerCase()
+    if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable) {
+      return
+    }
+    e.preventDefault()
+    toggleVideoPlayPause()
+  }
+}
+
 function goToPrevAnomaly() {
   if (currentAnomalyIndex.value > 0) {
     selectEvent(sortedEvents.value[currentAnomalyIndex.value - 1])
@@ -1296,12 +1395,13 @@ async function handleLogout() {
               @loadedmetadata="onVideoLoaded"
               @timeupdate="onVideoTimeUpdate"
               @ended="onVideoEnded"
+              @click="toggleVideoPlayPause"
               autoplay
               :loop="activeView === 'raw'"
               muted
               playsinline
               controls
-              class="w-full h-full object-contain"
+              class="w-full h-full object-contain cursor-pointer"
             ></video>
 
             <!-- SAM 3.1 Peak Frame Mode -->
@@ -1438,80 +1538,87 @@ async function handleLogout() {
             </div>
 
             <!-- Action Buttons: SAM 3.1 & Ask Muse (Mobile-friendly touch targets) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                @click="prepareSamPayload(selectedEvent)"
-                :disabled="isPreparingMuse || isAskingMuse"
-                class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-amber-300 font-semibold text-xs rounded-lg transition-all border border-amber-500/30 flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] touch-manipulation"
-              >
-                <span>SAM 3.1 Wire</span>
-              </button>
-
+            <div class="flex items-center gap-2">
               <button
                 @click="askMuse()"
                 :disabled="isAskingMuse"
-                class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-lg transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 active:scale-[0.98] touch-manipulation"
+                class="flex-1 py-2.5 sm:py-3 px-4 min-h-[44px] bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-lg transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 active:scale-[0.98] touch-manipulation"
               >
                 <span v-if="isAskingMuse" class="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
                 <span>{{ isAskingMuse ? 'Analyzing Hive...' : '🐝 Ask Muse Spark' }}</span>
+              </button>
+
+              <button
+                @click="prepareSamPayload(selectedEvent)"
+                :disabled="isPreparingMuse || isAskingMuse"
+                class="hidden sm:inline-flex py-2.5 sm:py-3 px-3 min-h-[44px] bg-slate-800/80 hover:bg-slate-700 disabled:opacity-50 text-slate-400 hover:text-amber-300 font-medium text-xs rounded-lg transition-all border border-slate-700/60 items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] touch-manipulation"
+                title="Inspect SAM 3.1 wire payload format"
+              >
+                <span>SAM 3.1 Wire</span>
               </button>
             </div>
 
             <!-- Muse Spark Live / Cached Storyboard Diagnosis Card -->
             <div v-if="museDiagnosis" class="p-3.5 bg-slate-900/95 rounded-lg border border-amber-500/40 space-y-3 shadow-lg">
-              <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-800">
-                <span class="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                  <span>🐝</span>
-                  <span>Muse Spark Briefing</span>
-                </span>
-                <div class="flex items-center gap-2 text-[10px] font-mono">
+              <!-- Compact Header & Audio Action Bar -->
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                    <span>🐝</span>
+                    <span>Hive Briefing</span>
+                  </span>
                   <span
                     :class="museDiagnosis.offlineLocked ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'"
-                    class="px-2 py-0.5 rounded border"
+                    class="px-2 py-0.5 rounded border text-[10px] font-mono"
                   >
-                    {{ museDiagnosis.offlineLocked ? 'Cached Disk / Offline Mode' : 'Live Baseten Spark' }}
+                    {{ museDiagnosis.offlineLocked ? 'Offline Cache' : 'Live' }}
                   </span>
-                  <span class="text-slate-400">{{ museDiagnosis.telemetry?.latencyMs || 0 }}ms</span>
+                  <span class="text-slate-400 text-[10px] font-mono hidden sm:inline">{{ museDiagnosis.telemetry?.latencyMs || 0 }}ms</span>
                 </div>
-              </div>
 
-              <!-- Spoken Audio Controls: Real Voice & Cooley-Tukey FFT Synthesizer -->
-              <div class="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-950/80 rounded border border-slate-800 text-[11px]">
-                <label class="flex items-center gap-1.5 text-slate-300 cursor-pointer text-[10px]">
-                  <input type="checkbox" v-model="autoReadAloud" class="rounded accent-amber-500 w-3.5 h-3.5" />
-                  <span>Auto-Voice</span>
-                </label>
-                <div class="flex items-center gap-1.5">
+                <!-- Single-Line Audio Action Pills -->
+                <div class="flex items-center gap-1.5 flex-wrap">
                   <button
                     @click="isSpeakingAloud ? stopReadAloud() : readAloud()"
-                    class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded flex items-center gap-1 transition-colors text-[10px] font-medium"
+                    class="px-3 py-1.5 min-h-[40px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-full flex items-center gap-1.5 transition-colors text-xs font-medium active:scale-95 touch-manipulation"
+                    :title="isSpeakingAloud ? 'Stop audio' : 'Read briefing aloud in natural English'"
                   >
-                    <span>{{ isSpeakingAloud ? 'Stop Voice' : 'Read Briefing Aloud' }}</span>
+                    <svg v-if="isSpeakingAloud" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                    <svg v-else class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5-2.23l-5 4H2v12h4.5l5 4V1zm4.5 11c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+                    <span>{{ isSpeakingAloud ? 'Stop' : 'Read' }}</span>
                   </button>
                   <button
                     @click="playBeeBuzz()"
                     :disabled="isPlayingBeeBuzz"
-                    class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded flex items-center gap-1 transition-colors text-[10px]"
-                    title="Synthesize audio via Radix-2 Cooley-Tukey FFT synthesizer"
+                    class="px-2.5 py-1.5 min-h-[40px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-full flex items-center gap-1 transition-colors text-xs active:scale-95 touch-manipulation"
+                    title="Bioacoustic bee buzz synthesis"
                   >
-                    <span>{{ isPlayingBeeBuzz ? 'Playing FFT...' : '🐝 Bee-Buzz (Cooley-Tukey FFT)' }}</span>
+                    <span>{{ isPlayingBeeBuzz ? 'Buzzing...' : '🐝 FFT-Buzz' }}</span>
                   </button>
+                  <label class="flex items-center gap-1.5 text-slate-400 hover:text-slate-300 cursor-pointer text-xs select-none pl-1">
+                    <input type="checkbox" v-model="autoReadAloud" class="rounded accent-amber-500 w-3.5 h-3.5" />
+                    <span class="text-[11px]">Auto</span>
+                  </label>
                 </div>
               </div>
 
-              <!-- Spoken Summary Quote -->
-              <div v-if="museDiagnosis.spokenSummary" class="p-2.5 bg-amber-500/5 rounded border border-amber-500/20 text-xs text-amber-200/90 italic leading-relaxed">
-                "{{ museDiagnosis.spokenSummary }}"
-              </div>
+              <!-- Clean Formatted HTML Report Content Directly Above Crops -->
+              <div
+                v-html="formatMarkdownReport(museDiagnosis.report || museDiagnosis.diagnosis)"
+                class="p-3 bg-slate-950/90 rounded-lg border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans max-h-60 overflow-y-auto space-y-1"
+              ></div>
 
-              <!-- 3-Event Visual Storyboard Focus -->
-              <div v-if="museDiagnosis.events && museDiagnosis.events.length" class="space-y-1.5">
-                <span class="text-[10px] uppercase font-mono text-slate-400 tracking-wider">Multi-Event Storyboard Focus (384x384 Crops)</span>
-                <div class="grid grid-cols-3 gap-2">
+              <!-- Multi-Event Storyboard Focus (Desktop 3-Grid / Mobile Touch Carousel) -->
+              <div v-if="museDiagnosis.events && museDiagnosis.events.length" class="space-y-1.5 pt-1">
+                <div class="flex items-center justify-between text-[10px] uppercase font-mono text-slate-400 tracking-wider">
+                  <span>KEYFRAME PEAK CROPS</span>
+                  <span class="text-[9px] text-slate-500 md:hidden">Swipe ↔</span>
+                </div>
+                <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 scrollbar-none md:grid md:grid-cols-3 md:gap-2 md:overflow-visible">
                   <div
                     v-for="evt in museDiagnosis.events"
                     :key="evt.eventId"
-                    class="p-1.5 bg-slate-950 rounded border border-slate-800 space-y-1 text-center"
+                    class="flex-none w-[78%] sm:w-[65%] md:w-auto snap-center p-1.5 bg-slate-950 rounded-lg border border-slate-800 space-y-1.5 text-center"
                   >
                     <img
                       v-if="evt.cropBase64"
@@ -1519,16 +1626,13 @@ async function handleLogout() {
                       :alt="evt.eventId"
                       class="w-full aspect-square rounded object-cover border border-slate-700/80"
                     />
-                    <div class="text-[9px] font-mono text-slate-300 truncate">{{ evt.timestamp }}</div>
-                    <div class="text-[9px] font-semibold text-amber-400">{{ evt.surpriseScoreSigma }}σ</div>
-                    <div class="text-[8px] text-slate-400 font-mono">{{ evt.landingBoardBeeCount }} bees</div>
+                    <div class="flex items-center justify-between text-[10px] font-mono bg-slate-900/90 px-2 py-1 rounded border border-slate-800">
+                      <span class="text-slate-300">{{ evt.timestamp }}</span>
+                      <span class="font-semibold text-amber-400">{{ evt.surpriseScoreSigma }}σ</span>
+                      <span class="text-emerald-400 font-semibold">{{ evt.beesInsideHotspotCount !== undefined ? evt.beesInsideHotspotCount : evt.landingBoardBeeCount }} bees</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <!-- Full Markdown Report Content -->
-              <div class="p-3 bg-slate-950/90 rounded border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans max-h-60 overflow-y-auto">
-                {{ museDiagnosis.report }}
               </div>
 
               <!-- Raw API Payload Toggle -->

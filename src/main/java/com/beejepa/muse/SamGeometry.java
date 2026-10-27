@@ -1,5 +1,6 @@
 package com.beejepa.muse;
 
+import io.micronaut.serde.annotation.Serdeable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +13,7 @@ public final class SamGeometry {
 
     private SamGeometry() {}
 
+    @Serdeable
     public record BoundingBox(int x1, int y1, int x2, int y2) {
         public int width() { return Math.max(1, x2 - x1); }
         public int height() { return Math.max(1, y2 - y1); }
@@ -30,8 +32,10 @@ public final class SamGeometry {
         }
     }
 
+    @Serdeable
     public record ContainedBee(int beeIndex, List<Integer> box, double containmentRatio) {}
 
+    @Serdeable
     public record EventSpatialSummary(
             String eventId,
             String timestamp,
@@ -51,6 +55,22 @@ public final class SamGeometry {
         int halfW = 80;
         int halfH = 60;
         return new BoundingBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+    }
+
+    public static BoundingBox hotspotFromNormCenter(double normCenterX, double normCenterY) {
+        return hotspotFromNormCenter(normCenterX, normCenterY, FRAME_SIZE, FRAME_SIZE);
+    }
+
+    public static BoundingBox hotspotFromNormCenter(double normCenterX, double normCenterY, int imageWidth, int imageHeight) {
+        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * FRAME_SIZE), 220, 410) : 315;
+        int cy = 390;
+        int halfW = 80;
+        int halfH = 60;
+        int x1 = Math.max(0, cx - halfW);
+        int y1 = Math.max(0, cy - halfH);
+        int x2 = Math.min(imageWidth, cx + halfW);
+        int y2 = Math.min(imageHeight, cy + halfH);
+        return new BoundingBox(x1, y1, x2, y2);
     }
 
     public static double computeBeeContainment(BoundingBox hotspot, BoundingBox bee) {

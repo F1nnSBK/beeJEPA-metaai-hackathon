@@ -30,14 +30,50 @@ public class Sam31Client {
     @jakarta.inject.Inject
     public Sam31Client(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-        this.apiKey = Optional.ofNullable(System.getenv("META_MUSE_API_KEY"))
-                .orElseGet(() -> Optional.ofNullable(System.getenv("MODEL_API_KEY")).orElse(""));
-        String baseUrl = Optional.ofNullable(System.getenv("META_MUSE_BASE_URL"))
-                .orElse("https://api.meta.ai");
+        String key = getEnvOrDotEnv("META_MUSE_API_KEY");
+        if (key.isBlank()) {
+            key = getEnvOrDotEnv("MODEL_API_KEY");
+        }
+        this.apiKey = key;
+        String baseUrl = getEnvOrDotEnv("META_MUSE_BASE_URL");
+        if (baseUrl.isBlank()) {
+            baseUrl = "https://api.meta.ai";
+        }
         this.endpointUrl = baseUrl.replaceAll("/+$", "") + "/v1/responses";
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
+    }
+
+    public static String getEnvOrDotEnv(String key) {
+        String prop = System.getProperty(key);
+        if (prop != null && !prop.isBlank()) {
+            return prop.trim();
+        }
+        String env = System.getenv(key);
+        if (env != null && !env.isBlank()) {
+            return env.trim();
+        }
+        java.nio.file.Path dotEnv = java.nio.file.Path.of(".env");
+        if (java.nio.file.Files.exists(dotEnv)) {
+            try {
+                for (String raw : java.nio.file.Files.readAllLines(dotEnv)) {
+                    String line = raw.trim();
+                    if (!line.startsWith("#") && line.contains("=")) {
+                        int eq = line.indexOf('=');
+                        String k = line.substring(0, eq).trim();
+                        if (k.equals(key)) {
+                            String v = line.substring(eq + 1).trim();
+                            if ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'"))) {
+                                v = v.substring(1, v.length() - 1);
+                            }
+                            return v.trim();
+                        }
+                    }
+                }
+            } catch (java.io.IOException ignored) {}
+        }
+        return "";
     }
 
     public Sam31Client() {

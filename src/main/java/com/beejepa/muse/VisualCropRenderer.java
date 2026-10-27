@@ -16,6 +16,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import io.micronaut.serde.annotation.Serdeable;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +30,7 @@ public final class VisualCropRenderer {
 
     private VisualCropRenderer() {}
 
+    @Serdeable
     public record RenderedVisuals(String canonicalFrameB64, String annotatedOverviewB64, String upscaledCropB64) {}
 
     public static BufferedImage loadCanonicalView(Path imagePath) throws IOException {

@@ -52,5 +52,9 @@ Thumbs.db
 *.log
 logs/
 
+# Audio Files (generated on demand via backend TTS / synthesizer)
+*.wav
+*.mp3
+audio/
 
 create_pipeline_notebook.py

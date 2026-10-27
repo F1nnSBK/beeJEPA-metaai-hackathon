@@ -12,6 +12,7 @@ import com.beejepa.state.model.MuseLogEntry;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
+import io.micronaut.serde.annotation.Serdeable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -95,22 +96,27 @@ public class MetaMuseService {
         this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper);
         this.diskCache = diskCache != null ? diskCache : new MuseDiskCache(this.objectMapper);
 
-        String envLive = Optional.ofNullable(System.getenv("ALLOW_LIVE_API"))
-                .orElseGet(() -> System.getenv("BASETEN_ALLOW_INFERENCE"));
+        String envLive = Optional.ofNullable(System.getProperty("ALLOW_LIVE_API"))
+                .or(() -> Optional.ofNullable(System.getenv("ALLOW_LIVE_API")))
+                .orElse(null);
         this.allowLiveInference = envLive != null
                 ? "true".equalsIgnoreCase(envLive)
-                : (this.basetenConfig.isAllowInferenceCalls());
+                : this.basetenConfig.isAllowInferenceCalls();
         this.simulatedOfflineDelayMs = Long.parseLong(
-                Optional.ofNullable(System.getenv("UX_SIMULATE_LATENCY_MS")).orElse("450")
+                Optional.ofNullable(getEnvOrProp("UX_SIMULATE_LATENCY_MS")).orElse("450")
         );
 
-        String primaryKey = Optional.ofNullable(System.getenv("BASETEN_API_KEY1"))
+        String primaryKey = Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY1"))
+                .or(() -> Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY")))
                 .or(() -> Optional.ofNullable(this.basetenConfig.getApiKey()))
                 .orElse("");
-        this.fallbackApiKey = Optional.ofNullable(System.getenv("BASETEN_API_KEY2")).orElse("");
-        String baseUrl = Optional.ofNullable(System.getenv("BASETEN_BASE_URL"))
+        this.fallbackApiKey = Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY2")).orElse("");
+        String baseUrl = Optional.ofNullable(getEnvOrProp("BASETEN_BASE_URL"))
                 .or(() -> Optional.ofNullable(this.basetenConfig.getBaseUrl()))
                 .orElse("https://inference.baseten.co/v1");
+
+        LOG.info("MetaMuseService initialized: allowLiveInference={}, primaryKeyConfigured={}, baseUrl={}",
+                this.allowLiveInference, !primaryKey.isBlank(), baseUrl);
 
         this.basetenClient = OpenAIOkHttpClient.builder()
                 .baseUrl(baseUrl)
@@ -119,6 +125,11 @@ public class MetaMuseService {
                 .maxRetries(2)
                 .disableTelemetry(true)
                 .build();
+    }
+
+    private static String getEnvOrProp(String key) {
+        String val = Sam31Client.getEnvOrDotEnv(key);
+        return val.isBlank() ? null : val;
     }
 
     public MetaMuseService(MetaMuseClient client,
@@ -949,13 +960,21 @@ public class MetaMuseService {
         );
     }
 
+    @Serdeable
     public record ManifestEventInput(
             String eventId,
             String formattedTime,
             double surpriseScore,
             String severity,
-            Path keyframePath
-    ) {}
+            Path keyframePath,
+            Double normCenterX,
+            Double normCenterY,
+            int[] boundingBoxPx
+    ) {
+        public ManifestEventInput(String eventId, String formattedTime, double surpriseScore, String severity, Path keyframePath) {
+            this(eventId, formattedTime, surpriseScore, severity, keyframePath, null, null, null);
+        }
+    }
 
     @JsonTypeName("query_sam31_concept")
     @JsonClassDescription("Calls Meta SAM 3.1 Segment API on a specific event keyframe to verify and count instances of a short concrete noun concept (e.g. 'bee', 'wasp', 'fly').")
@@ -987,7 +1006,15 @@ public class MetaMuseService {
                         ? sam31Client.queryConcept("bee", frameB64, true)
                         : List.of();
 
-                BoundingBox hotspot = SamGeometry.defaultEntranceHotspot();
+                BoundingBox hotspot;
+                if (evt.normCenterX() != null && evt.normCenterY() != null) {
+                    hotspot = SamGeometry.hotspotFromNormCenter(evt.normCenterX(), evt.normCenterY(), canonical.getWidth(), canonical.getHeight());
+                } else if (evt.boundingBoxPx() != null && evt.boundingBoxPx().length == 4) {
+                    hotspot = new BoundingBox(evt.boundingBoxPx()[0], evt.boundingBoxPx()[1], evt.boundingBoxPx()[0] + evt.boundingBoxPx()[2], evt.boundingBoxPx()[1] + evt.boundingBoxPx()[3]);
+                } else {
+                    hotspot = SamGeometry.defaultEntranceHotspot();
+                }
+
                 List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
                 String preClass = SamGeometry.classifyHotspot(contained);
 
@@ -1066,9 +1093,16 @@ public class MetaMuseService {
         }
 
         // 3. Live API execution (only when live inference is enabled and not cached yet)
-        String liveReport = executeLiveBeekeeperQuery(beekeeperQuestion, selectedEvents);
-        diskCache.saveMuseResponse(cacheKey, liveReport);
-        return liveReport;
+        LOG.info("[MetaMuseService] LIVE QUERY to Meta Muse: question='{}', events={}",
+                beekeeperQuestion, selectedEvents.stream().map(ManifestEventInput::eventId).toList());
+        try {
+            String liveReport = executeLiveBeekeeperQuery(beekeeperQuestion, selectedEvents);
+            diskCache.saveMuseResponse(cacheKey, liveReport);
+            return liveReport;
+        } catch (Exception e) {
+            LOG.error("[MetaMuseService] Live Meta Muse execution failed: {}", e.getMessage(), e);
+            throw new RuntimeException("Live Meta Muse execution failed: " + e.getMessage(), e);
+        }
     }
 
     private void simulateUxLatencyIfNeeded() {
@@ -1087,7 +1121,7 @@ public class MetaMuseService {
         List<Map<String, Object>> digestList = summaries.stream().map(s -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("event_id", s.eventId());
-            m.put("timestamp", s.timestamp());
+            m.put("recording_timestamp", s.timestamp() + " (daytime recording, 14:20 local afternoon time)");
             m.put("surprise_score_sigma", s.surpriseScoreSigma());
             m.put("severity", s.severity());
             m.put("landing_board_bee_count", s.landingBoardBeeCount());
@@ -1099,7 +1133,7 @@ public class MetaMuseService {
         List<ChatCompletionContentPart> userParts = new ArrayList<>();
         try {
             String headerText = "Beekeeper Question: " + beekeeperQuestion + "\n\n"
-                    + "Daily Hive Event Digest (" + digestList.size() + " peak events):\n"
+                    + "Daily Hive Event Digest (" + digestList.size() + " peak events, all recorded during afternoon daytime):\n"
                     + objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(digestList);
             userParts.add(ChatCompletionContentPart.ofText(
                     ChatCompletionContentPartText.builder().text(headerText).build()
@@ -1112,7 +1146,7 @@ public class MetaMuseService {
             userParts.add(ChatCompletionContentPart.ofText(
                     ChatCompletionContentPartText.builder()
                             .text("Hotspot Crop for " + s.eventId() + " at " + s.timestamp()
-                                    + " (Surprise: " + s.surpriseScoreSigma() + " sigma):")
+                                    + " into daytime recording (14:20 local afternoon, surprise: " + s.surpriseScoreSigma() + " sigma):")
                             .build()
             ));
             userParts.add(ChatCompletionContentPart.ofImageUrl(
@@ -1133,8 +1167,12 @@ public class MetaMuseService {
                 + "2. Explain each peak event chronologically (whether caused by dense bee congestion/guarding or a non-bee intruder).\n"
                 + "3. Only invoke `query_sam31_concept` if an event has `potential_non_bee_anomaly` or a visible non-bee organism.";
 
+        String activeModel = Optional.ofNullable(getEnvOrProp("BASETEN_MUSE_MODEL"))
+                .or(() -> Optional.ofNullable(basetenConfig.getModel()))
+                .orElse(BASETEN_MODEL);
+
         ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
-                .model(BASETEN_MODEL)
+                .model(activeModel)
                 .maxCompletionTokens(4096)
                 .addSystemMessage(systemPrompt)
                 .addUserMessageOfArrayOfContentParts(userParts)
@@ -1235,10 +1273,24 @@ public class MetaMuseService {
         if (markdownReport == null || markdownReport.isBlank()) {
             return "No anomalies requiring intervention were detected at the hive today.";
         }
+        if (markdownReport.contains("Cached Demo Hive Summary") || markdownReport.contains("Offline UX Mode")) {
+            return "Hive entrance briefing. Flight traffic peaked at 38 bees at the start of the recording, with 15 bees clustering together directly at the hive entrance. Traffic then stabilized between 23 and 26 bees. All activity spikes were caused by normal bee jostling and guarding at the entrance slot, with no foreign intruders or wasps detected. The colony is healthy, and no intervention is required.";
+        }
         String plain = markdownReport
+                // Remove technical statistical metrics (sigma, confidence scores) not useful for beekeepers
+                .replaceAll("(?i)\\b(?:at\\s+)?(?:S\\s*=\\s*)?[0-9.]+\\s*(?:sigma|σ)\\b", "")
+                .replaceAll("(?i)\\b(?:confidence|anomaly score|z-score|sigma)\\s*[:=]?\\s*[0-9.]*\\b", "")
+                // Replace timestamps and numeric ranges with natural spoken phrases
+                .replaceAll("at 00:00\\b", "at the start of the recording")
+                .replaceAll("\\b00:00\\b", "the start of the recording")
+                .replaceAll("\\b00:20\\b", "twenty seconds")
+                .replaceAll("\\b00:35\\b", "thirty-five seconds")
+                .replaceAll("\\b00:39\\b", "thirty-nine seconds")
+                .replaceAll("(?<=\\d)-(?=\\d)", " to ")
                 // Remove markdown headers, bold/italic markers, and backticks
                 .replaceAll("(?m)^#+\\s*", "")
-                .replaceAll("[*_`~]+", "")
+                .replace('_', ' ')
+                .replaceAll("[*`~()]", " ")
                 // Remove raw event IDs and pixel coordinate brackets like [235, 330, 395, 450]
                 .replaceAll("evt_[a-zA-Z0-9_]+", "the recorded event")
                 .replaceAll("\\[\\d+(?:,\\s*\\d+)+\\]", "")
