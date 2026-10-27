@@ -1,8 +1,96 @@
-# beeJEPA Edge Server & Console
+# 🐝 beeJEPA Edge Server & Console
 
 High-performance, lightweight edge server and embedded web console for **beeJEPA**, optimized for deployment on a **Raspberry Pi 4 Model B** (ARM64) using **GraalVM Native Image (AOT)**, **Java 25 Virtual Threads**, and an embedded **Vue 3 + Tailwind CSS** frontend.
 
-Built for the **Meta AI Hackathon** in conjunction with self-supervised **V-JEPA** video anomaly detection.
+Built for the **Meta Global AI Developer Hackathon 2026** in conjunction with self-supervised **V-JEPA 2.1** video anomaly detection.
+
+---
+
+## Hackathon Scope & Project Cut-Off
+
+To provide clear transparency for the hackathon evaluation, the overview below distinguishes between pre-existing university coursework foundations and the system built during the **Meta Global AI Developer Hackathon 2026**:
+
+- **Pre-Existing Foundation (System 1 – Sensor Stream):**
+  Unsupervised feature extraction from 60 fps 1080x960 hive camera footage using V-JEPA 2.1, producing numerical prediction error tensors ($S(t)$ across a $9\times9$ spatial tubelet grid logged to `mlflow.db`). At this stage, outputs were abstract numerical indices without semantic labeling or language interfaces.
+
+- **Built During the Meta AI Hackathon (System 2 – Grounding, Reasoning & Edge Delivery):**
+  The semantic and multimodal pipeline connecting latent surprise signals to actionable insights: dual-mode SAM 3.1 segmentation, scale-invariant containment analysis ($\text{IoA}_{\text{bee}}$), Meta Muse Spark Open agentic reasoning on Baseten, chronological daily event digests, a deterministic bioacoustic honeybee synthesizer, and a GraalVM native edge server on ARM64.
+
+```
+┌────────────────────────────────────────────────────────┐
+│  PRE-EXISTING COURSEWORK FOUNDATION (System 1)         │
+│  - Raw 60 fps 1080x960 hive camera footage             │
+│  - Unsupervised V-JEPA 2.1 latent feature extraction   │
+│  - 9x9 spatial tubelet grid & surprise metric S(t)     │
+│  - Raw tracking database (mlflow.db)                   │
+└───────────────────────────┬────────────────────────────┘
+                            │  [HACKATHON CUT-OFF LINE]
+════════════════════════════╪═════════════════════════════
+┌───────────────────────────▼────────────────────────────┐
+│  BUILT DURING META AI HACKATHON (System 2)             │
+│  - 3-Channel Grounding Architecture (PCS + PVS + IoA)  │
+│  - Dual-Mode Meta SAM 3.1 Integration (/v1/responses)  │
+│  - Scale-Invariant Bee Containment Metric (IoA_bee)    │
+│  - Meta Muse Spark Open 1026 Agentic Loop on Baseten   │
+│  - Multi-Event Timeline Digest & Beekeeper Briefing   │
+│  - Bioacoustic Honeybee Voice Synthesizer (Java 25)    │
+│  - Micronaut AOT GraalVM Native Edge Server (ARM64)    │
+│  - Embedded Vue 3 + Tailwind Interactive Console       │
+└────────────────────────────────────────────────────────┘
+```
+
+### Scope Comparison Matrix
+
+| Component | Pre-Existing Foundation (System 1: Sensory) | Built During Hackathon (System 2: Cognition & Delivery) |
+| :--- | :--- | :--- |
+| **Vision Foundation Models** | Pre-trained V-JEPA 2.1 encoder | **Dual-Mode Meta SAM 3.1 (`sam-3.1`)** via `/v1/responses`<br>• Channel 1: Promptable Concept Segmentation (`"bee"`)<br>• Channel 2: Promptable Visual Segmentation (`point`/`box` at hotspot) |
+| **Reasoning & Agent Loop** | None (pure numerical loss $S(t)$) | **Meta Muse Spark Open (`meta-models/muse-spark-open-1026`)** on Baseten<br>• Dual visual inputs ($688\times688$ overview + $384\times384$ hotspot crop)<br>• Function calling tool loop (`query_sam31_concept`)<br>• Daily multi-event chronological timeline briefing |
+| **Spatial / Geometric Grounding**| Abstract $9\times9$ grid indices `[row, col]` | **Scale-Invariant Bee Containment Metric ($\text{IoA}_{\text{bee}}$)**<br>• Differentiates entrance crowding (15 bees in hotspot) from foreign intruders |
+| **Edge Server Runtime** | Python training scripts | **Java 25 / Micronaut 4.7 GraalVM Native Image (AOT)**<br>• Virtual Threads (Project Loom)<br>• SQLite WAL edge cache (`state.db`) on external SSD<br>• Sub-40ms cold start, Prometheus OpenMetrics |
+| **Bioacoustic Edge UI** | None | **Deterministic Honeybee Voice Synthesizer (Java 25)**<br>• 210–460 Hz carrier frequencies, 26–30 Hz wingbeat AM<br>**Embedded Vue 3 SPA** with 37.5-minute fever curve & video inspector |
+
+---
+
+## Empirical Findings & Pipeline Analysis
+
+The following sections document the visual outputs, geometric metrics, and model behaviors observed across evaluation runs:
+
+### Side-by-Side Latent Representation (Pixel Stream vs. V-JEPA Attention)
+![Live Side-by-Side V-JEPA Anomaly Detection](figures/side_by_side_vjepa_detection.gif)
+
+- **Left (Camera View):** Raw 60 fps hive footage showing honeybee traffic at the landing board during peak arrival clustering (`evt_rec2125_seq001_f0320`, $S(t) = 12.60\sigma$).
+- **Right (V-JEPA 2.1 Latent Space):** Spatial tubelet surprise heatmap isolating kinematic attention patches at the hive entrance slot in real time with zero camera jitter.
+
+### 1. Single-Frame Spatial Grounding Analysis
+![Single Frame 3-Channel Spatial Isolation](figures/channel1_and_2_spatial_isolation.svg)
+
+- **Overview Panel (Left):** SAM 3.1 Channel 1 detects 38 honeybee bounding boxes across the landing board in green. The V-JEPA kinematic hotspot $(i^*, j^*) = (4, 2)$ at $S(t) = 16.05\sigma$ projects a bounding box `[235, 330, 395, 450]` onto the entrance area.
+- **Hotspot Crop (Right):** Evaluating the scale-invariant containment ratio ($\text{IoA}_{\text{bee}} \ge 0.25$) identifies 15 honeybees overlapping the hotspot region (highlighted in bright neon green), documenting dense entrance traffic rather than foreign organisms.
+
+### 2. Multi-Event Timeline Analysis & Observed Bee Densities
+![Multi-Event Timeline Storyboard](figures/multi_event_timeline_storyboard.svg)
+
+Evaluating consecutive kinematic peak frames in recording `rec2125` revealed the following distribution of bees overlapping the identified hotspot windows:
+
+- **$S(t) = 16.05\sigma$** $\rightarrow$ **15 bees contained** in hotspot (`multi_bee_interaction_cluster`)
+- **$S(t) = 13.72\sigma$** $\rightarrow$ **11 bees contained** in hotspot
+- **$S(t) = 10.88\sigma$** $\rightarrow$ **7 bees contained** in hotspot
+- **$S(t) = 9.45\sigma$** $\rightarrow$ **6 bees contained** in hotspot
+
+These structured event summaries provide the context for Meta Muse Spark Open to produce chronological digests without requiring continuous manual inspection of raw video.
+
+### 3. Ablation Comparison: Model Behavior With and Without V-JEPA Metadata
+![Ablation Study: Without vs With V-JEPA](figures/ablation_vjepa_vs_no_vjepa.svg)
+
+To evaluate the specific effect of V-JEPA kinematic guidance on downstream reasoning, model outputs were compared on the identical test frame (`evt_rec2125_seq000_f0000`) under two configurations:
+
+| Metric | Condition A: Without V-JEPA (Ablated Baseline) | Condition B: With V-JEPA (Full 3-Channel Pipeline) |
+| :--- | :--- | :--- |
+| **Temporal Search Space** | 2,880 frames (uniform 1 fps sampling over 48 min) | **184 peak events (-93.6% API calls)** |
+| **SAM 3.1 Segmentation** | Channel 1 PCS (`"bee"`) only $\rightarrow$ 38 unlocalized boxes | **Channel 1 PCS + Channel 2 PVS Hotspot** |
+| **Perception Tokens on Anomaly** | **88 visual patches** ($160\times120$ px native in $14\times14$ grid) | **729 visual patches** ($384\times384$ crop, **+8.3x resolution**) |
+| **Class-Agnostic Isolation** | Unprompted foreign concepts remain unsegmented | **Active via PVS point/box prompt + IoA filter** |
+| **Observed Muse Spark Output** | **Unlocalized Assessment:**<br>*"Visual inspection alone shows uniform baseline traffic only. Anomaly: None detectable without kinematic data. Normal baseline activity... No intervention required. Continue routine monitoring."* | **Hotspot-Focused Assessment:**<br>Identifies the 15-bee entrance interaction cluster, verifies honeybee morphology at high resolution, and confirms absence of non-bee intruders. |
 
 ---
 
