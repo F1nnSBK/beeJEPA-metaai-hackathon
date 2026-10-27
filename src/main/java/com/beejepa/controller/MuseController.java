@@ -1,11 +1,15 @@
 package com.beejepa.controller;
 
+import com.beejepa.event.EventService;
 import com.beejepa.muse.AudioSpectralAnalyzer;
 import com.beejepa.muse.BeeAcousticSynthesizer;
 import com.beejepa.muse.MetaMuseService;
 import com.beejepa.muse.ResponseLatencyModel;
+import com.beejepa.muse.SamGeometry;
 import com.beejepa.muse.dto.MuseInferenceRequest;
 import com.beejepa.muse.dto.MuseInferenceResponse;
+import com.beejepa.state.model.MuseLogEntry;
+import com.beejepa.state.StateRepository;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
@@ -15,7 +19,11 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 
-import java.util.Map;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.*;
 
 @Controller("/api/v1/muse")
 @ExecuteOn(TaskExecutors.BLOCKING)
@@ -25,15 +33,28 @@ public class MuseController {
     private final BeeAcousticSynthesizer acousticSynthesizer;
     private final AudioSpectralAnalyzer spectralAnalyzer;
     private final ResponseLatencyModel latencyModel;
+    private final EventService eventService;
+    private final StateRepository stateRepository;
+
+    public MuseController(MetaMuseService museService,
+                          BeeAcousticSynthesizer acousticSynthesizer,
+                          AudioSpectralAnalyzer spectralAnalyzer,
+                          ResponseLatencyModel latencyModel,
+                          EventService eventService,
+                          StateRepository stateRepository) {
+        this.museService = museService;
+        this.acousticSynthesizer = acousticSynthesizer;
+        this.spectralAnalyzer = spectralAnalyzer;
+        this.latencyModel = latencyModel;
+        this.eventService = eventService;
+        this.stateRepository = stateRepository;
+    }
 
     public MuseController(MetaMuseService museService,
                           BeeAcousticSynthesizer acousticSynthesizer,
                           AudioSpectralAnalyzer spectralAnalyzer,
                           ResponseLatencyModel latencyModel) {
-        this.museService = museService;
-        this.acousticSynthesizer = acousticSynthesizer;
-        this.spectralAnalyzer = spectralAnalyzer;
-        this.latencyModel = latencyModel;
+        this(museService, acousticSynthesizer, spectralAnalyzer, latencyModel, null, null);
     }
 
     @Post(value = "/acoustic-mirror", consumes = {"audio/wav", "application/octet-stream", "audio/*"}, produces = "audio/wav")
@@ -147,6 +168,77 @@ public class MuseController {
     @Post("/embeddings")
     public MuseInferenceResponse embeddings(@Body MuseInferenceRequest request) {
         return museService.callEmbedding(request);
+    }
+
+    @Post("/ask")
+    public HttpResponse<Map<String, Object>> askMuse(@Body Map<String, Object> payload) {
+        long startTime = System.currentTimeMillis();
+        String logId = UUID.randomUUID().toString();
+        String question = payload != null && payload.get("question") != null
+                ? String.valueOf(payload.get("question"))
+                : "What happened at my hive today?";
+
+        List<MetaMuseService.ManifestEventInput> topEvents = new ArrayList<>();
+        if (eventService != null) {
+            List<Map<String, Object>> rawEvents = eventService.listEvents();
+            for (Map<String, Object> ev : rawEvents) {
+                if (topEvents.size() >= 3) break;
+                String eventId = (String) ev.get("eventId");
+                String formattedTime = (String) ev.getOrDefault("formattedTime", "00:00");
+                double surprise = ev.get("surpriseScoreL2") instanceof Number n ? n.doubleValue() : 0.0;
+                String severity = (String) ev.getOrDefault("severity", "MEDIUM");
+
+                Path keyframePath = eventService.getMediaFile(eventId, "peak_frame.jpg")
+                        .map(File::toPath)
+                        .orElseGet(() -> {
+                            Path fallback = Path.of("data", "hackathon_sample", "event_frames", eventId + ".jpg");
+                            if (Files.exists(fallback)) {
+                                return fallback;
+                            }
+                            return null;
+                        });
+
+                if (keyframePath != null) {
+                    topEvents.add(new MetaMuseService.ManifestEventInput(
+                            eventId,
+                            formattedTime,
+                            surprise,
+                            severity,
+                            keyframePath
+                    ));
+                }
+            }
+        }
+
+        List<SamGeometry.EventSpatialSummary> summaries = museService.analyzeEventsInParallel(topEvents);
+        String reportMarkdown = museService.answerBeekeeperQuestion(question, topEvents, 3);
+        String spokenSummary = MetaMuseService.extractSpokenSummary(reportMarkdown);
+
+        long latency = System.currentTimeMillis() - startTime;
+        if (stateRepository != null) {
+            stateRepository.logMuseCall(new MuseLogEntry(
+                    logId,
+                    "/api/v1/muse/ask",
+                    question,
+                    200,
+                    latency,
+                    Instant.now()
+            ));
+        }
+
+        return HttpResponse.ok(Map.of(
+                "question", question,
+                "report", reportMarkdown,
+                "spokenSummary", spokenSummary,
+                "events", summaries,
+                "offlineLocked", !museService.isAllowLiveInference(),
+                "telemetry", Map.of(
+                        "logId", logId,
+                        "latencyMs", latency,
+                        "eventCount", summaries.size(),
+                        "offlineLocked", !museService.isAllowLiveInference()
+                )
+        ));
     }
 }
 

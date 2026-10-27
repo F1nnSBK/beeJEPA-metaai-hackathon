@@ -1231,6 +1231,31 @@ public class MetaMuseService {
         return config;
     }
 
+    public static String extractSpokenSummary(String markdownReport) {
+        if (markdownReport == null || markdownReport.isBlank()) {
+            return "No anomalies requiring intervention were detected at the hive today.";
+        }
+        String plain = markdownReport
+                // Remove markdown headers, bold/italic markers, and backticks
+                .replaceAll("(?m)^#+\\s*", "")
+                .replaceAll("[*_`~]+", "")
+                // Remove raw event IDs and pixel coordinate brackets like [235, 330, 395, 450]
+                .replaceAll("evt_[a-zA-Z0-9_]+", "the recorded event")
+                .replaceAll("\\[\\d+(?:,\\s*\\d+)+\\]", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        // Limit to first ~450 characters (approx. 3-4 spoken sentences) for crisp voice playback
+        if (plain.length() > 450) {
+            int lastPeriod = plain.lastIndexOf('.', 450);
+            if (lastPeriod > 150) {
+                return plain.substring(0, lastPeriod + 1);
+            }
+            return plain.substring(0, 450) + "...";
+        }
+        return plain;
+    }
+
     public BasetenConfig getBasetenConfig() {
         return basetenConfig;
     }

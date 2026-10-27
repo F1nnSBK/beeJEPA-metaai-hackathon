@@ -255,4 +255,19 @@ class MetaMuseServiceTest {
         Assertions.assertTrue(response.contains("Cached Demo Hive Summary"));
         Assertions.assertTrue(response.contains("Traffic Evolution"));
     }
+
+    @Test
+    void testExtractSpokenSummary() {
+        String markdown = "### 🐝 Hive Summary\n"
+                + "**Status:** High traffic detected at evt_rec2125_seq000_f0000 with box [235, 330, 395, 450].\n"
+                + "Guard bees are active at the hive entrance slot.";
+
+        String spoken = MetaMuseService.extractSpokenSummary(markdown);
+        Assertions.assertNotNull(spoken);
+        Assertions.assertFalse(spoken.contains("###"));
+        Assertions.assertFalse(spoken.contains("**"));
+        Assertions.assertFalse(spoken.contains("evt_rec2125_seq000_f0000"));
+        Assertions.assertFalse(spoken.contains("[235, 330, 395, 450]"));
+        Assertions.assertTrue(spoken.contains("Guard bees are active"));
+    }
 }

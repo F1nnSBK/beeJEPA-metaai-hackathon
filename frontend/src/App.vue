@@ -45,6 +45,14 @@ const voiceTranscript = ref('')
 const museQuestionInput = ref('')
 const stagedTab = ref('sam') // 'sam', 'prompt', 'payload', 'responses', 'headers', 'event'
 
+// Live / Cached Muse Diagnosis & Voice TTS state
+const museDiagnosis = ref(null)
+const isAskingMuse = ref(false)
+const autoReadAloud = ref(true)
+const isSpeakingAloud = ref(false)
+const isPlayingBeeBuzz = ref(false)
+const showRawWirePayload = ref(false)
+
 // Meta Model API Health state
 const metaHealth = ref({
   configured: false,
@@ -249,6 +257,8 @@ async function toggleMicrophoneListening() {
             voiceTranscript.value = transData.transcript
             museQuestionInput.value = transData.transcript
             console.log('Voice transcribed dynamically via Meta Audio API:', transData.transcript)
+            // Auto-chain into Ask Muse!
+            askMuse(transData.transcript)
           }
         }
       } catch (err) {
@@ -359,6 +369,68 @@ async function prepareSamPayload(event = null, prompt = null) {
 
 function setPresetQuestion(q) {
   museQuestionInput.value = q
+}
+
+async function askMuse(question = null) {
+  const q = question || museQuestionInput.value || 'What happened at my hive today?'
+  isAskingMuse.value = true
+  try {
+    const res = await fetch('/api/v1/muse/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, maxEvents: 3 })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      museDiagnosis.value = data
+
+      // Auto-read aloud if toggle is on
+      if (autoReadAloud.value && data.spokenSummary) {
+        readAloud(data.spokenSummary)
+      }
+    }
+  } catch (err) {
+    console.error('Failed to ask Muse:', err)
+  } finally {
+    isAskingMuse.value = false
+  }
+}
+
+function readAloud(text = null) {
+  if (!('speechSynthesis' in window)) return
+  window.speechSynthesis.cancel()
+  const content = text || museDiagnosis.value?.spokenSummary || ''
+  if (!content) return
+  const utterance = new SpeechSynthesisUtterance(content)
+  utterance.lang = 'en-US'
+  utterance.rate = 1.05
+  utterance.pitch = 1.0
+  isSpeakingAloud.value = true
+  utterance.onend = () => { isSpeakingAloud.value = false }
+  utterance.onerror = () => { isSpeakingAloud.value = false }
+  window.speechSynthesis.speak(utterance)
+}
+
+function stopReadAloud() {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+  isSpeakingAloud.value = false
+}
+
+async function playBeeBuzz(text = null) {
+  try {
+    isPlayingBeeBuzz.value = true
+    const promptText = text || museDiagnosis.value?.spokenSummary || 'Bee colony activity report.'
+    const url = `/api/v1/muse/voice?text=${encodeURIComponent(promptText)}`
+    const audio = new Audio(url)
+    audio.onended = () => { isPlayingBeeBuzz.value = false }
+    audio.onerror = () => { isPlayingBeeBuzz.value = false }
+    await audio.play()
+  } catch (err) {
+    console.error('Failed to play bee buzz:', err)
+    isPlayingBeeBuzz.value = false
+  }
 }
 
 // Live Bee Swarm Simulation (Low-Temperature Random Walk)
@@ -1227,20 +1299,114 @@ async function handleLogout() {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 @click="prepareSamPayload(selectedEvent)"
-                :disabled="isPreparingMuse"
+                :disabled="isPreparingMuse || isAskingMuse"
                 class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-amber-300 font-semibold text-xs rounded-lg transition-all border border-amber-500/30 flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] touch-manipulation"
               >
-                <span>SAM 3.1 API</span>
+                <span>🔍 SAM 3.1 Wire</span>
               </button>
 
               <button
-                @click="prepareMusePayload(selectedEvent)"
-                :disabled="isPreparingMuse"
+                @click="askMuse()"
+                :disabled="isAskingMuse"
                 class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-lg transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 active:scale-[0.98] touch-manipulation"
               >
-                <span v-if="isPreparingMuse" class="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                <span>🐝 Ask Muse</span>
+                <span v-if="isAskingMuse" class="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                <span>{{ isAskingMuse ? 'Analyzing Hive...' : '🐝 Ask Muse Spark' }}</span>
               </button>
+            </div>
+
+            <!-- Muse Spark Live / Cached Storyboard Diagnosis Card -->
+            <div v-if="museDiagnosis" class="p-3.5 bg-slate-900/95 rounded-lg border border-amber-500/40 space-y-3 shadow-lg">
+              <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-800">
+                <span class="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                  <span>🐝</span>
+                  <span>Muse Spark Briefing</span>
+                </span>
+                <div class="flex items-center gap-2 text-[10px] font-mono">
+                  <span
+                    :class="museDiagnosis.offlineLocked ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'"
+                    class="px-2 py-0.5 rounded border"
+                  >
+                    {{ museDiagnosis.offlineLocked ? 'Cached Disk / Offline Mode' : 'Live Baseten Spark' }}
+                  </span>
+                  <span class="text-slate-400">{{ museDiagnosis.telemetry?.latencyMs || 0 }}ms</span>
+                </div>
+              </div>
+
+              <!-- Spoken Audio Controls: Real Voice & Cooley-Tukey FFT Synthesizer -->
+              <div class="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-950/80 rounded border border-slate-800 text-[11px]">
+                <label class="flex items-center gap-1.5 text-slate-300 cursor-pointer text-[10px]">
+                  <input type="checkbox" v-model="autoReadAloud" class="rounded accent-amber-500 w-3.5 h-3.5" />
+                  <span>Auto-Voice</span>
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    @click="isSpeakingAloud ? stopReadAloud() : readAloud()"
+                    class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded flex items-center gap-1 transition-colors text-[10px] font-medium"
+                  >
+                    <span>{{ isSpeakingAloud ? '⏹ Stop Voice' : '🔊 Read Briefing Aloud' }}</span>
+                  </button>
+                  <button
+                    @click="playBeeBuzz()"
+                    :disabled="isPlayingBeeBuzz"
+                    class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded flex items-center gap-1 transition-colors text-[10px]"
+                    title="Synthesize audio via Radix-2 Cooley-Tukey FFT synthesizer"
+                  >
+                    <span>{{ isPlayingBeeBuzz ? '🎶 Playing FFT...' : '🐝 Bee-Buzz (Cooley-Tukey FFT)' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Spoken Summary Quote -->
+              <div v-if="museDiagnosis.spokenSummary" class="p-2.5 bg-amber-500/5 rounded border border-amber-500/20 text-xs text-amber-200/90 italic leading-relaxed">
+                "{{ museDiagnosis.spokenSummary }}"
+              </div>
+
+              <!-- 3-Event Visual Storyboard Focus -->
+              <div v-if="museDiagnosis.events && museDiagnosis.events.length" class="space-y-1.5">
+                <span class="text-[10px] uppercase font-mono text-slate-400 tracking-wider">Multi-Event Storyboard Focus (384x384 Crops)</span>
+                <div class="grid grid-cols-3 gap-2">
+                  <div
+                    v-for="evt in museDiagnosis.events"
+                    :key="evt.eventId"
+                    class="p-1.5 bg-slate-950 rounded border border-slate-800 space-y-1 text-center"
+                  >
+                    <img
+                      v-if="evt.cropBase64"
+                      :src="'data:image/jpeg;base64,' + evt.cropBase64"
+                      :alt="evt.eventId"
+                      class="w-full aspect-square rounded object-cover border border-slate-700/80"
+                    />
+                    <div class="text-[9px] font-mono text-slate-300 truncate">{{ evt.timestamp }}</div>
+                    <div class="text-[9px] font-semibold text-amber-400">{{ evt.surpriseScoreSigma }}σ</div>
+                    <div class="text-[8px] text-slate-400 font-mono">{{ evt.landingBoardBeeCount }} bees</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Full Markdown Report Content -->
+              <div class="p-3 bg-slate-950/90 rounded border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans max-h-60 overflow-y-auto">
+                {{ museDiagnosis.report }}
+              </div>
+
+              <!-- Raw API Payload Toggle -->
+              <div class="pt-1 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-800">
+                <button
+                  @click="showRawWirePayload = !showRawWirePayload"
+                  class="text-slate-400 hover:text-slate-200 flex items-center gap-1"
+                >
+                  <span>{{ showRawWirePayload ? '▼ Hide' : '▶ Show' }} Raw Wire Payload</span>
+                </button>
+                <button
+                  @click="prepareMusePayload(selectedEvent)"
+                  class="text-amber-400 hover:text-amber-300 underline"
+                >
+                  View Staging & cURL
+                </button>
+              </div>
+              <pre v-if="showRawWirePayload" class="p-2 bg-slate-950 rounded text-[9px] font-mono text-amber-300/80 overflow-x-auto max-h-40 border border-slate-800">
+{{ JSON.stringify(museDiagnosis, null, 2) }}
+              </pre>
             </div>
 
             <!-- Staged Muse Query Status Banner (Prepared, Not Sent) -->
