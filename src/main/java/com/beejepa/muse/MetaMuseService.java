@@ -80,12 +80,12 @@ public class MetaMuseService {
     @Inject
     public MetaMuseService(MetaMuseClient client,
                            MetaMuseConfig config,
-                           BasetenConfig basetenConfig,
+                           @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
                            StateRepository stateRepository,
                            com.beejepa.event.EventService eventService,
-                           Sam31Client sam31Client,
-                           ObjectMapper objectMapper,
-                           MuseDiskCache diskCache) {
+                           @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
+                           @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
+                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache) {
         this.client = client;
         this.config = config;
         this.basetenConfig = basetenConfig != null ? basetenConfig : new BasetenConfig();

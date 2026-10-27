@@ -27,8 +27,9 @@ public class Sam31Client {
     private final String apiKey;
     private final String endpointUrl;
 
+    @jakarta.inject.Inject
     public Sam31Client(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.apiKey = Optional.ofNullable(System.getenv("META_MUSE_API_KEY"))
                 .orElseGet(() -> Optional.ofNullable(System.getenv("MODEL_API_KEY")).orElse(""));
         String baseUrl = Optional.ofNullable(System.getenv("META_MUSE_BASE_URL"))
@@ -37,6 +38,10 @@ public class Sam31Client {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
+    }
+
+    public Sam31Client() {
+        this(new ObjectMapper());
     }
 
     public List<BoundingBox> queryConcept(String conceptPrompt, String imageBase64, boolean filterLandingBoard) {

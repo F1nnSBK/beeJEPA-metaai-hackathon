@@ -154,6 +154,34 @@ async function toggleMicrophoneListening() {
     isRecording.value = true
     isProcessing.value = false
 
+    // Real-time browser speech recognition into museQuestionInput
+    let speechRecognitionInstance = null
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (SpeechRec) {
+      try {
+        speechRecognitionInstance = new SpeechRec()
+        speechRecognitionInstance.continuous = true
+        speechRecognitionInstance.interimResults = true
+        speechRecognitionInstance.lang = navigator.language || 'de-DE'
+        speechRecognitionInstance.onresult = (event) => {
+          let str = ''
+          for (let i = 0; i < event.results.length; ++i) {
+            str += event.results[i][0].transcript
+          }
+          if (str.trim()) {
+            museQuestionInput.value = str
+            voiceTranscript.value = str
+          }
+        }
+        speechRecognitionInstance.onerror = (e) => {
+          console.debug('Speech recognition event:', e)
+        }
+        speechRecognitionInstance.start()
+      } catch (e) {
+        console.debug('Speech recognition init error:', e)
+      }
+    }
+
     processor.onaudioprocess = (e) => {
       if (stopped) return
       const input = e.inputBuffer.getChannelData(0)
@@ -184,6 +212,9 @@ async function toggleMicrophoneListening() {
       stopped = true
       activeStopRecording = null
       if (silenceCheckInterval) clearInterval(silenceCheckInterval)
+      if (speechRecognitionInstance) {
+        try { speechRecognitionInstance.stop() } catch (e) {}
+      }
 
       isRecording.value = false
       isProcessing.value = true
@@ -253,12 +284,10 @@ async function toggleMicrophoneListening() {
         })
         if (transRes.ok) {
           const transData = await transRes.json()
-          if (transData && transData.transcript) {
+          if (transData && transData.transcript && transData.transcript.trim()) {
             voiceTranscript.value = transData.transcript
             museQuestionInput.value = transData.transcript
             console.log('Voice transcribed dynamically via Meta Audio API:', transData.transcript)
-            // Auto-chain into Ask Muse!
-            askMuse(transData.transcript)
           }
         }
       } catch (err) {
@@ -1302,7 +1331,7 @@ async function handleLogout() {
                 :disabled="isPreparingMuse || isAskingMuse"
                 class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-amber-300 font-semibold text-xs rounded-lg transition-all border border-amber-500/30 flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] touch-manipulation"
               >
-                <span>🔍 SAM 3.1 Wire</span>
+                <span>SAM 3.1 Wire</span>
               </button>
 
               <button
@@ -1344,7 +1373,7 @@ async function handleLogout() {
                     @click="isSpeakingAloud ? stopReadAloud() : readAloud()"
                     class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded flex items-center gap-1 transition-colors text-[10px] font-medium"
                   >
-                    <span>{{ isSpeakingAloud ? '⏹ Stop Voice' : '🔊 Read Briefing Aloud' }}</span>
+                    <span>{{ isSpeakingAloud ? 'Stop Voice' : 'Read Briefing Aloud' }}</span>
                   </button>
                   <button
                     @click="playBeeBuzz()"
@@ -1352,7 +1381,7 @@ async function handleLogout() {
                     class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded flex items-center gap-1 transition-colors text-[10px]"
                     title="Synthesize audio via Radix-2 Cooley-Tukey FFT synthesizer"
                   >
-                    <span>{{ isPlayingBeeBuzz ? '🎶 Playing FFT...' : '🐝 Bee-Buzz (Cooley-Tukey FFT)' }}</span>
+                    <span>{{ isPlayingBeeBuzz ? 'Playing FFT...' : '🐝 Bee-Buzz (Cooley-Tukey FFT)' }}</span>
                   </button>
                 </div>
               </div>
@@ -1641,26 +1670,21 @@ async function handleLogout() {
       </footer>
     </div>
 
-    <!-- Staged Meta Muse Request Modal (Prepared with Event Data, Not Sent Yet) -->
+    <!-- Staged Meta Muse Request Modal (Cleaned & Streamlined) -->
     <div
       v-if="stagedMuseModalOpen"
       class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6"
       @click.self="stagedMuseModalOpen = false"
     >
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <!-- Header -->
-        <div class="p-4 sm:p-5 border-b border-slate-800 flex items-start justify-between bg-slate-900/60">
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-base select-none">🐝</span>
-              <h3 class="text-sm sm:text-base font-semibold text-white">Muse Spark Open Staging (Baseten)</h3>
-              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                Bereitgestellt • Noch nicht abgesendet
-              </span>
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+          <div class="flex items-center gap-2">
+            <span class="text-base select-none">🐝</span>
+            <div>
+              <h3 class="text-sm font-semibold text-white">Meta Muse Staging Inspector</h3>
+              <p class="text-[11px] text-slate-400">Gegroundete Video-Telemetrie & SAM 3.1 Prompt-Vorschau</p>
             </div>
-            <p class="text-xs text-slate-400 mt-1">
-              Event- & SAM 3.1 Maskendaten gebunden an Baseten Model API (<code class="font-mono text-amber-300/90">{{ stagedMuseQuery?.targetUrl || 'https://inference.baseten.co/v1/chat/completions' }}</code>)
-            </p>
           </div>
           <button
             @click="stagedMuseModalOpen = false"
@@ -1672,52 +1696,26 @@ async function handleLogout() {
           </button>
         </div>
 
-        <!-- Body Scrollable -->
-        <div class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
-          <!-- Safety & Budget Protection Banner -->
-          <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30 flex items-start gap-3">
-            <span class="text-lg select-none">🐝</span>
-            <div class="space-y-1">
-              <div class="font-semibold text-amber-300 text-xs">
-                Budget-Schutz aktiv • 0 Credits verbraucht
-              </div>
-              <p class="text-slate-300 text-[11px] leading-relaxed">
-                Die Anfrage ist vollständig formatiert: Zuerst SAM 3.1 Instanzsegmentierung, dann Maske & SAM-Eingangsdaten gebunden in den OpenAI-kompatiblen Payload für <span class="text-amber-200 font-semibold">{{ stagedMuseQuery?.model || 'meta-models/muse-spark-open' }}</span>. Liegt im Staging-Modus und wird <span class="text-amber-200 font-medium">noch nicht</span> an Baseten gesendet.
-              </p>
+        <!-- Body -->
+        <div class="p-4 space-y-3.5 overflow-y-auto flex-1 text-xs">
+          <!-- Compact Status & Event Context -->
+          <div class="p-2.5 bg-slate-950/70 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-[11px]">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span class="text-slate-300 font-semibold">{{ stagedMuseQuery?.eventId || stagedSamQuery?.eventId || selectedEvent?.eventId || 'Event Telemetrie' }}</span>
             </div>
-          </div>
-
-          <!-- Active Event Context Binding Badges -->
-          <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
-            <div class="flex items-center justify-between text-[11px] text-slate-400">
-              <span class="font-mono uppercase font-semibold text-slate-300">Gebundene Event-Telemetrie</span>
-              <span class="font-mono text-amber-400">{{ stagedMuseQuery?.eventId || 'Active Sequence' }}</span>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[11px]">
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800/80">
-                <div class="text-[10px] text-slate-500">Surprise σ</div>
-                <div class="text-rose-400 font-bold mt-0.5">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + 'σ' : '4.82σ' }}</div>
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800/80">
-                <div class="text-[10px] text-slate-500">Pixel-Diff</div>
-                <div class="text-slate-300 font-medium mt-0.5">{{ stagedMuseQuery?.eventData?.pixelDiffBaseline ? Number(stagedMuseQuery.eventData.pixelDiffBaseline).toFixed(4) : '0.0142' }}</div>
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800/80">
-                <div class="text-[10px] text-slate-500">Tubelet Hotspot</div>
-                <div class="text-amber-400 font-medium mt-0.5">({{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridX ?? 2 }}, {{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridY ?? 3 }})</div>
-              </div>
-              <div class="p-2 bg-slate-900 rounded-lg border border-slate-800/80">
-                <div class="text-[10px] text-slate-500">Tokens (est.)</div>
-                <div class="text-slate-200 font-medium mt-0.5">{{ stagedMuseQuery?.estimatedTokens || 120 }}</div>
-              </div>
+            <div class="flex items-center gap-3 text-slate-400">
+              <span class="text-rose-400 font-bold">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + 'σ' : (selectedEvent?.surpriseScoreL2 ? Number(selectedEvent.surpriseScoreL2).toFixed(2) + 'σ' : '4.82σ') }}</span>
+              <span class="text-amber-400">Hotspot ({{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridX ?? 2 }}, {{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridY ?? 3 }})</span>
+              <span class="text-emerald-400 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">0 Credits</span>
             </div>
           </div>
 
           <!-- Question Input & Presets -->
-          <div class="space-y-2">
+          <div class="space-y-1.5">
             <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold text-slate-200">Beekeeper Frage an Meta Muse:</label>
-              <span class="text-[11px] text-slate-400">Kann angepasst werden</span>
+              <label class="text-[11px] font-semibold text-slate-200">Beekeeper Frage an Meta Muse:</label>
+              <span class="text-[10px] text-slate-400">Text oder Sprache</span>
             </div>
             <textarea
               v-model="museQuestionInput"
@@ -1725,39 +1723,31 @@ async function handleLogout() {
               class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono text-xs focus:outline-none focus:border-amber-500/50 resize-none"
               placeholder="Frage an Meta Muse..."
             ></textarea>
-            <div class="flex flex-wrap items-center gap-1.5 pt-1">
-              <span class="text-[10px] text-slate-500 uppercase font-mono mr-1">Presets:</span>
+            <div class="flex flex-wrap items-center gap-1.5">
               <button
                 @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors"
+                class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Kollisions-Ursache
+                🐝 Kollision
               </button>
               <button
                 @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors"
+                class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Hornissen-Gefahr
+                🐝 Hornisse
               </button>
               <button
                 @click="setPresetQuestion('Analyze swarm preparation cues from cluster vibration and entrance traffic')"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors"
+                class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Schwarm-Dynamik
+                🐝 Schwarm
               </button>
             </div>
           </div>
 
-          <!-- Staging Inspector Tabs -->
-          <div class="border-t border-slate-800 pt-3 space-y-2">
-            <div class="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
-              <button
-                @click="stagedTab = 'sam'"
-                :class="stagedTab === 'sam' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors shrink-0 flex items-center gap-1"
-              >
-                <span>🐝 SAM 3.1 (/responses)</span>
-              </button>
+          <!-- Staged Inspector Tabs: Just 2 clean tabs! -->
+          <div class="border-t border-slate-800 pt-2 space-y-2">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-1.5">
               <button
                 @click="stagedTab = 'prompt'"
                 :class="stagedTab === 'prompt' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
@@ -1770,107 +1760,42 @@ async function handleLogout() {
                 :class="stagedTab === 'payload' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
                 class="px-2 py-1 text-xs transition-colors shrink-0"
               >
-                Chat Completions (/chat/completions)
-              </button>
-              <button
-                @click="stagedTab = 'responses'"
-                :class="stagedTab === 'responses' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors shrink-0"
-              >
-                Meta Responses (/responses)
-              </button>
-              <button
-                @click="stagedTab = 'headers'"
-                :class="stagedTab === 'headers' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors shrink-0"
-              >
-                HTTP Headers
-              </button>
-              <button
-                @click="stagedTab = 'event'"
-                :class="stagedTab === 'event' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
-                class="px-2 py-1 text-xs transition-colors shrink-0"
-              >
-                Event Telemetry
+                Wire Payload & cURL
               </button>
             </div>
 
-            <!-- Tab: SAM 3.1 Meta Model API Payload -->
-            <div v-if="stagedTab === 'sam'" class="space-y-3 font-mono text-[11px]">
-              <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <div class="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-slate-800">
-                  <span class="text-amber-400 font-semibold uppercase">API Endpoint:</span>
-                  <span class="text-slate-200">{{ stagedSamQuery?.targetUrl || 'https://api.meta.ai/v1/responses' }}</span>
-                </div>
-                <div class="flex items-center justify-between text-[10px] text-slate-400">
-                  <span class="text-amber-400 font-semibold uppercase">Model Identifier:</span>
-                  <span class="text-emerald-400 font-semibold">{{ stagedSamQuery?.model || 'sam-3.1' }}</span>
-                </div>
-                <div class="flex items-start justify-between text-[10px] text-slate-400">
-                  <span class="text-amber-400 font-semibold shrink-0 uppercase">Dynamic Prompt:</span>
-                  <span class="text-slate-200 text-right font-sans pl-2">{{ stagedSamQuery?.prompt || museQuestionInput }}</span>
-                </div>
+            <!-- Tab 1: Formatted Grounded Prompt -->
+            <div v-if="stagedTab === 'prompt'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
+              {{ stagedMuseQuery?.prompt || stagedSamQuery?.prompt || 'Kein Prompt generiert' }}
+            </div>
+
+            <!-- Tab 2: Wire Payload & cURL -->
+            <div v-if="stagedTab === 'payload'" class="space-y-2">
+              <div v-if="stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand" class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                <div class="text-[10px] font-mono text-amber-400 uppercase font-semibold">cURL:</div>
+                <pre class="text-slate-300 whitespace-pre-wrap font-mono text-[10px] leading-tight select-all max-h-28 overflow-y-auto">{{ stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand }}</pre>
               </div>
-
-              <!-- JSON Image / Concept Payload -->
-              <div class="space-y-1">
-                <div class="text-[10px] text-slate-400 uppercase font-semibold">Image & Concept Prompt Payload:</div>
-                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-emerald-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {{ JSON.stringify(stagedSamQuery?.imagePayload || { model: 'sam-3.1', input: [{ role: 'user', content: [{ type: 'input_text', text: museQuestionInput }, { type: 'input_image', image_url: '/api/v1/events/' + selectedEvent?.eventId + '/media/peak_frame.jpg' }] }] }, null, 2) }}
-                </div>
+              <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[10px] text-emerald-400 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                {{ JSON.stringify(stagedMuseQuery?.payload || stagedSamQuery?.imagePayload || { model: 'muse-spark-open', question: museQuestionInput }, null, 2) }}
               </div>
-
-              <!-- Ready-to-run Curl Command -->
-              <div v-if="stagedSamQuery?.curlCommand" class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
-                <div class="flex items-center justify-between text-[10px] text-slate-400">
-                  <span class="font-semibold text-slate-300">Ready-to-run cURL Command:</span>
-                  <span class="text-amber-300 font-mono">Meta Model API</span>
-                </div>
-                <pre class="text-slate-300 whitespace-pre-wrap text-[10px] leading-tight select-all">{{ stagedSamQuery.curlCommand }}</pre>
-              </div>
-            </div>
-
-            <!-- Tab: Formatted Grounded Prompt -->
-            <div v-if="stagedTab === 'prompt'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
-              {{ stagedMuseQuery?.prompt || 'Kein Prompt generiert' }}
-            </div>
-
-            <!-- Tab: OpenAI Chat Completions Payload -->
-            <div v-if="stagedTab === 'payload'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
-              {{ JSON.stringify(stagedMuseQuery?.payload, null, 2) }}
-            </div>
-
-            <!-- Tab: Meta Responses API Payload -->
-            <div v-if="stagedTab === 'responses'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-cyan-400 whitespace-pre-wrap max-h-56 overflow-y-auto">
-              {{ JSON.stringify(stagedMuseQuery?.responsesPayload || { model: stagedMuseQuery?.model, input: stagedMuseQuery?.prompt, reasoning: { effort: 'high' } }, null, 2) }}
-            </div>
-
-            <!-- Tab: HTTP Headers -->
-            <div v-if="stagedTab === 'headers'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 space-y-1.5">
-              <div v-for="(v, k) in stagedMuseQuery?.headers" :key="k" class="flex items-start gap-2">
-                <span class="text-amber-400 shrink-0">{{ k }}:</span>
-                <span class="text-slate-300 break-all">{{ v }}</span>
-              </div>
-            </div>
-
-            <!-- Tab: Event Telemetry -->
-            <div v-if="stagedTab === 'event'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-amber-300/90 whitespace-pre-wrap max-h-56 overflow-y-auto">
-              {{ JSON.stringify(stagedMuseQuery?.eventData, null, 2) }}
             </div>
           </div>
         </div>
 
-        <!-- Modal Footer -->
-        <div class="p-4 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
-          <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span>Bereitgestellt für Meta Muse Endpoint (noch nicht abgesendet)</span>
-          </div>
+        <!-- Footer with Direct Action -->
+        <div class="p-3.5 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between">
           <button
             @click="stagedMuseModalOpen = false"
-            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors"
+            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-colors"
           >
             Schließen
+          </button>
+          <button
+            @click="stagedMuseModalOpen = false; askMuse()"
+            :disabled="isAskingMuse"
+            class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-md shadow-amber-500/10 active:scale-95"
+          >
+            <span>🐝 Jetzt an Muse Spark senden</span>
           </button>
         </div>
       </div>

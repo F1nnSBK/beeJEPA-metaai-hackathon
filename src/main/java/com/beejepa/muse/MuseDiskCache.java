@@ -21,12 +21,17 @@ public class MuseDiskCache {
     private final Path museResponsesFile;
     private final Map<String, String> responseMemoryCache = new ConcurrentHashMap<>();
 
+    @jakarta.inject.Inject
     public MuseDiskCache(ObjectMapper objectMapper) {
-        this(objectMapper, Path.of("data", "hackathon_sample", "cache"));
+        this(objectMapper != null ? objectMapper : new ObjectMapper(), Path.of("data", "hackathon_sample", "cache"));
+    }
+
+    public MuseDiskCache() {
+        this(new ObjectMapper());
     }
 
     public MuseDiskCache(ObjectMapper objectMapper, Path cacheDir) {
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.cacheDir = cacheDir;
         this.museResponsesFile = cacheDir.resolve("muse_responses.json");
         initCacheDirectory();

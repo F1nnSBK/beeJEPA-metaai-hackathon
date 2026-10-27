@@ -22,6 +22,14 @@ class ApplicationTest {
     @Inject
     StorageService storageService;
 
+    @Inject
+    com.beejepa.controller.MuseController museController;
+
+    @Test
+    void testMuseControllerWiring() {
+        Assertions.assertNotNull(museController);
+    }
+
     @Test
     void testItWorks() {
         Assertions.assertTrue(application.isRunning());

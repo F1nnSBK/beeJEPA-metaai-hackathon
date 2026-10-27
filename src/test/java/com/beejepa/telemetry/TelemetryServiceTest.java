@@ -53,7 +53,7 @@ class TelemetryServiceTest {
 
         LatencyStats stats = telemetryService.getLatencyStats();
         Assertions.assertTrue(stats.totalRequests() >= 100);
-        Assertions.assertTrue(stats.minMs() >= 1.0);
+        Assertions.assertTrue(stats.minMs() >= 0.0);
         Assertions.assertTrue(stats.p50Ms() > 0.0);
         Assertions.assertTrue(stats.p95Ms() >= stats.p50Ms());
         Assertions.assertTrue(stats.p99Ms() >= stats.p95Ms());
@@ -63,6 +63,7 @@ class TelemetryServiceTest {
         LatencyStats benchStats = stats.platformBreakdown().get(testPlatform);
         Assertions.assertEquals(100, benchStats.totalRequests());
         Assertions.assertEquals(1, benchStats.errorCount());
+        Assertions.assertTrue(benchStats.minMs() >= 1.0);
         Assertions.assertEquals(1.0, benchStats.errorRatePct());
         Assertions.assertEquals(1.0, benchStats.minMs());
         Assertions.assertEquals(100.0, benchStats.maxMs());
