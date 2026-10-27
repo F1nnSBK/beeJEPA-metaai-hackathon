@@ -240,4 +240,19 @@ class MetaMuseServiceTest {
         Assertions.assertFalse(cleaned.contains("assistant to="));
         Assertions.assertFalse(cleaned.contains("hidden thought"));
     }
+
+    @Test
+    void testAnswerBeekeeperQuestionOfflineFallback() {
+        MetaMuseConfig metaConfig = new MetaMuseConfig();
+        BasetenConfig basetenConfig = new BasetenConfig();
+        basetenConfig.setAllowInferenceCalls(false); // Locked offline mode
+
+        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null);
+
+        // When offline, answerBeekeeperQuestion should immediately return fallback summary
+        String response = service.answerBeekeeperQuestion("What happened at my hive today?", List.of());
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.contains("Cached Demo Hive Summary"));
+        Assertions.assertTrue(response.contains("Traffic Evolution"));
+    }
 }

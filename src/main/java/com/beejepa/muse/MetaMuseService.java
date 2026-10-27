@@ -72,6 +72,9 @@ public class MetaMuseService {
     private final ObjectMapper objectMapper;
     private final OpenAIClient basetenClient;
     private final String fallbackApiKey;
+    private final MuseDiskCache diskCache;
+    private final boolean allowLiveInference;
+    private final long simulatedOfflineDelayMs;
     private final Map<String, EventSpatialSummary> spatialCache = new ConcurrentHashMap<>();
 
     @Inject
@@ -81,7 +84,8 @@ public class MetaMuseService {
                            StateRepository stateRepository,
                            com.beejepa.event.EventService eventService,
                            Sam31Client sam31Client,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           MuseDiskCache diskCache) {
         this.client = client;
         this.config = config;
         this.basetenConfig = basetenConfig != null ? basetenConfig : new BasetenConfig();
@@ -89,6 +93,16 @@ public class MetaMuseService {
         this.eventService = eventService;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper);
+        this.diskCache = diskCache != null ? diskCache : new MuseDiskCache(this.objectMapper);
+
+        String envLive = Optional.ofNullable(System.getenv("ALLOW_LIVE_API"))
+                .orElseGet(() -> System.getenv("BASETEN_ALLOW_INFERENCE"));
+        this.allowLiveInference = envLive != null
+                ? "true".equalsIgnoreCase(envLive)
+                : (this.basetenConfig.isAllowInferenceCalls());
+        this.simulatedOfflineDelayMs = Long.parseLong(
+                Optional.ofNullable(System.getenv("UX_SIMULATE_LATENCY_MS")).orElse("450")
+        );
 
         String primaryKey = Optional.ofNullable(System.getenv("BASETEN_API_KEY1"))
                 .or(() -> Optional.ofNullable(this.basetenConfig.getApiKey()))
@@ -111,6 +125,16 @@ public class MetaMuseService {
                            MetaMuseConfig config,
                            BasetenConfig basetenConfig,
                            StateRepository stateRepository,
+                           com.beejepa.event.EventService eventService,
+                           Sam31Client sam31Client,
+                           ObjectMapper objectMapper) {
+        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper, new MuseDiskCache(objectMapper != null ? objectMapper : new ObjectMapper()));
+    }
+
+    public MetaMuseService(MetaMuseClient client,
+                           MetaMuseConfig config,
+                           BasetenConfig basetenConfig,
+                           StateRepository stateRepository,
                            com.beejepa.event.EventService eventService) {
         this(client, config, basetenConfig, stateRepository, eventService, new Sam31Client(new ObjectMapper()), new ObjectMapper());
     }
@@ -120,6 +144,14 @@ public class MetaMuseService {
                            StateRepository stateRepository,
                            com.beejepa.event.EventService eventService) {
         this(client, config, new BasetenConfig(), stateRepository, eventService);
+    }
+
+    public boolean isAllowLiveInference() {
+        return allowLiveInference;
+    }
+
+    public MuseDiskCache getDiskCache() {
+        return diskCache;
     }
 
     public MuseInferenceResponse callInference(MuseInferenceRequest request) {
@@ -138,7 +170,7 @@ public class MetaMuseService {
         }
 
         // Safety policy: no live inference calls allowed until explicitly enabled to protect credits
-        if (!basetenConfig.isAllowInferenceCalls()) {
+        if (!allowLiveInference) {
             LOG.info("Inference calls blocked by safety policy (healthchecks only). 0 credits consumed.");
             String model = basetenConfig.getModel() != null ? basetenConfig.getModel() : "meta-models/muse-spark-open";
             MuseInferenceResponse standbyResponse = new MuseInferenceResponse(
@@ -940,11 +972,21 @@ public class MetaMuseService {
 
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
         return spatialCache.computeIfAbsent(evt.eventId(), id -> {
+            // 1. Check persistent disk cache first (0 API calls across restarts)
+            Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(id);
+            if (cachedOnDisk.isPresent()) {
+                return cachedOnDisk.get();
+            }
+
             try {
                 BufferedImage canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
                 String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
 
-                List<BoundingBox> boardBees = sam31Client.queryConcept("bee", frameB64, true);
+                // Only call Meta SAM 3.1 API if live inference is enabled
+                List<BoundingBox> boardBees = allowLiveInference
+                        ? sam31Client.queryConcept("bee", frameB64, true)
+                        : List.of();
+
                 BoundingBox hotspot = SamGeometry.defaultEntranceHotspot();
                 List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
                 String preClass = SamGeometry.classifyHotspot(contained);
@@ -953,7 +995,7 @@ public class MetaMuseService {
                         canonical, hotspot, boardBees, contained, 35
                 );
 
-                return new EventSpatialSummary(
+                EventSpatialSummary summary = new EventSpatialSummary(
                         evt.eventId(),
                         evt.formattedTime(),
                         Math.round(evt.surpriseScore() * 100.0) / 100.0,
@@ -965,6 +1007,11 @@ public class MetaMuseService {
                         visuals.canonicalFrameB64(),
                         visuals.upscaledCropB64()
                 );
+
+                if (allowLiveInference && !boardBees.isEmpty()) {
+                    diskCache.saveSpatialSummary(summary);
+                }
+                return summary;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to analyze event " + evt.eventId(), e);
             }
@@ -988,6 +1035,53 @@ public class MetaMuseService {
     }
 
     public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> topEvents) {
+        return answerBeekeeperQuestion(beekeeperQuestion, topEvents, 3);
+    }
+
+    public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> events, int maxEvents) {
+        List<ManifestEventInput> selectedEvents = events.stream()
+                .limit(Math.max(1, maxEvents))
+                .toList();
+
+        String eventIdsKey = selectedEvents.stream().map(ManifestEventInput::eventId).reduce("", (a, b) -> a + "," + b);
+        String cacheKey = beekeeperQuestion + "|" + eventIdsKey;
+
+        // 1. Exact cache hit on disk -> return immediately (0 Baseten tokens used)
+        Optional<String> cachedReport = diskCache.getMuseResponse(cacheKey);
+        if (cachedReport.isPresent()) {
+            simulateUxLatencyIfNeeded();
+            return cachedReport.get();
+        }
+
+        // 2. If live API is locked (BASETEN_ALLOW_INFERENCE/ALLOW_LIVE_API=false), return recorded fallback for UI/UX testing
+        if (!allowLiveInference) {
+            simulateUxLatencyIfNeeded();
+            return diskCache.getAnyFallbackResponse().orElse(
+                    "### 🐝 Cached Demo Hive Summary (Offline UX Mode)\n\n"
+                    + "**Status:** High entrance congestion (38 bees on landing board, 15 inside hotspot at 00:00, S = 16.05 sigma).\n\n"
+                    + "- **Traffic Evolution:** Peaked at 38 bees (00:00), stabilized at 23-26 bees (00:20-00:39).\n"
+                    + "- **Anomaly Cause:** Multi-bee jostling and guarding cluster at the entrance slot (multi_bee_interaction_cluster). No foreign intruders detected.\n"
+                    + "- **Recommendation:** Routine foraging congestion; no intervention required."
+            );
+        }
+
+        // 3. Live API execution (only when live inference is enabled and not cached yet)
+        String liveReport = executeLiveBeekeeperQuery(beekeeperQuestion, selectedEvents);
+        diskCache.saveMuseResponse(cacheKey, liveReport);
+        return liveReport;
+    }
+
+    private void simulateUxLatencyIfNeeded() {
+        if (!allowLiveInference && simulatedOfflineDelayMs > 0) {
+            try {
+                Thread.sleep(simulatedOfflineDelayMs);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private String executeLiveBeekeeperQuery(String beekeeperQuestion, List<ManifestEventInput> topEvents) {
         List<EventSpatialSummary> summaries = analyzeEventsInParallel(topEvents);
 
         List<Map<String, Object>> digestList = summaries.stream().map(s -> {
