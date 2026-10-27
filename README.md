@@ -4,6 +4,11 @@ High-performance, lightweight edge server and embedded web console for **beeJEPA
 
 Built for the **Meta Global AI Developer Hackathon 2026** in conjunction with self-supervised **V-JEPA 2.1** video anomaly detection.
 
+[![Hugging Face Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-bee--jepa--entrance--anomalies-yellow.svg)](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Hardware](https://img.shields.io/badge/Target-Raspberry%20Pi%204%20(ARM64)-C51A4A.svg)](https://www.raspberrypi.com/)
+[![Runtime](https://img.shields.io/badge/Runtime-Java%2025%20%7C%20GraalVM%20Native-orange.svg)](https://www.graalvm.org/)
+
 ---
 
 ## Hackathon Scope & Project Cut-Off
@@ -48,6 +53,105 @@ To provide clear transparency for the hackathon evaluation, the overview below d
 | **Spatial / Geometric Grounding**| Abstract $9\times9$ grid indices `[row, col]` | **Scale-Invariant Bee Containment Metric ($\text{IoA}_{\text{bee}}$)**<br>• Differentiates entrance crowding (15 bees in hotspot) from foreign intruders |
 | **Edge Server Runtime** | Python training scripts | **Java 25 / Micronaut 4.7 GraalVM Native Image (AOT)**<br>• Virtual Threads (Project Loom)<br>• SQLite WAL edge cache (`state.db`) on external SSD<br>• Sub-40ms cold start, Prometheus OpenMetrics |
 | **Bioacoustic Edge UI** | None | **Deterministic Honeybee Voice Synthesizer (Java 25)**<br>• 210–460 Hz carrier frequencies, 26–30 Hz wingbeat AM<br>**Embedded Vue 3 SPA** with 37.5-minute fever curve & video inspector |
+
+---
+
+## Pre-Hackathon Dataset: Hugging Face & Edge SSD Storage
+
+[![Hugging Face Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-bee--jepa--entrance--anomalies-yellow.svg)](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Tasks](https://img.shields.io/badge/Tasks-Video%20Classification%20%7C%20Feature%20Extraction-green.svg)](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies)
+
+The sensory foundation and pre-hackathon feature trajectories for beeJEPA are published on Hugging Face: [**F1nnSBK/bee-jepa-entrance-anomalies**](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies).
+
+> **Storage Location & Edge Access:**  
+> During the hackathon live demonstration, the complete 48-minute raw video sequences (1080x960 side-by-side @ 60 fps) and all 184 sliced peak anomaly MP4s reside locally on the **Raspberry Pi 4 Model B USB 3.0 SSD** mounted at `/mnt/ssd/beejepa_data` (symlinked to `./data/`). The Hugging Face dataset provides all Parquet metadata, timeline trajectories, feature extraction ablations, and evaluation clips for public inspection.
+
+### Dataset Overview
+
+- **Title:** BeeJEPA: Self-Supervised Hive Entrance Anomaly Detection and Visual State Prediction
+- **Description:** High-frequency computer vision dataset recorded at 60 fps at the hive entrance flight board (*Apis mellifera*), paired with self-supervised V-JEPA 2.1 (ViT-H/16) representation trajectories and frame-accurate anomaly events.
+- **Coverage:** 48 minutes of dual-recording video (96 synchronized sequences of 30 seconds each @ 59.94 fps).
+- **Patch Resolution:** Biologically-grounded 9x9 pixel Mean-Bee patch resolution (43x43 spatial token grid) isolating individual bees at the flight board while eliminating background noise.
+- **Source Footage:** `mrkschtr/thehiveisreal`
+  - **Recording 2123 (Base / Training):** 75 sequences (37.5 minutes continuous runtime, 07:44 to 08:21 UTC).
+  - **Recording 2125 (Zero-Shot Transfer / Validation):** 21 sequences (10.5 minutes continuous runtime, 09:20 to 09:30 UTC).
+- **Temporal Resolution:** 60 fps (16.68 ms inter-frame interval).
+- **Video Format:** 1080x960 MP4 side-by-side (Original 688x688 px camera stream left, ghost-free V-JEPA attention heatmap right).
+
+### Key Features (Pre-Hackathon Foundation)
+
+1. **Biologically-Grounded Token Grid:** Derived from empirical bee diameter measurements (9.12 px). Standard 16x16 or 32x32 patches aggregate multiple bees into blurred tokens. The 9x9 Mean-Bee patch (extracted via 4-quadrant tiled inference) yields single-bee receptive fields across a 43x43 token grid.
+2. **Submanifold State Decoupling:** Decouples high-velocity ballistic flight corridors ($y=0..8$, State $M_2$) from decelerated touchdown and cluster dynamics on the wooden landing board ($y=9..13$, State $M_3$).
+3. **Invariance Mechanisms:**
+   - *Dichromatic Shadow Gate:* Differentiates ambient cloud luminance dips from genuine bee body shadows.
+   - *Perspective Depth Gain:* Compensates for optical perspective foreshortening as bees approach from distant upper airspace to the near landing lip.
+4. **Surprise Trajectories & Verified Peaks:** 2,688 timeline points (sampled every 1.07s / 64 frames) tracking predictor prediction error $S(t) = \|z_{\text{pred}} - z_{\text{target}}\|_2$, with 184 distinct local peak anomaly events sliced as 4-second video clips.
+
+### Repository & File Schema
+
+```
+F1nnSBK/bee-jepa-entrance-anomalies/
+├── README.md                          # Dataset card
+├── metadata/
+│   ├── timeline_points.parquet        # 2,688 timeline points with S(t), pixel_diff, bee counts
+│   ├── event_catalog.parquet          # 184 verified local peak events with frame indices
+│   ├── sequence_runs.parquet          # Aggregate statistics per 30s sequence run
+│   ├── patch_granularity.parquet      # Granularity ablations (32x32 down to 4x4)
+│   └── method_ablations.parquet       # Baseline comparisons (Optical Flow, Pixel Diff, Frame Diff)
+├── events/
+│   └── peaks/                         # 184 x 4-second side-by-side MP4 clips centered on peak anomalies
+├── stitched_sequences/                # 96 x 30-second continuous side-by-side MP4 videos (60 fps)
+└── figures/                           # Scientific Tufte-style SVG diagnostic figures
+```
+
+### Data Schema
+
+#### `metadata/timeline_points.parquet`
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `sequence_id` | `str` | Identifier of the 30s sequence (e.g. `rec2123_seq015`) |
+| `recording_id` | `str` | Recording identifier (`rec2123` or `rec2125`) |
+| `window_idx` | `int` | Temporal window index within sequence (0..27) |
+| `timestamp_sec` | `float` | Elapsed time within the 30s sequence (seconds) |
+| `global_timestamp_sec` | `float` | Continuous global elapsed time across recording (seconds) |
+| `surprise_score_l2` | `float` | V-JEPA 2.1 predictor surprise score $S(t)$ |
+| `pixel_diff` | `float` | Baseline pixel intensity difference |
+| `board_peaks_9x9` | `int` | Detected active bee count on the landing board |
+| `grass_peaks_9x9` | `int` | Detected active bee count in outer periphery |
+| `event_id` | `str / null` | Associated peak anomaly event identifier (if local peak) |
+
+#### `metadata/event_catalog.parquet`
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `event_id` | `str` | Unique event identifier (e.g. `evt_rec2123_seq015_f1217`) |
+| `sequence_id` | `str` | Parent 30s sequence |
+| `recording_id` | `str` | Parent recording (`rec2123` or `rec2125`) |
+| `peak_frame` | `int` | Frame index corresponding to the maximum of $S(t)$ |
+| `duration_sec_30fps` | `float` | Duration of the sliced clip (4.0 seconds) |
+| `submanifold_state` | `str` | Dynamic state classification (`M2_ROUTINE` or `M3_APPROACH`) |
+| `surprise_score_l2` | `float` | Maximum surprise score at event peak |
+| `clip_path` | `str` | Relative path to the 4-second MP4 clip |
+
+### Loading via Hugging Face (`huggingface_hub`)
+
+```python
+import pandas as pd
+from huggingface_hub import hf_hub_download
+
+# Download and inspect the full surprise timeline
+timeline_file = hf_hub_download(
+    repo_id="F1nnSBK/bee-jepa-entrance-anomalies",
+    filename="metadata/timeline_points.parquet",
+    repo_type="dataset",
+)
+df_timeline = pd.read_parquet(timeline_file)
+print(f"Loaded {len(df_timeline)} timeline points across {df_timeline['sequence_id'].nunique()} sequences.")
+
+# Filter significant anomaly peaks
+peaks = df_timeline[df_timeline["event_id"].notna()]
+print(peaks.sort_values("surprise_score_l2", ascending=False)[["sequence_id", "timestamp_sec", "surprise_score_l2", "event_id"]].head())
+```
 
 ---
 

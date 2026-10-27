@@ -25,6 +25,18 @@ class ApplicationTest {
     @Inject
     com.beejepa.controller.MuseController museController;
 
+    @Inject
+    @io.micronaut.http.client.annotation.Client("/")
+    io.micronaut.http.client.HttpClient httpClient;
+
+    @Test
+    void testSequenceVideoStreaming() {
+        var req = io.micronaut.http.HttpRequest.GET("/api/v1/sequences/clip_00_rec2125_seq000_00_00_to_00_30.mp4")
+                .header("Range", "bytes=0-100");
+        var resp = httpClient.toBlocking().exchange(req, byte[].class);
+        Assertions.assertTrue(resp.getStatus().getCode() == 200 || resp.getStatus().getCode() == 206);
+    }
+
     @Test
     void testMuseControllerWiring() {
         Assertions.assertNotNull(museController);

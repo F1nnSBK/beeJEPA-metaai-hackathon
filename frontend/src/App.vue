@@ -708,8 +708,8 @@ async function loadSystemAndData() {
     if (eventsRes.ok) {
       const list = await eventsRes.json()
       events.value = list
-      if (list.length > 0) {
-        selectEvent(list[0])
+      if (list.length > 0 && !selectedEvent.value) {
+        selectedEvent.value = list[0]
       }
     }
     checkMetaHealth()
@@ -721,8 +721,23 @@ async function loadSystemAndData() {
 function selectEvent(ev) {
   selectedEvent.value = ev
   if (ev && typeof ev.timestampSec === 'number') {
-    currentTimelineSec.value = ev.timestampSec
-    syncTimelineToVideo(true)
+    const t = ev.timestampSec
+    currentTimelineSec.value = t
+    const targetSeqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
+    const localSec = Math.max(0, t - (targetSeqIdx * 30.0))
+
+    if (activeView.value === 'comparison' || activeView.value === 'sequence') {
+      if (targetSeqIdx !== currentSequenceIndex.value) {
+        currentSequenceIndex.value = targetSeqIdx
+        pendingSeekSec = localSec
+      } else if (videoPlayer.value) {
+        try {
+          videoPlayer.value.currentTime = localSec
+        } catch (e) {
+          console.debug('Seek error:', e)
+        }
+      }
+    }
   }
 }
 
@@ -759,13 +774,19 @@ async function runMetaAnalysis() {
 }
 
 // Sequence and Event Video Media URLs
-const currentSeqIndex = computed(() => {
-  return Math.min(9, Math.max(0, Math.floor(currentTimelineSec.value / 30.0)))
-})
+const currentSequenceIndex = ref(0)
+let pendingSeekSec = null
 
 const currentSequence = computed(() => {
-  if (!timelineMeta.value?.sequences || timelineMeta.value.sequences.length === 0) return null
-  return timelineMeta.value.sequences[currentSeqIndex.value] || timelineMeta.value.sequences[0]
+  if (timelineMeta.value?.sequences && timelineMeta.value.sequences.length > 0) {
+    return timelineMeta.value.sequences[currentSequenceIndex.value] || timelineMeta.value.sequences[0]
+  }
+  const idx = currentSequenceIndex.value
+  const pad = String(idx).padStart(2, '0')
+  return {
+    index: idx,
+    filename: `clip_${pad}_rec2125_seq00${idx}_${pad}_00_to_${pad}_30.mp4`
+  }
 })
 
 const sequenceClipUrl = computed(() => {
@@ -827,15 +848,27 @@ const tauY = computed(() => {
   return (svgHeight - 8 - ((clamped - minScore.value) / range) * (svgHeight - 16)).toFixed(1)
 })
 
+function getTimelineCoordinates(timestampSec, score) {
+  const range = Math.max(1.0, maxScore.value - minScore.value)
+  const clampedScore = Math.max(minScore.value, Math.min(score, maxScore.value))
+  const normX = Math.max(0, Math.min(1, timestampSec / maxDuration.value))
+  const normScore = (clampedScore - minScore.value) / range
+  const svgY = svgHeight - 8 - normScore * (svgHeight - 16)
+  const normY = svgY / svgHeight
+  return {
+    svgX: normX * svgWidth,
+    svgY,
+    normX,
+    normY
+  }
+}
+
 // Area path for gradient fill under the curve
 const svgAreaPath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
-  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
-    const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
-    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
+    const coords = getTimelineCoordinates(pt.timestampSec, pt.surpriseScoreL2)
+    return `${coords.svgX.toFixed(1)},${coords.svgY.toFixed(1)}`
   })
 
   return `M 0,${svgHeight} L ${points.join(' L ')} L ${svgWidth},${svgHeight} Z`
@@ -844,30 +877,25 @@ const svgAreaPath = computed(() => {
 // Stroke path for the fever curve
 const svgCurvePath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
-  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
-    const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
-    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
+    const coords = getTimelineCoordinates(pt.timestampSec, pt.surpriseScoreL2)
+    return `${coords.svgX.toFixed(1)},${coords.svgY.toFixed(1)}`
   })
 
   return `M ${points.join(' L ')}`
 })
 
-// Spikes with exact HTML coordinates (to keep circles 100% round)
+// Spikes with exact HTML coordinates (guaranteed 100% mathematical lock with curve vertices)
 const timelineSpikes = computed(() => {
   if (!timelineData.value) return []
-  const range = Math.max(1.0, maxScore.value - minScore.value)
   return timelineData.value
     .filter(pt => pt.eventId)
     .map(pt => {
-      const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
-      const normY = 1.0 - ((clampedScore - minScore.value) / range) * 0.84 - 0.08
+      const coords = getTimelineCoordinates(pt.timestampSec, pt.surpriseScoreL2)
       return {
         ...pt,
-        normX: pt.timestampSec / maxDuration.value,
-        normY
+        normX: coords.normX,
+        normY: coords.normY
       }
     })
 })
@@ -909,21 +937,26 @@ let isUserScrubbing = false
 
 function syncTimelineToVideo(seek = true) {
   const t = currentTimelineSec.value
-  const seqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
-  const localSec = Math.max(0, t - (seqIdx * 30.0))
+  const targetSeqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
+  const localSec = Math.max(0, t - (targetSeqIdx * 30.0))
 
   const closest = findClosestEvent(t)
   if (closest && closest.eventId !== selectedEvent.value?.eventId) {
     selectedEvent.value = closest
   }
 
-  if (seek && videoPlayer.value && (activeView.value === 'comparison' || activeView.value === 'sequence')) {
-    try {
-      if (Math.abs(videoPlayer.value.currentTime - localSec) > 0.25) {
-        videoPlayer.value.currentTime = localSec
+  if (seek && (activeView.value === 'comparison' || activeView.value === 'sequence')) {
+    if (targetSeqIdx !== currentSequenceIndex.value) {
+      currentSequenceIndex.value = targetSeqIdx
+      pendingSeekSec = localSec
+    } else if (videoPlayer.value) {
+      try {
+        if (Math.abs(videoPlayer.value.currentTime - localSec) > 0.3) {
+          videoPlayer.value.currentTime = localSec
+        }
+      } catch (e) {
+        console.debug('Video seek error:', e)
       }
-    } catch (e) {
-      console.debug('Video seek error:', e)
     }
   }
 }
@@ -937,7 +970,7 @@ function onTimelineSliderChange() {
   syncTimelineToVideo(true)
   setTimeout(() => {
     isUserScrubbing = false
-  }, 120)
+  }, 150)
 }
 
 function onTimelineContainerClick(e) {
@@ -950,17 +983,13 @@ function onTimelineContainerClick(e) {
 }
 
 function onVideoLoaded() {
-  if (activeView.value === 'comparison' || activeView.value === 'sequence') {
-    const t = currentTimelineSec.value
-    const seqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
-    const localSec = Math.max(0, t - (seqIdx * 30.0))
-    if (videoPlayer.value && !isNaN(videoPlayer.value.duration)) {
-      try {
-        videoPlayer.value.currentTime = Math.min(localSec, videoPlayer.value.duration)
-      } catch (e) {
-        console.debug('onVideoLoaded seek error:', e)
-      }
+  if (pendingSeekSec !== null && videoPlayer.value && !isNaN(videoPlayer.value.duration)) {
+    try {
+      videoPlayer.value.currentTime = Math.min(pendingSeekSec, videoPlayer.value.duration)
+    } catch (e) {
+      console.debug('onVideoLoaded seek error:', e)
     }
+    pendingSeekSec = null
   }
 }
 
@@ -968,7 +997,7 @@ function onVideoTimeUpdate() {
   if (isUserScrubbing) return
   if (!videoPlayer.value) return
   if (activeView.value === 'comparison' || activeView.value === 'sequence') {
-    const globalSec = (currentSeqIndex.value * 30.0) + (videoPlayer.value.currentTime || 0)
+    const globalSec = (currentSequenceIndex.value * 30.0) + (videoPlayer.value.currentTime || 0)
     currentTimelineSec.value = Math.min(maxDuration.value, Math.round(globalSec * 10) / 10)
     const closest = findClosestEvent(currentTimelineSec.value)
     if (closest && closest.eventId !== selectedEvent.value?.eventId) {
@@ -979,9 +1008,10 @@ function onVideoTimeUpdate() {
 
 function onVideoEnded() {
   if (activeView.value === 'comparison' || activeView.value === 'sequence') {
-    if (currentSeqIndex.value < 9) {
-      currentTimelineSec.value = (currentSeqIndex.value + 1) * 30.0
-      syncTimelineToVideo(true)
+    if (currentSequenceIndex.value < 9) {
+      currentSequenceIndex.value++
+      pendingSeekSec = 0
+      currentTimelineSec.value = currentSequenceIndex.value * 30.0
       nextTick(() => {
         if (videoPlayer.value) {
           videoPlayer.value.play().catch(() => {})
@@ -1262,10 +1292,8 @@ async function handleLogout() {
             <video
               v-if="activeView !== 'sam' && activeMediaSource"
               ref="videoPlayer"
-              :key="activeMediaSource"
               :src="activeMediaSource"
               @loadedmetadata="onVideoLoaded"
-              @canplay="onVideoLoaded"
               @timeupdate="onVideoTimeUpdate"
               @ended="onVideoEnded"
               autoplay
@@ -1618,86 +1646,89 @@ async function handleLogout() {
         </div>
 
         <!-- SVG Timeline Curve Container with Beautiful Gradient & Breathing Room -->
-        <div
-          class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner cursor-pointer select-none"
-          @click="onTimelineContainerClick"
-          title="Click to seek on timeline"
-        >
-          <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
+        <div class="relative w-full bg-[#080c14] rounded-lg border border-slate-800 px-3 py-2 shadow-inner select-none">
+          <div v-if="!timelineData || timelineData.length === 0" class="h-24 sm:h-28 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
             <span>No timeline artifacts found on storage.</span>
             <span class="text-[11px] text-slate-600">Connect SSD or populate ./data with sequence events.</span>
           </div>
 
-          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full pointer-events-none">
-            <defs>
-              <!-- Gradient under the fever curve -->
-              <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
-                <stop offset="60%" stop-color="#f59e0b" stop-opacity="0.08" />
-                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0" />
-              </linearGradient>
-            </defs>
-
-            <!-- Grid Lines -->
-            <line x1="0" y1="92" x2="1000" y2="92" stroke="#1e293b" stroke-width="1" />
-            <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
-
-            <!-- Filled Area under Curve -->
-            <path
-              v-if="svgAreaPath"
-              :d="svgAreaPath"
-              fill="url(#curveGradient)"
-            />
-
-            <!-- Main Curve Line -->
-            <path
-              v-if="svgCurvePath"
-              :d="svgCurvePath"
-              fill="none"
-              stroke="#f59e0b"
-              stroke-width="2"
-              vector-effect="non-scaling-stroke"
-            />
-          </svg>
-
-          <!-- Hotspot Interactive HTML Pins (100% Perfectly Round, Never Squished) -->
+          <!-- Interactive Track: SVG curve, event spikes, and needle all share this EXACT geometry -->
           <div
-            v-for="spike in timelineSpikes"
-            :key="spike.eventId"
-            class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
-            :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
-            @click.stop="selectEventById(spike.eventId)"
+            v-else
+            class="relative w-full h-24 sm:h-28 cursor-pointer select-none"
+            @click="onTimelineContainerClick"
+            title="Click to seek on timeline"
           >
-            <!-- Pin Dot -->
-            <div class="relative flex items-center justify-center p-2">
-              <span v-if="selectedEvent?.eventId === spike.eventId" class="absolute w-6 h-6 rounded-full bg-rose-500/40 animate-ping"></span>
-              <span
-                class="w-3.5 h-3.5 rounded-full border-2 transition-transform group-hover:scale-125"
-                :class="selectedEvent?.eventId === spike.eventId ? 'bg-rose-500 border-white ring-2 ring-rose-400' : 'bg-amber-400 border-slate-900 shadow-md'"
-              ></span>
+            <svg viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full block pointer-events-none overflow-visible">
+              <defs>
+                <!-- Gradient under the fever curve -->
+                <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+                  <stop offset="60%" stop-color="#f59e0b" stop-opacity="0.08" />
+                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              <!-- Grid Lines -->
+              <line x1="0" y1="92" x2="1000" y2="92" stroke="#1e293b" stroke-width="1" />
+              <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
+
+              <!-- Filled Area under Curve -->
+              <path
+                v-if="svgAreaPath"
+                :d="svgAreaPath"
+                fill="url(#curveGradient)"
+              />
+
+              <!-- Main Curve Line -->
+              <path
+                v-if="svgCurvePath"
+                :d="svgCurvePath"
+                fill="none"
+                stroke="#f59e0b"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+
+            <!-- Hotspot Interactive HTML Pins (100% Perfectly Round, Exact Alignment) -->
+            <div
+              v-for="spike in timelineSpikes"
+              :key="spike.eventId"
+              class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
+              :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
+              @click.stop="selectEventById(spike.eventId)"
+            >
+              <!-- Pin Dot -->
+              <div class="relative flex items-center justify-center p-2">
+                <span v-if="selectedEvent?.eventId === spike.eventId" class="absolute w-6 h-6 rounded-full bg-rose-500/40 animate-ping"></span>
+                <span
+                  class="w-3.5 h-3.5 rounded-full border-2 transition-transform group-hover:scale-125"
+                  :class="selectedEvent?.eventId === spike.eventId ? 'bg-rose-500 border-white ring-2 ring-rose-400' : 'bg-amber-400 border-slate-900 shadow-md'"
+                ></span>
+              </div>
+
+              <!-- Tooltip Hover Badge -->
+              <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-slate-700 px-2 py-0.5 rounded text-[10px] font-mono text-amber-300 whitespace-nowrap shadow-xl pointer-events-none z-30">
+                {{ spike.surpriseScoreL2 }}σ ({{ formatTime(spike.timestampSec) }})
+              </div>
             </div>
 
-            <!-- Tooltip Hover Badge -->
-            <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-slate-700 px-2 py-0.5 rounded text-[10px] font-mono text-amber-300 whitespace-nowrap shadow-xl pointer-events-none">
-              {{ spike.surpriseScoreL2 }}σ ({{ formatTime(spike.timestampSec) }})
-            </div>
-          </div>
-
-          <!-- Vertical Scrubber Needle Line on Timeline -->
-          <div
-            v-if="timelineData && timelineData.length > 0"
-            class="absolute top-0 bottom-0 pointer-events-none z-30 transition-[left] duration-75 ease-out"
-            :style="{ left: `${(currentTimelineSec / maxDuration) * 100}%` }"
-          >
-            <div class="w-0.5 h-full bg-amber-400/90 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></div>
-            <div class="absolute -top-0.5 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">
-              {{ formatTime(currentTimelineSec) }}
+            <!-- Vertical Scrubber Needle Line on Timeline -->
+            <div
+              class="absolute top-0 bottom-0 pointer-events-none z-30 -translate-x-1/2 transition-[left] duration-75 ease-out"
+              :style="{ left: `${(currentTimelineSec / maxDuration) * 100}%` }"
+            >
+              <div class="w-0.5 h-full bg-amber-400/90 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></div>
+              <div class="absolute -top-1 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">
+                {{ formatTime(currentTimelineSec) }}
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Timeline Dynamic Time Markers -->
-        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-2 pt-1">
+        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
           <span>0:00 (Start)</span>
           <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.25) }}</span>
           <span>{{ formatTime(maxDuration * 0.5) }}</span>
