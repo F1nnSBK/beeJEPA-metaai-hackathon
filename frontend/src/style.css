@@ -10,3 +10,64 @@ html, body, #app {
   color: #f3f4f6;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* Custom Timeline Range Slider styling */
+.timeline-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.timeline-slider:focus {
+  outline: none;
+}
+.timeline-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+}
+.timeline-slider:hover::-webkit-slider-runnable-track {
+  background: #334155;
+}
+.timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #0f172a;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  margin-top: -6px;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.timeline-slider::-webkit-slider-thumb:hover,
+.timeline-slider:active::-webkit-slider-thumb {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.9);
+}
+.timeline-slider::-moz-range-track {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+}
+.timeline-slider:hover::-moz-range-track {
+  background: #334155;
+}
+.timeline-slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid #0f172a;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.timeline-slider::-moz-range-thumb:hover,
+.timeline-slider:active::-moz-range-thumb {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.9);
+}

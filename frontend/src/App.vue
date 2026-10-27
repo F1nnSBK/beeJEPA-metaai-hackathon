@@ -23,6 +23,8 @@ const timelineData = ref([])
 const timelineMeta = ref(null)
 const events = ref([])
 const selectedEvent = ref(null)
+const currentTimelineSec = ref(0)
+const videoPlayer = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
 
@@ -617,6 +619,9 @@ async function loadSystemAndData() {
 
 function selectEvent(ev) {
   selectedEvent.value = ev
+  if (ev && typeof ev.timestampSec === 'number') {
+    currentTimelineSec.value = ev.timestampSec
+  }
 }
 
 function selectEventById(id) {
@@ -749,9 +754,73 @@ const timelineSpikes = computed(() => {
 })
 
 function formatTime(sec) {
+  if (sec == null || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const sortedEvents = computed(() => {
+  return [...events.value].sort((a, b) => (a.timestampSec || 0) - (b.timestampSec || 0))
+})
+
+const currentAnomalyIndex = computed(() => {
+  if (!selectedEvent.value) return -1
+  return sortedEvents.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
+})
+
+const isFirstAnomaly = computed(() => currentAnomalyIndex.value <= 0)
+const isLastAnomaly = computed(() => currentAnomalyIndex.value === -1 || currentAnomalyIndex.value >= sortedEvents.value.length - 1)
+
+function findClosestEvent(sec) {
+  if (!events.value || events.value.length === 0) return null
+  let closest = events.value[0]
+  let minDiff = Math.abs((closest.timestampSec || 0) - sec)
+  for (let i = 1; i < events.value.length; i++) {
+    const diff = Math.abs((events.value[i].timestampSec || 0) - sec)
+    if (diff < minDiff) {
+      minDiff = diff
+      closest = events.value[i]
+    }
+  }
+  return closest
+}
+
+function onTimelineSliderInput() {
+  const closest = findClosestEvent(currentTimelineSec.value)
+  if (closest && closest.eventId !== selectedEvent.value?.eventId) {
+    selectedEvent.value = closest
+  }
+}
+
+function onTimelineSliderChange() {
+  const closest = findClosestEvent(currentTimelineSec.value)
+  if (closest) {
+    selectEvent(closest)
+  }
+}
+
+function onTimelineContainerClick(e) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  if (!rect.width) return
+  const clickX = e.clientX - rect.left
+  const pct = Math.max(0, Math.min(1, clickX / rect.width))
+  currentTimelineSec.value = Math.round(pct * maxDuration.value * 10) / 10
+  onTimelineSliderInput()
+}
+
+function goToPrevAnomaly() {
+  if (currentAnomalyIndex.value > 0) {
+    selectEvent(sortedEvents.value[currentAnomalyIndex.value - 1])
+  }
+}
+
+function goToNextAnomaly() {
+  if (currentAnomalyIndex.value >= 0 && currentAnomalyIndex.value < sortedEvents.value.length - 1) {
+    selectEvent(sortedEvents.value[currentAnomalyIndex.value + 1])
+  } else if (sortedEvents.value.length > 0 && currentAnomalyIndex.value === -1) {
+    selectEvent(sortedEvents.value[0])
+  }
 }
 
 async function handleLogin() {
@@ -1232,7 +1301,6 @@ async function handleLogout() {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <p class="text-xs font-mono text-slate-400">No Events Detected</p>
             <p class="text-[11px] text-slate-500 max-w-xs mt-1">
               Awaiting anomaly events on SSD storage.
             </p>
@@ -1240,13 +1308,13 @@ async function handleLogout() {
         </div>
       </main>
 
-      <!-- Bottom: 37.5-Minute Anomaly Fever Curve (High Quality & Responsive) -->
+      <!-- Bottom: Latent Surprise Timeline & Interactive Scrubber Slider -->
       <footer class="border-t border-slate-800/80 bg-[#0c121e] px-4 sm:px-6 py-3 shrink-0">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2 text-xs">
           <div class="flex items-center gap-2.5">
             <span class="font-semibold text-slate-200">
               {{ timelineData && timelineData.length > 0
-                ? `${Math.round((timelineMeta?.totalDurationSec || 2250) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec'})`
+                ? `${Math.round((timelineMeta?.totalDurationSec || 300) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec2125'})`
                 : 'Latent Surprise Timeline' }}
             </span>
             <span
@@ -1262,19 +1330,25 @@ async function handleLogout() {
               Awaiting Data
             </span>
           </div>
-          <div class="text-[11px] text-slate-400 font-mono hidden sm:block">
-            {{ timelineData && timelineData.length > 0 ? 'Click peak hotspot to inspect anomaly' : 'Awaiting V-JEPA latent vectors' }}
+          <div v-if="timelineData && timelineData.length > 0" class="text-[11px] text-slate-400 font-mono hidden sm:flex items-center gap-3">
+            <span>Scrubber: <strong class="text-amber-400 font-semibold">{{ formatTime(currentTimelineSec) }}</strong> / {{ formatTime(maxDuration) }}</span>
+            <span class="text-slate-600">|</span>
+            <span>Anomalie {{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }} von {{ sortedEvents.length }}</span>
           </div>
         </div>
 
         <!-- SVG Timeline Curve Container with Beautiful Gradient & Breathing Room -->
-        <div class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner">
+        <div
+          class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner cursor-pointer select-none"
+          @click="onTimelineContainerClick"
+          title="Klicken zum Springen auf der Timeline"
+        >
           <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
             <span>No timeline artifacts found on storage.</span>
             <span class="text-[11px] text-slate-600">Connect SSD or populate ./data with sequence events.</span>
           </div>
 
-          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full">
+          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full pointer-events-none">
             <defs>
               <!-- Gradient under the fever curve -->
               <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1312,7 +1386,7 @@ async function handleLogout() {
             :key="spike.eventId"
             class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
             :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
-            @click="selectEventById(spike.eventId)"
+            @click.stop="selectEventById(spike.eventId)"
           >
             <!-- Pin Dot -->
             <div class="relative flex items-center justify-center p-2">
@@ -1328,16 +1402,75 @@ async function handleLogout() {
               {{ spike.surpriseScoreL2 }}σ ({{ formatTime(spike.timestampSec) }})
             </div>
           </div>
+
+          <!-- Vertical Scrubber Needle Line on Timeline -->
+          <div
+            v-if="timelineData && timelineData.length > 0"
+            class="absolute top-0 bottom-0 pointer-events-none z-30 transition-[left] duration-75 ease-out"
+            :style="{ left: `${(currentTimelineSec / maxDuration) * 100}%` }"
+          >
+            <div class="w-0.5 h-full bg-amber-400/90 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></div>
+            <div class="absolute -top-0.5 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">
+              {{ formatTime(currentTimelineSec) }}
+            </div>
+          </div>
         </div>
 
-        <!-- Timeline Time Markers -->
-        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
+        <!-- Timeline Dynamic Time Markers -->
+        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-2 pt-1">
           <span>0:00 (Start)</span>
-          <span class="hidden sm:inline">7:30</span>
-          <span>15:00</span>
-          <span class="hidden sm:inline">22:30</span>
-          <span class="hidden sm:inline">30:00</span>
-          <span>{{ formatTime(timelineMeta?.totalDurationSec || 2250) }} (End)</span>
+          <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.25) }}</span>
+          <span>{{ formatTime(maxDuration * 0.5) }}</span>
+          <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.75) }}</span>
+          <span>{{ formatTime(maxDuration) }} (End)</span>
+        </div>
+
+        <!-- Dedicated Timeline Slider (Scrubber Bar Control) -->
+        <div v-if="timelineData && timelineData.length > 0" class="mt-2 flex items-center gap-3">
+          <!-- Current Scrubber Time Badge -->
+          <div class="flex items-center gap-1.5 shrink-0 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-md text-[11px] font-mono shadow-sm">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span class="text-amber-300 font-semibold">{{ formatTime(currentTimelineSec) }}</span>
+            <span class="text-slate-600">/</span>
+            <span class="text-slate-400">{{ formatTime(maxDuration) }}</span>
+          </div>
+
+          <!-- Slider Range Input (Mobile-touch friendly with min-h-[44px] container) -->
+          <div class="relative flex-1 flex items-center min-h-[44px]">
+            <input
+              type="range"
+              min="0"
+              :max="maxDuration"
+              step="0.5"
+              v-model.number="currentTimelineSec"
+              @input="onTimelineSliderInput"
+              @change="onTimelineSliderChange"
+              class="timeline-slider w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+              aria-label="Timeline Scrubber Slider"
+            />
+          </div>
+
+          <!-- Anomaly Stepper Controls (Snap to Previous / Next Anomaly) -->
+          <div class="flex items-center gap-1 shrink-0">
+            <button
+              @click="goToPrevAnomaly"
+              :disabled="isFirstAnomaly"
+              class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
+              title="Vorherige Anomalie"
+            >
+              <span>◀</span>
+              <span class="hidden sm:inline">Anomalie</span>
+            </button>
+            <button
+              @click="goToNextAnomaly"
+              :disabled="isLastAnomaly"
+              class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
+              title="Nächste Anomalie"
+            >
+              <span class="hidden sm:inline">Anomalie</span>
+              <span>▶</span>
+            </button>
+          </div>
         </div>
       </footer>
     </div>
