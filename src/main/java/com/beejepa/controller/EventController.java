@@ -59,6 +59,15 @@ public class EventController {
         return HttpResponse.ok(new SystemFile(target, mediaType));
     }
 
+    @Get(value = "/sequences/{filename}")
+    public HttpResponse<?> getSequenceMedia(@PathVariable String filename) {
+        Optional<File> file = eventService.getSequenceFile(filename);
+        if (file.isEmpty()) {
+            return HttpResponse.notFound();
+        }
+        return HttpResponse.ok(new SystemFile(file.get(), MediaType.of("video/mp4")));
+    }
+
     @Post("/events/{eventId}/analyze")
     public HttpResponse<Map<String, Object>> analyzeEvent(
         @PathVariable String eventId,

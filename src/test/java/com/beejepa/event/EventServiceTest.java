@@ -69,4 +69,12 @@ public class EventServiceTest {
         Assertions.assertTrue(frame.get().exists());
         Assertions.assertTrue(frame.get().length() > 1000);
     }
+
+    @Test
+    void testGetSequenceFile() {
+        Optional<File> seqFile = eventService.getSequenceFile("clip_00_rec2125_seq000_00_00_to_00_30.mp4");
+        Assertions.assertTrue(seqFile.isPresent(), "Sequence clip should be present in sequences directory");
+        Assertions.assertTrue(seqFile.get().exists());
+        Assertions.assertTrue(seqFile.get().length() > 100_000);
+    }
 }

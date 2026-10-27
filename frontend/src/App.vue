@@ -29,6 +29,7 @@ const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
 
 // Muse Voice & Bee Mode Dynamic Audio (Java Synthesizer & Live Device Microphone)
+const beeModeActive = ref(true) // Bee Mode: Hive answers with bioacoustic buzzing
 const isBeeModePlaying = ref(false)
 const isRecording = ref(false)
 const isProcessing = ref(false)
@@ -43,7 +44,7 @@ const isPreparingMuse = ref(false)
 const isTranscribing = ref(false)
 const voiceTranscript = ref('')
 const museQuestionInput = ref('')
-const stagedTab = ref('sam') // 'sam', 'prompt', 'payload', 'responses', 'headers', 'event'
+const stagedTab = ref('prompt') // 'prompt', 'payload'
 
 // Live / Cached Muse Diagnosis & Voice TTS state
 const museDiagnosis = ref(null)
@@ -62,7 +63,7 @@ const metaHealth = ref({
   latencyMs: 0,
   baseUrl: '',
   availableModels: [],
-  message: 'Prüfe Meta Model API...'
+  message: 'Checking Meta Model API...'
 })
 
 async function checkMetaHealth() {
@@ -245,34 +246,9 @@ async function toggleMicrophoneListening() {
 
       const wavBytes = encodeWavBuffer(allSamples, sampleRate)
 
-      try {
-        const res = await fetch('/api/v1/muse/acoustic-mirror', {
-          method: 'POST',
-          headers: { 'Content-Type': 'audio/wav' },
-          body: wavBytes
-        })
+      isProcessing.value = false
 
-        isProcessing.value = false
-
-        if (res.ok) {
-          const audioBlob = await res.blob()
-          const audioUrl = URL.createObjectURL(audioBlob)
-
-          if (beeAudioInstance) {
-            beeAudioInstance.pause()
-          }
-          beeAudioInstance = new Audio(audioUrl)
-          isBeeModePlaying.value = true
-
-          beeAudioInstance.onended = () => {
-            isBeeModePlaying.value = false
-          }
-          beeAudioInstance.play().catch(e => console.debug('Audio playback error:', e))
-        }
-      } catch (err) {
-        console.debug('Acoustic mirror network error:', err)
-        isProcessing.value = false
-      }
+      let recognizedText = museQuestionInput.value.trim()
 
       // Transcribe voice input dynamically via Meta Audio API
       try {
@@ -285,15 +261,21 @@ async function toggleMicrophoneListening() {
         if (transRes.ok) {
           const transData = await transRes.json()
           if (transData && transData.transcript && transData.transcript.trim()) {
-            voiceTranscript.value = transData.transcript
-            museQuestionInput.value = transData.transcript
-            console.log('Voice transcribed dynamically via Meta Audio API:', transData.transcript)
+            recognizedText = transData.transcript.trim()
+            voiceTranscript.value = recognizedText
+            museQuestionInput.value = recognizedText
           }
         }
       } catch (err) {
         console.debug('Transcribe error:', err)
       } finally {
         isTranscribing.value = false
+      }
+
+      // Voice Input: Immediately execute production pipeline through Meta Muse
+      if (recognizedText) {
+        console.log('Voice input complete. Executing production pipeline:', recognizedText)
+        await askMuse(recognizedText)
       }
     }
 
@@ -329,6 +311,10 @@ async function toggleMicrophoneListening() {
 }
 
 function toggleBeeMode() {
+  beeModeActive.value = !beeModeActive.value
+}
+
+function toggleVoiceInput() {
   toggleMicrophoneListening()
 }
 
@@ -413,8 +399,11 @@ async function askMuse(question = null) {
       const data = await res.json()
       museDiagnosis.value = data
 
-      // Auto-read aloud if toggle is on
-      if (autoReadAloud.value && data.spokenSummary) {
+      // If Bee Mode is active, respond with bioacoustic bee buzzing synthesis
+      if (beeModeActive.value) {
+        const textToBuzz = data.spokenSummary || data.diagnosis || data.cause || 'Anomaly diagnosed by Meta Muse.'
+        playBeeBuzz(textToBuzz)
+      } else if (autoReadAloud.value && data.spokenSummary) {
         readAloud(data.spokenSummary)
       }
     }
@@ -450,15 +439,26 @@ function stopReadAloud() {
 async function playBeeBuzz(text = null) {
   try {
     isPlayingBeeBuzz.value = true
-    const promptText = text || museDiagnosis.value?.spokenSummary || 'Bee colony activity report.'
+    isBeeModePlaying.value = true
+    const promptText = text || museDiagnosis.value?.spokenSummary || museDiagnosis.value?.diagnosis || 'Bee colony activity report.'
     const url = `/api/v1/muse/voice?text=${encodeURIComponent(promptText)}`
-    const audio = new Audio(url)
-    audio.onended = () => { isPlayingBeeBuzz.value = false }
-    audio.onerror = () => { isPlayingBeeBuzz.value = false }
-    await audio.play()
+    if (beeAudioInstance) {
+      beeAudioInstance.pause()
+    }
+    beeAudioInstance = new Audio(url)
+    beeAudioInstance.onended = () => {
+      isPlayingBeeBuzz.value = false
+      isBeeModePlaying.value = false
+    }
+    beeAudioInstance.onerror = () => {
+      isPlayingBeeBuzz.value = false
+      isBeeModePlaying.value = false
+    }
+    await beeAudioInstance.play()
   } catch (err) {
     console.error('Failed to play bee buzz:', err)
     isPlayingBeeBuzz.value = false
+    isBeeModePlaying.value = false
   }
 }
 
@@ -722,6 +722,7 @@ function selectEvent(ev) {
   selectedEvent.value = ev
   if (ev && typeof ev.timestampSec === 'number') {
     currentTimelineSec.value = ev.timestampSec
+    syncTimelineToVideo(true)
   }
 }
 
@@ -757,15 +758,28 @@ async function runMetaAnalysis() {
   }
 }
 
-// Media URLs for current event
+// Sequence and Event Video Media URLs
+const currentSeqIndex = computed(() => {
+  return Math.min(9, Math.max(0, Math.floor(currentTimelineSec.value / 30.0)))
+})
+
+const currentSequence = computed(() => {
+  if (!timelineMeta.value?.sequences || timelineMeta.value.sequences.length === 0) return null
+  return timelineMeta.value.sequences[currentSeqIndex.value] || timelineMeta.value.sequences[0]
+})
+
+const sequenceClipUrl = computed(() => {
+  if (!currentSequence.value) return ''
+  return `/api/v1/sequences/${currentSequence.value.filename}`
+})
+
 const rawClipUrl = computed(() => {
   if (!selectedEvent.value) return ''
   return `/api/v1/events/${selectedEvent.value.eventId}/media/clip_raw.mp4`
 })
 
 const comparisonClipUrl = computed(() => {
-  if (!selectedEvent.value) return ''
-  return `/api/v1/events/${selectedEvent.value.eventId}/media/clip_comparison.mp4`
+  return sequenceClipUrl.value
 })
 
 const peakFrameUrl = computed(() => {
@@ -775,8 +789,12 @@ const peakFrameUrl = computed(() => {
 
 // Current video source based on view toggle
 const activeMediaSource = computed(() => {
-  if (activeView.value === 'raw') return rawClipUrl.value
-  if (activeView.value === 'comparison') return comparisonClipUrl.value
+  if (activeView.value === 'comparison' || activeView.value === 'sequence') {
+    return sequenceClipUrl.value
+  }
+  if (activeView.value === 'raw' || activeView.value === 'event') {
+    return rawClipUrl.value
+  }
   return ''
 })
 
@@ -887,18 +905,39 @@ function findClosestEvent(sec) {
   return closest
 }
 
-function onTimelineSliderInput() {
-  const closest = findClosestEvent(currentTimelineSec.value)
+let isUserScrubbing = false
+
+function syncTimelineToVideo(seek = true) {
+  const t = currentTimelineSec.value
+  const seqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
+  const localSec = Math.max(0, t - (seqIdx * 30.0))
+
+  const closest = findClosestEvent(t)
   if (closest && closest.eventId !== selectedEvent.value?.eventId) {
     selectedEvent.value = closest
   }
+
+  if (seek && videoPlayer.value && (activeView.value === 'comparison' || activeView.value === 'sequence')) {
+    try {
+      if (Math.abs(videoPlayer.value.currentTime - localSec) > 0.25) {
+        videoPlayer.value.currentTime = localSec
+      }
+    } catch (e) {
+      console.debug('Video seek error:', e)
+    }
+  }
+}
+
+function onTimelineSliderInput() {
+  isUserScrubbing = true
+  syncTimelineToVideo(true)
 }
 
 function onTimelineSliderChange() {
-  const closest = findClosestEvent(currentTimelineSec.value)
-  if (closest) {
-    selectEvent(closest)
-  }
+  syncTimelineToVideo(true)
+  setTimeout(() => {
+    isUserScrubbing = false
+  }, 120)
 }
 
 function onTimelineContainerClick(e) {
@@ -907,7 +946,49 @@ function onTimelineContainerClick(e) {
   const clickX = e.clientX - rect.left
   const pct = Math.max(0, Math.min(1, clickX / rect.width))
   currentTimelineSec.value = Math.round(pct * maxDuration.value * 10) / 10
-  onTimelineSliderInput()
+  syncTimelineToVideo(true)
+}
+
+function onVideoLoaded() {
+  if (activeView.value === 'comparison' || activeView.value === 'sequence') {
+    const t = currentTimelineSec.value
+    const seqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
+    const localSec = Math.max(0, t - (seqIdx * 30.0))
+    if (videoPlayer.value && !isNaN(videoPlayer.value.duration)) {
+      try {
+        videoPlayer.value.currentTime = Math.min(localSec, videoPlayer.value.duration)
+      } catch (e) {
+        console.debug('onVideoLoaded seek error:', e)
+      }
+    }
+  }
+}
+
+function onVideoTimeUpdate() {
+  if (isUserScrubbing) return
+  if (!videoPlayer.value) return
+  if (activeView.value === 'comparison' || activeView.value === 'sequence') {
+    const globalSec = (currentSeqIndex.value * 30.0) + (videoPlayer.value.currentTime || 0)
+    currentTimelineSec.value = Math.min(maxDuration.value, Math.round(globalSec * 10) / 10)
+    const closest = findClosestEvent(currentTimelineSec.value)
+    if (closest && closest.eventId !== selectedEvent.value?.eventId) {
+      selectedEvent.value = closest
+    }
+  }
+}
+
+function onVideoEnded() {
+  if (activeView.value === 'comparison' || activeView.value === 'sequence') {
+    if (currentSeqIndex.value < 9) {
+      currentTimelineSec.value = (currentSeqIndex.value + 1) * 30.0
+      syncTimelineToVideo(true)
+      nextTick(() => {
+        if (videoPlayer.value) {
+          videoPlayer.value.play().catch(() => {})
+        }
+      })
+    }
+  }
 }
 
 function goToPrevAnomaly() {
@@ -1107,13 +1188,13 @@ async function handleLogout() {
             <!-- Bee Mode Button: 🐝 -->
             <button
               @click="toggleBeeMode"
-              title="Bee Mode: Mikrofon aktivieren und mit Bienenstock sprechen"
-              :class="isRecording ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20' : (isBeeModePlaying ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50' : (isProcessing ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-300 hover:text-amber-400 hover:bg-slate-800 border border-transparent'))"
+              :title="beeModeActive ? 'Bee Mode: ON (Responses synthesized as bioacoustic bee buzzing)' : 'Bee Mode: OFF (Click to enable bioacoustic buzzing)'"
+              :class="beeModeActive ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20' : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 border border-transparent'"
               class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all active:scale-95"
             >
-              <span class="text-sm select-none" :class="{ 'animate-bounce': isRecording || isBeeModePlaying }">🐝</span>
+              <span class="text-sm select-none" :class="{ 'animate-bounce': isBeeModePlaying }">🐝</span>
               <span class="font-mono text-[11px] font-medium">
-                {{ isRecording ? 'Listening...' : (isProcessing ? 'Thinking...' : (isBeeModePlaying ? 'Answering...' : 'Bee Mode')) }}
+                {{ isBeeModePlaying ? 'Buzzing...' : (beeModeActive ? 'Bee Mode: ON' : 'Bee Mode: OFF') }}
               </span>
               <span v-if="isBeeModePlaying" class="flex gap-0.5 items-end h-2.5 ml-0.5">
                 <span class="w-0.5 bg-amber-400 h-2.5 animate-pulse"></span>
@@ -1149,14 +1230,14 @@ async function handleLogout() {
                 :class="activeView === 'comparison' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
                 class="px-2.5 sm:px-3 py-1.5 text-xs rounded transition-colors whitespace-nowrap shrink-0 min-h-[36px] flex items-center"
               >
-                Side-by-Side
+                Sequence Stream (5m)
               </button>
               <button
                 @click="activeView = 'raw'"
                 :class="activeView === 'raw' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
                 class="px-2.5 sm:px-3 py-1.5 text-xs rounded transition-colors whitespace-nowrap shrink-0 min-h-[36px] flex items-center"
               >
-                Raw Clip
+                Event Clip
               </button>
               <button
                 @click="activeView = 'sam'"
@@ -1177,14 +1258,18 @@ async function handleLogout() {
 
           <!-- Video / Frame Canvas -->
           <div class="relative w-full aspect-[4/3] sm:aspect-video lg:aspect-auto lg:flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[240px] sm:min-h-[300px]">
-            <!-- Video Mode: Raw or Side-by-Side -->
+            <!-- Video Mode: Sequence Stream or Event Clip -->
             <video
               v-if="activeView !== 'sam' && activeMediaSource"
               ref="videoPlayer"
               :key="activeMediaSource"
               :src="activeMediaSource"
+              @loadedmetadata="onVideoLoaded"
+              @canplay="onVideoLoaded"
+              @timeupdate="onVideoTimeUpdate"
+              @ended="onVideoEnded"
               autoplay
-              loop
+              :loop="activeView === 'raw'"
               muted
               playsinline
               controls
@@ -1281,10 +1366,10 @@ async function handleLogout() {
                     <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> Transcribing...
                   </span>
                   <button
-                    @click="toggleBeeMode"
+                    @click="toggleVoiceInput"
                     :class="isRecording ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse' : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'"
                     class="px-2 py-0.5 rounded text-[10px] font-mono border flex items-center gap-1 transition-colors"
-                    title="Mikrofon-Eingabe für Muse Audio Transcribe"
+                    title="Record voice query and run production pipeline through Meta Muse"
                   >
                     <span>{{ isRecording ? 'Listening...' : 'Voice Input' }}</span>
                   </button>
@@ -1297,7 +1382,7 @@ async function handleLogout() {
                   v-model="museQuestionInput"
                   rows="2"
                   class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-500/50 resize-none font-sans leading-relaxed"
-                  placeholder="Gib hier deinen Text-Prompt ein oder nutze Voice Input (z.B. 'Was ist das für ein Fremdkörper am Flugloch?')..."
+                  placeholder="Enter your prompt here or use Voice Input (e.g., 'What foreign object is at the flight entrance?')..."
                 ></textarea>
               </div>
 
@@ -1307,19 +1392,19 @@ async function handleLogout() {
                   @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
                   class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
                 >
-                  🐝 Kollision
+                  🐝 Collision
                 </button>
                 <button
                   @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
                   class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
                 >
-                  🐝 Wespe
+                  🐝 Hornet Threat
                 </button>
                 <button
                   @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
                   class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
                 >
-                  🐝 SAM Kontur
+                  🐝 SAM Contour
                 </button>
               </div>
             </div>
@@ -1528,7 +1613,7 @@ async function handleLogout() {
           <div v-if="timelineData && timelineData.length > 0" class="text-[11px] text-slate-400 font-mono hidden sm:flex items-center gap-3">
             <span>Scrubber: <strong class="text-amber-400 font-semibold">{{ formatTime(currentTimelineSec) }}</strong> / {{ formatTime(maxDuration) }}</span>
             <span class="text-slate-600">|</span>
-            <span>Anomalie {{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }} von {{ sortedEvents.length }}</span>
+            <span>Anomaly {{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }} of {{ sortedEvents.length }}</span>
           </div>
         </div>
 
@@ -1536,7 +1621,7 @@ async function handleLogout() {
         <div
           class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner cursor-pointer select-none"
           @click="onTimelineContainerClick"
-          title="Klicken zum Springen auf der Timeline"
+          title="Click to seek on timeline"
         >
           <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
             <span>No timeline artifacts found on storage.</span>
@@ -1651,18 +1736,18 @@ async function handleLogout() {
               @click="goToPrevAnomaly"
               :disabled="isFirstAnomaly"
               class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
-              title="Vorherige Anomalie"
+              title="Previous Anomaly"
             >
               <span>◀</span>
-              <span class="hidden sm:inline">Anomalie</span>
+              <span class="hidden sm:inline">Anomaly</span>
             </button>
             <button
               @click="goToNextAnomaly"
               :disabled="isLastAnomaly"
               class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
-              title="Nächste Anomalie"
+              title="Next Anomaly"
             >
-              <span class="hidden sm:inline">Anomalie</span>
+              <span class="hidden sm:inline">Anomaly</span>
               <span>▶</span>
             </button>
           </div>
@@ -1683,7 +1768,7 @@ async function handleLogout() {
             <span class="text-base select-none">🐝</span>
             <div>
               <h3 class="text-sm font-semibold text-white">Meta Muse Staging Inspector</h3>
-              <p class="text-[11px] text-slate-400">Gegroundete Video-Telemetrie & SAM 3.1 Prompt-Vorschau</p>
+              <p class="text-[11px] text-slate-400">Grounded Video Telemetry & SAM 3.1 Prompt Preview</p>
             </div>
           </div>
           <button
@@ -1702,7 +1787,7 @@ async function handleLogout() {
           <div class="p-2.5 bg-slate-950/70 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-[11px]">
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-              <span class="text-slate-300 font-semibold">{{ stagedMuseQuery?.eventId || stagedSamQuery?.eventId || selectedEvent?.eventId || 'Event Telemetrie' }}</span>
+              <span class="text-slate-300 font-semibold">{{ stagedMuseQuery?.eventId || stagedSamQuery?.eventId || selectedEvent?.eventId || 'Event Telemetry' }}</span>
             </div>
             <div class="flex items-center gap-3 text-slate-400">
               <span class="text-rose-400 font-bold">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + 'σ' : (selectedEvent?.surpriseScoreL2 ? Number(selectedEvent.surpriseScoreL2).toFixed(2) + 'σ' : '4.82σ') }}</span>
@@ -1714,33 +1799,33 @@ async function handleLogout() {
           <!-- Question Input & Presets -->
           <div class="space-y-1.5">
             <div class="flex items-center justify-between">
-              <label class="text-[11px] font-semibold text-slate-200">Beekeeper Frage an Meta Muse:</label>
-              <span class="text-[10px] text-slate-400">Text oder Sprache</span>
+              <label class="text-[11px] font-semibold text-slate-200">Beekeeper Query to Meta Muse:</label>
+              <span class="text-[10px] text-slate-400">Text or Voice</span>
             </div>
             <textarea
               v-model="museQuestionInput"
               rows="2"
               class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono text-xs focus:outline-none focus:border-amber-500/50 resize-none"
-              placeholder="Frage an Meta Muse..."
+              placeholder="Query for Meta Muse..."
             ></textarea>
             <div class="flex flex-wrap items-center gap-1.5">
               <button
                 @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
                 class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Kollision
+                🐝 Collision
               </button>
               <button
                 @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
                 class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Hornisse
+                🐝 Hornet Threat
               </button>
               <button
                 @click="setPresetQuestion('Analyze swarm preparation cues from cluster vibration and entrance traffic')"
                 class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
               >
-                🐝 Schwarm
+                🐝 Swarm Dynamics
               </button>
             </div>
           </div>
@@ -1766,7 +1851,7 @@ async function handleLogout() {
 
             <!-- Tab 1: Formatted Grounded Prompt -->
             <div v-if="stagedTab === 'prompt'" class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
-              {{ stagedMuseQuery?.prompt || stagedSamQuery?.prompt || 'Kein Prompt generiert' }}
+              {{ stagedMuseQuery?.prompt || stagedSamQuery?.prompt || 'No prompt generated' }}
             </div>
 
             <!-- Tab 2: Wire Payload & cURL -->
@@ -1788,14 +1873,14 @@ async function handleLogout() {
             @click="stagedMuseModalOpen = false"
             class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-colors"
           >
-            Schließen
+            Close
           </button>
           <button
             @click="stagedMuseModalOpen = false; askMuse()"
             :disabled="isAskingMuse"
             class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-md shadow-amber-500/10 active:scale-95"
           >
-            <span>🐝 Jetzt an Muse Spark senden</span>
+            <span>🐝 Submit to Muse Spark</span>
           </button>
         </div>
       </div>

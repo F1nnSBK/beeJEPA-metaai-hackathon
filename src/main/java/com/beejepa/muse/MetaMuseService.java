@@ -819,16 +819,16 @@ public class MetaMuseService {
                 Math.min(cameraH, pxCenterY + halfBox)
         );
 
-        // Kanal 1 (PCS): Statischer Konzept-Prompt fuer Bienen-Zaehlwerk & Telemetrie
+        // Channel 1 (PCS): Static concept prompt for bee counter & telemetry
         Map<String, Object> channel1Prompt = Map.of(
                 "prompt_id", "baseline_bees",
                 "mode", "concept",
                 "text", "honey bee",
                 "confidence_threshold", 0.35,
-                "description", "Kanal 1: Statische Tages-Telemetrie fuer Bienenanzahl & Flussrichtung"
+                "description", "Channel 1: Static daily telemetry for bee count & traffic direction"
         );
 
-        // Kanal 2 (PVS): Klassen-agnostischer geometrischer Hotspot-Prompt aus 9x9 V-JEPA Grid
+        // Channel 2 (PVS): Class-agnostic geometric hotspot prompt from 9x9 V-JEPA grid
         Map<String, Object> channel2Prompt = Map.of(
                 "prompt_id", "vjepa_anomaly_target",
                 "mode", "visual_geometry",
@@ -836,10 +836,10 @@ public class MetaMuseService {
                 "point_coords", List.of(List.of(pxCenterX, pxCenterY)),
                 "point_labels", List.of(1),
                 "box_coords", hotspotBox,
-                "description", "Kanal 2: Klassen-agnostische Isolierung des Ueberraschungsobjekts"
+                "description", "Channel 2: Class-agnostic isolation of surprise anomaly object"
         );
 
-        // Kanal 3: Muse Spark Open Agentic Tool Definition
+        // Channel 3: Muse Spark Open Agentic Tool Definition
         Map<String, Object> samToolDefinition = Map.of(
                 "type", "function",
                 "function", Map.of(

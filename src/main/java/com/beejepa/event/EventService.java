@@ -269,9 +269,21 @@ public class EventService {
         if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
             return Optional.of(filePath.toFile());
         }
-
         return Optional.empty();
     }
+
+    public Optional<File> getSequenceFile(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return Optional.empty();
+        }
+        String safeName = Path.of(filename).getFileName().toString();
+        Path seqClip = getHackathonSampleDirectory().resolve("sequences").resolve(safeName);
+        if (Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
+            return Optional.of(seqClip.toFile());
+        }
+        return Optional.empty();
+    }
+
 
     private synchronized void extractFrameLazily(String eventId) {
         Path frameDir = getHackathonSampleDirectory().resolve("event_frames");
