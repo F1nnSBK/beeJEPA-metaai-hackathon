@@ -153,4 +153,40 @@ class MetaMuseServiceTest {
             Assertions.assertTrue(health.availableModels().contains("meta-models/muse-spark-open") || health.availableModels().contains("meta-models/muse-spark-open-1026"));
         }
     }
+
+    @Test
+    void testPrepareSamQueryDynamicPrompt() {
+        MetaMuseConfig metaConfig = new MetaMuseConfig();
+        metaConfig.setApiKey("test_meta_api_key");
+        metaConfig.setBaseUrl("https://api.meta.ai");
+
+        MetaMuseService service = new MetaMuseService(null, metaConfig, null, null, null);
+
+        // 1. Dynamic prompt from user (e.g. from Web App Text Input or Voice Transcript)
+        String userPrompt = "Was ist das für eine Wespe am Flugloch?";
+        com.beejepa.muse.dto.PrepareSamQueryRequest req = new com.beejepa.muse.dto.PrepareSamQueryRequest(
+                "evt_test_123",
+                userPrompt,
+                Map.of("x", 0.35, "y", 0.40, "width", 0.15, "height", 0.15),
+                "image"
+        );
+
+        var stagedSam = service.prepareSamQuery(req);
+
+        Assertions.assertTrue(stagedSam.staged());
+        Assertions.assertFalse(stagedSam.sent());
+        Assertions.assertEquals("sam-3.1", stagedSam.model());
+        Assertions.assertEquals("https://api.meta.ai/v1/responses", stagedSam.targetUrl());
+        Assertions.assertEquals(userPrompt, stagedSam.prompt(), "Prompt must match the user's dynamic query exactly");
+        Assertions.assertEquals("/api/v1/events/evt_test_123/media/peak_frame.jpg", stagedSam.peakFrameUrl());
+        Assertions.assertNotNull(stagedSam.curlCommand());
+        Assertions.assertTrue(stagedSam.curlCommand().contains("sam-3.1"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains(userPrompt));
+
+        // 2. Dynamic Audio Transcribe (Zero Credits Safe)
+        var trans = service.transcribeVoice(new byte[]{1, 2, 3, 4});
+        Assertions.assertEquals("SUCCESS", trans.get("status"));
+        Assertions.assertEquals(0, ((Number) trans.get("creditsConsumed")).intValue());
+        Assertions.assertNotNull(trans.get("transcript"));
+    }
 }

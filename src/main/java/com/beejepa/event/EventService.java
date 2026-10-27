@@ -369,14 +369,11 @@ public class EventService {
         result.put("analyzedAt", java.time.Instant.now().toString());
 
         Map<String, Object> samResult = new HashMap<>();
-        samResult.put("model", "meta/sam-3.1");
-        samResult.put("status", "SUCCESS");
-        samResult.put("instanceCount", 2);
-        samResult.put("segmentationMaskRle", "compact_rle_instance_0");
-        samResult.put("segmentedObject", "Bee Collision Pair");
+        samResult.put("model", "sam-3.1");
+        samResult.put("status", "STAGED");
         samResult.put("targetFrame", "peak_frame.jpg");
 
-        // Attach input parameters that went into SAM 3.1
+        // Attach real input parameters that went into SAM 3.1 from V-JEPA detection
         getEvent(eventId).ifPresent(ev -> {
             Object rawEvent = ev.get("event");
             if (rawEvent instanceof AnomalyEvent ae) {
@@ -389,10 +386,9 @@ public class EventService {
         result.put("sam", samResult);
 
         Map<String, Object> museResult = new HashMap<>();
-        museResult.put("model", "meta-models/muse-spark-open-1026");
-        museResult.put("status", "SUCCESS");
-        museResult.put("confidence", 0.94);
-        museResult.put("diagnosis", "Anomaly detected (Surprise Score spike): Incoming forager bee collided abruptly with vertical hive entrance wall at 60 fps, tumbling onto the alighting board.");
+        museResult.put("model", "meta-models/muse-spark-open");
+        museResult.put("status", "STAGED");
+        museResult.put("diagnosis", "V-JEPA surprise telemetry grounded. Ready for live Meta Model API query.");
         result.put("muse", museResult);
 
         // 3. Cache to SSD to protect budget

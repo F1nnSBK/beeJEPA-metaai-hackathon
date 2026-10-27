@@ -394,13 +394,9 @@ public class MetaMuseService {
             samData.putAll((Map<String, Object>) sm);
         }
 
-        // If no pre-computed SAM result was loaded, provide synthesized grounding from hotspot
         if (samData.isEmpty()) {
-            samData.put("model", "meta/sam-3.1");
-            samData.put("status", "SUCCESS");
-            samData.put("instanceCount", 2);
-            samData.put("segmentationMaskRle", "compact_rle_instance_0");
-            samData.put("segmentedObject", "Bee Collision Pair");
+            samData.put("model", "sam-3.1");
+            samData.put("status", "STAGED");
             if (eventData.get("hotspot") != null) {
                 samData.put("boxPrompt", eventData.get("hotspot"));
             }
@@ -408,8 +404,8 @@ public class MetaMuseService {
         eventData.put("samSegmentation", samData);
 
         String userQuestion = (request != null && request.question() != null && !request.question().isBlank())
-                ? request.question()
-                : "Explain this anomaly event: What physical interaction occurred in this tubelet region and what is the threat assessment?";
+                ? request.question().trim()
+                : "Analyze physical dynamics and threat level for this V-JEPA latent surprise anomaly.";
 
         // Grounded prompt with complete causal physics, SAM inputs, and SAM mask telemetry
         StringBuilder promptBuilder = new StringBuilder();
@@ -436,7 +432,7 @@ public class MetaMuseService {
         }
 
         promptBuilder.append("\n### Pipeline Stage 2: Inputs Routed to SAM 3.1 (Segment Anything Model)\n");
-        promptBuilder.append("- Target Visual Frame: Peak anomaly frame #").append(eventData.getOrDefault("frameIndex", 720)).append(" (clip_raw.mp4 / peak_frame.jpg)\n");
+        promptBuilder.append("- Target Visual Frame: Peak anomaly frame #").append(eventData.getOrDefault("frameIndex", 0)).append(" (clip_raw.mp4 / peak_frame.jpg)\n");
         if (eventData.get("hotspot") != null) {
             promptBuilder.append("- Spatial Hotspot Tubelet: ").append(eventData.get("hotspot")).append("\n");
             promptBuilder.append("- SAM Visual Box Prompt: Bounding box enclosing the anomaly hotspot tubelet\n");
@@ -446,10 +442,16 @@ public class MetaMuseService {
         }
 
         promptBuilder.append("\n### Pipeline Stage 3: SAM 3.1 Visual Segmentation Mask & Instance Telemetry\n");
-        promptBuilder.append(String.format("- Segmentation Model: %s\n", samData.getOrDefault("model", "meta/sam-3.1")));
-        promptBuilder.append(String.format("- Segmented Visual Object: %s\n", samData.getOrDefault("segmentedObject", "Bee Collision Pair")));
-        promptBuilder.append(String.format("- Isolated Instances Count: %s\n", samData.getOrDefault("instanceCount", 2)));
-        promptBuilder.append(String.format("- Segmentation Mask (RLE/Contour): %s\n", samData.getOrDefault("segmentationMaskRle", "compact_rle_instance_0")));
+        promptBuilder.append(String.format("- Segmentation Model: %s\n", samData.getOrDefault("model", "sam-3.1")));
+        if (samData.containsKey("segmentedObject")) {
+            promptBuilder.append(String.format("- Segmented Visual Object: %s\n", samData.get("segmentedObject")));
+        }
+        if (samData.containsKey("instanceCount")) {
+            promptBuilder.append(String.format("- Isolated Instances Count: %s\n", samData.get("instanceCount")));
+        }
+        if (samData.containsKey("segmentationMaskRle")) {
+            promptBuilder.append(String.format("- Segmentation Mask (RLE/Contour): %s\n", samData.get("segmentationMaskRle")));
+        }
         if (samData.get("boxPrompt") != null) {
             promptBuilder.append(String.format("- Visual Box Prompt Applied: %s\n", samData.get("boxPrompt")));
         }
