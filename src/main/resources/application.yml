@@ -11,6 +11,24 @@ micronaut:
       frontend:
         paths: classpath:public
         mapping: /**
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT1M
+    binders:
+      uptime:
+        enabled: true
+      processor:
+        enabled: true
+      jvm:
+        enabled: true
+      web:
+        enabled: true
+        percentiles: [0.5, 0.9, 0.95, 0.99]
+        histogram: true
 
 meta:
   muse:
@@ -38,5 +56,8 @@ endpoints:
     enabled: true
     sensitive: false
   info:
+    enabled: true
+    sensitive: false
+  prometheus:
     enabled: true
     sensitive: false

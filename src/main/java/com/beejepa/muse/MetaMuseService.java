@@ -634,6 +634,73 @@ public class MetaMuseService {
             prompt = "segment central anomaly object";
         }
 
+        // 3-Kanal SAM 3.1 & Muse Spark Open Architektur
+        // Kamera-Ausschnitt: 688x688 (gecroppt aus den 1080x960 Side-by-Side Clips)
+        int cameraW = 688;
+        int cameraH = 688;
+        List<Integer> cropRegion = List.of(0, 0, 688, 688);
+
+        int frameIdx = 64;
+        if (eventId.contains("_f0000")) {
+            frameIdx = 0;
+        }
+
+        double normCx = 0.436; // default 300 / 688
+        double normCy = 0.697; // default 480 / 688
+        if (hotspot.containsKey("x") && hotspot.containsKey("width")) {
+            normCx = ((Number) hotspot.get("x")).doubleValue() + ((Number) hotspot.get("width")).doubleValue() / 2.0;
+        }
+        if (hotspot.containsKey("y") && hotspot.containsKey("height")) {
+            normCy = ((Number) hotspot.get("y")).doubleValue() + ((Number) hotspot.get("height")).doubleValue() / 2.0;
+        }
+
+        int pxCenterX = (int) Math.round(normCx * cameraW);
+        int pxCenterY = (int) Math.round(normCy * cameraH);
+        int halfBox = 90; // 180x180 Box [210, 390, 390, 570]
+        List<Integer> hotspotBox = List.of(
+                Math.max(0, pxCenterX - halfBox),
+                Math.max(0, pxCenterY - halfBox),
+                Math.min(cameraW, pxCenterX + halfBox),
+                Math.min(cameraH, pxCenterY + halfBox)
+        );
+
+        // Kanal 1 (PCS): Statischer Konzept-Prompt fuer Bienen-Zaehlwerk & Telemetrie
+        Map<String, Object> channel1Prompt = Map.of(
+                "prompt_id", "baseline_bees",
+                "mode", "concept",
+                "text", "honey bee",
+                "confidence_threshold", 0.35,
+                "description", "Kanal 1: Statische Tages-Telemetrie fuer Bienenanzahl & Flussrichtung"
+        );
+
+        // Kanal 2 (PVS): Klassen-agnostischer geometrischer Hotspot-Prompt aus 9x9 V-JEPA Grid
+        Map<String, Object> channel2Prompt = Map.of(
+                "prompt_id", "vjepa_anomaly_target",
+                "mode", "visual_geometry",
+                "frame_idx", frameIdx,
+                "point_coords", List.of(List.of(pxCenterX, pxCenterY)),
+                "point_labels", List.of(1),
+                "box_coords", hotspotBox,
+                "description", "Kanal 2: Klassen-agnostische Isolierung des Ueberraschungsobjekts"
+        );
+
+        // Kanal 3: Muse Spark Open Agentic Tool Definition
+        Map<String, Object> samToolDefinition = Map.of(
+                "type", "function",
+                "function", Map.of(
+                        "name", "query_sam31_concept",
+                        "description", "Runs dynamic open-vocabulary SAM 3.1 concept segmentation and tracking on a 4-second peak clip (e.g., 'fly', 'wasp', 'pollen basket', 'fighting bees').",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "event_id", Map.of("type", "string"),
+                                        "concept_prompt", Map.of("type", "string")
+                                ),
+                                "required", List.of("event_id", "concept_prompt")
+                        )
+                )
+        );
+
         Map<String, Object> imagePayload = Map.of(
                 "model", modelName,
                 "input", List.of(
@@ -645,39 +712,39 @@ public class MetaMuseService {
                                 )
                         )
                 ),
+                "crop_region_xywh", cropRegion,
+                "three_channel_pipeline", Map.of(
+                        "channel_1_pcs_baseline", channel1Prompt,
+                        "channel_2_pvs_hotspot", channel2Prompt,
+                        "channel_3_muse_tool", samToolDefinition
+                ),
                 "stream", false
         );
 
         Map<String, Object> videoPayload = Map.of(
                 "model", modelName,
-                "input", List.of(
-                        Map.of(
-                                "role", "user",
-                                "content", List.of(
-                                        Map.of("type", "input_text", "text", prompt),
-                                        Map.of("type", "input_video", "video_url", videoClipUrl)
-                                )
-                        )
-                ),
+                "video_or_image_path", videoClipUrl,
+                "crop_region_xywh", cropRegion,
+                "multiplex_tracking", true,
+                "prompts", List.of(channel1Prompt, channel2Prompt),
+                "agentic_tools", List.of(samToolDefinition),
                 "stream", true
         );
 
-        String curlCommand = String.format(
+        String curlCommand = String.format(Locale.US,
                 "curl -X POST \"%s\" \\\n" +
                 "  -H \"Authorization: Bearer $META_MUSE_API_KEY\" \\\n" +
                 "  -H \"Content-Type: application/json\" \\\n" +
                 "  -d '{\n" +
-                "    \"model\": \"%s\",\n" +
-                "    \"input\": [{\n" +
-                "      \"role\": \"user\",\n" +
-                "      \"content\": [\n" +
-                "        {\"type\": \"input_text\", \"text\": \"%s\"},\n" +
-                "        {\"type\": \"input_image\", \"image_url\": \"%s\"}\n" +
-                "      ]\n" +
-                "    }],\n" +
-                "    \"stream\": false\n" +
+                "    \"video_or_image_path\": \"%s\",\n" +
+                "    \"crop_region_xywh\": [0, 0, 688, 688],\n" +
+                "    \"multiplex_tracking\": true,\n" +
+                "    \"prompts\": [\n" +
+                "      {\"prompt_id\": \"baseline_bees\", \"mode\": \"concept\", \"text\": \"honey bee\", \"confidence_threshold\": 0.35},\n" +
+                "      {\"prompt_id\": \"vjepa_anomaly_target\", \"mode\": \"visual_geometry\", \"frame_idx\": %d, \"point_coords\": [[%d, %d]], \"point_labels\": [1], \"box_coords\": [%d, %d, %d, %d]}\n" +
+                "    ]\n" +
                 "  }'",
-                targetUrl, modelName, prompt, peakFrameUrl
+                targetUrl, videoClipUrl, frameIdx, pxCenterX, pxCenterY, hotspotBox.get(0), hotspotBox.get(1), hotspotBox.get(2), hotspotBox.get(3)
         );
 
         return new com.beejepa.muse.dto.StagedSamRequest(

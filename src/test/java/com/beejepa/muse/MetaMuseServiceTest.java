@@ -180,8 +180,32 @@ class MetaMuseServiceTest {
         Assertions.assertEquals(userPrompt, stagedSam.prompt(), "Prompt must match the user's dynamic query exactly");
         Assertions.assertEquals("/api/v1/events/evt_test_123/media/peak_frame.jpg", stagedSam.peakFrameUrl());
         Assertions.assertNotNull(stagedSam.curlCommand());
-        Assertions.assertTrue(stagedSam.curlCommand().contains("sam-3.1"));
-        Assertions.assertTrue(stagedSam.curlCommand().contains(userPrompt));
+        Assertions.assertTrue(stagedSam.curlCommand().contains("crop_region_xywh"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains("frame_idx"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains("baseline_bees"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains("vjepa_anomaly_target"));
+
+        // Verify Kanal 1 (PCS) & Kanal 2 (PVS) in videoPayload
+        var videoPayload = stagedSam.videoPayload();
+        Assertions.assertNotNull(videoPayload);
+        Assertions.assertEquals(Boolean.TRUE, videoPayload.get("multiplex_tracking"));
+        Assertions.assertEquals(List.of(0, 0, 688, 688), videoPayload.get("crop_region_xywh"));
+        @SuppressWarnings("unchecked")
+        var prompts = (List<Map<String, Object>>) videoPayload.get("prompts");
+        Assertions.assertEquals(2, prompts.size());
+        Assertions.assertEquals("baseline_bees", prompts.get(0).get("prompt_id"));
+        Assertions.assertEquals("honey bee", prompts.get(0).get("text"));
+        Assertions.assertEquals("vjepa_anomaly_target", prompts.get(1).get("prompt_id"));
+        Assertions.assertEquals("visual_geometry", prompts.get(1).get("mode"));
+        Assertions.assertEquals(64, prompts.get(1).get("frame_idx"));
+
+        // Verify Kanal 3 (Agentic SAM Tool) in videoPayload
+        @SuppressWarnings("unchecked")
+        var tools = (List<Map<String, Object>>) videoPayload.get("agentic_tools");
+        Assertions.assertEquals(1, tools.size());
+        @SuppressWarnings("unchecked")
+        var fn = (Map<String, Object>) tools.get(0).get("function");
+        Assertions.assertEquals("query_sam31_concept", fn.get("name"));
 
         // 2. Dynamic Audio Transcribe (Zero Credits Safe)
         var trans = service.transcribeVoice(new byte[]{1, 2, 3, 4});
