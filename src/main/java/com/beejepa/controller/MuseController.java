@@ -126,6 +126,24 @@ public class MuseController {
         return HttpResponse.ok(staged);
     }
 
+    @Get("/events/{eventId}/sam/staged")
+    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> stageSam(@io.micronaut.http.annotation.PathVariable String eventId) {
+        return HttpResponse.ok(museService.prepareSamQuery(eventId));
+    }
+
+    @Post("/prepare-sam")
+    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> prepareSam(@Body com.beejepa.muse.dto.PrepareSamQueryRequest request) {
+        if (request == null || request.eventId() == null || request.eventId().isBlank()) {
+            return HttpResponse.badRequest();
+        }
+        return HttpResponse.ok(museService.prepareSamQuery(request));
+    }
+
+    @Post(value = "/transcribe", consumes = {"audio/wav", "audio/*", "application/octet-stream"}, produces = "application/json")
+    public HttpResponse<Map<String, Object>> transcribeVoice(@Body byte[] audioBytes) {
+        return HttpResponse.ok(museService.transcribeVoice(audioBytes));
+    }
+
     @Post("/embeddings")
     public MuseInferenceResponse embeddings(@Body MuseInferenceRequest request) {
         return museService.callEmbedding(request);

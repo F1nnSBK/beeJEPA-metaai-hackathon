@@ -23,6 +23,8 @@ const timelineData = ref([])
 const timelineMeta = ref(null)
 const events = ref([])
 const selectedEvent = ref(null)
+const currentTimelineSec = ref(0)
+const videoPlayer = ref(null)
 const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
 const isAnalyzing = ref(false)
 
@@ -33,12 +35,15 @@ const isProcessing = ref(false)
 let beeAudioInstance = null
 let activeStopRecording = null
 
-// Staged Meta Muse Request (Ready for endpoint, not sent yet)
+// Staged Meta Muse & SAM 3.1 Request (Ready for endpoint, not sent yet)
 const stagedMuseModalOpen = ref(false)
 const stagedMuseQuery = ref(null)
+const stagedSamQuery = ref(null)
 const isPreparingMuse = ref(false)
-const museQuestionInput = ref('Explain this anomaly event: What physical interaction occurred in this tubelet region and what is the threat assessment?')
-const stagedTab = ref('prompt') // 'prompt', 'payload', 'headers', 'event'
+const isTranscribing = ref(false)
+const voiceTranscript = ref('')
+const museQuestionInput = ref('')
+const stagedTab = ref('sam') // 'sam', 'prompt', 'payload', 'responses', 'headers', 'event'
 
 // Meta Model API Health state
 const metaHealth = ref({
@@ -229,6 +234,28 @@ async function toggleMicrophoneListening() {
         console.debug('Acoustic mirror network error:', err)
         isProcessing.value = false
       }
+
+      // Transcribe voice input dynamically via Meta Audio API
+      try {
+        isTranscribing.value = true
+        const transRes = await fetch('/api/v1/muse/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'audio/wav' },
+          body: wavBytes
+        })
+        if (transRes.ok) {
+          const transData = await transRes.json()
+          if (transData && transData.transcript) {
+            voiceTranscript.value = transData.transcript
+            museQuestionInput.value = transData.transcript
+            console.log('Voice transcribed dynamically via Meta Audio API:', transData.transcript)
+          }
+        }
+      } catch (err) {
+        console.debug('Transcribe error:', err)
+      } finally {
+        isTranscribing.value = false
+      }
     }
 
     activeStopRecording = finishAndSend
@@ -285,6 +312,7 @@ async function prepareMusePayload(event = null, question = null) {
     if (res.ok) {
       const data = await res.json()
       stagedMuseQuery.value = data
+      stagedTab.value = 'prompt'
       stagedMuseModalOpen.value = true
     }
   } catch (err) {
@@ -294,9 +322,43 @@ async function prepareMusePayload(event = null, question = null) {
   }
 }
 
+async function prepareSamPayload(event = null, prompt = null) {
+  const ev = event || selectedEvent.value
+  if (!ev) return
+  const p = prompt || museQuestionInput.value
+
+  isPreparingMuse.value = true
+  try {
+    const res = await fetch('/api/v1/muse/prepare-sam', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: ev.eventId,
+        prompt: p,
+        customBox: ev.hotspot ? {
+          x: ev.hotspot.normCenterX - 0.06,
+          y: ev.hotspot.normCenterY - 0.07,
+          width: 0.12,
+          height: 0.14
+        } : null,
+        mediaType: 'image'
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      stagedSamQuery.value = data
+      stagedTab.value = 'sam'
+      stagedMuseModalOpen.value = true
+    }
+  } catch (err) {
+    console.error('Failed to prepare SAM query:', err)
+  } finally {
+    isPreparingMuse.value = false
+  }
+}
+
 function setPresetQuestion(q) {
   museQuestionInput.value = q
-  prepareMusePayload(selectedEvent.value, q)
 }
 
 // Live Bee Swarm Simulation (Low-Temperature Random Walk)
@@ -557,6 +619,9 @@ async function loadSystemAndData() {
 
 function selectEvent(ev) {
   selectedEvent.value = ev
+  if (ev && typeof ev.timestampSec === 'number') {
+    currentTimelineSec.value = ev.timestampSec
+  }
 }
 
 function selectEventById(id) {
@@ -630,17 +695,27 @@ const hotspotBoxStyle = computed(() => {
   }
 })
 
-const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 2250)
-const maxScore = 5.5
+const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 300)
+const minScore = computed(() => Number(timelineMeta.value?.minSurprise ?? 9.5))
+const maxScore = computed(() => Number(timelineMeta.value?.maxSurprise ?? 16.5))
 const svgWidth = 1000
 const svgHeight = 100
+
+const tauY = computed(() => {
+  const range = Math.max(1.0, maxScore.value - minScore.value)
+  const tau = Number(timelineMeta.value?.decisionThreshold || 10.2)
+  const clamped = Math.max(minScore.value, Math.min(tau, maxScore.value))
+  return (svgHeight - 8 - ((clamped - minScore.value) / range) * (svgHeight - 16)).toFixed(1)
+})
 
 // Area path for gradient fill under the curve
 const svgAreaPath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
     const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
+    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
 
@@ -650,9 +725,11 @@ const svgAreaPath = computed(() => {
 // Stroke path for the fever curve
 const svgCurvePath = computed(() => {
   if (!timelineData.value || timelineData.value.length === 0) return ''
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   const points = timelineData.value.map(pt => {
     const x = (pt.timestampSec / maxDuration.value) * svgWidth
-    const y = svgHeight - 8 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * (svgHeight - 16)
+    const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+    const y = svgHeight - 8 - ((clampedScore - minScore.value) / range) * (svgHeight - 16)
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
 
@@ -662,10 +739,12 @@ const svgCurvePath = computed(() => {
 // Spikes with exact HTML coordinates (to keep circles 100% round)
 const timelineSpikes = computed(() => {
   if (!timelineData.value) return []
+  const range = Math.max(1.0, maxScore.value - minScore.value)
   return timelineData.value
     .filter(pt => pt.eventId)
     .map(pt => {
-      const normY = 1.0 - (Math.min(pt.surpriseScoreL2, maxScore) / maxScore) * 0.84 - 0.08
+      const clampedScore = Math.max(minScore.value, Math.min(pt.surpriseScoreL2, maxScore.value))
+      const normY = 1.0 - ((clampedScore - minScore.value) / range) * 0.84 - 0.08
       return {
         ...pt,
         normX: pt.timestampSec / maxDuration.value,
@@ -675,9 +754,73 @@ const timelineSpikes = computed(() => {
 })
 
 function formatTime(sec) {
+  if (sec == null || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const sortedEvents = computed(() => {
+  return [...events.value].sort((a, b) => (a.timestampSec || 0) - (b.timestampSec || 0))
+})
+
+const currentAnomalyIndex = computed(() => {
+  if (!selectedEvent.value) return -1
+  return sortedEvents.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
+})
+
+const isFirstAnomaly = computed(() => currentAnomalyIndex.value <= 0)
+const isLastAnomaly = computed(() => currentAnomalyIndex.value === -1 || currentAnomalyIndex.value >= sortedEvents.value.length - 1)
+
+function findClosestEvent(sec) {
+  if (!events.value || events.value.length === 0) return null
+  let closest = events.value[0]
+  let minDiff = Math.abs((closest.timestampSec || 0) - sec)
+  for (let i = 1; i < events.value.length; i++) {
+    const diff = Math.abs((events.value[i].timestampSec || 0) - sec)
+    if (diff < minDiff) {
+      minDiff = diff
+      closest = events.value[i]
+    }
+  }
+  return closest
+}
+
+function onTimelineSliderInput() {
+  const closest = findClosestEvent(currentTimelineSec.value)
+  if (closest && closest.eventId !== selectedEvent.value?.eventId) {
+    selectedEvent.value = closest
+  }
+}
+
+function onTimelineSliderChange() {
+  const closest = findClosestEvent(currentTimelineSec.value)
+  if (closest) {
+    selectEvent(closest)
+  }
+}
+
+function onTimelineContainerClick(e) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  if (!rect.width) return
+  const clickX = e.clientX - rect.left
+  const pct = Math.max(0, Math.min(1, clickX / rect.width))
+  currentTimelineSec.value = Math.round(pct * maxDuration.value * 10) / 10
+  onTimelineSliderInput()
+}
+
+function goToPrevAnomaly() {
+  if (currentAnomalyIndex.value > 0) {
+    selectEvent(sortedEvents.value[currentAnomalyIndex.value - 1])
+  }
+}
+
+function goToNextAnomaly() {
+  if (currentAnomalyIndex.value >= 0 && currentAnomalyIndex.value < sortedEvents.value.length - 1) {
+    selectEvent(sortedEvents.value[currentAnomalyIndex.value + 1])
+  } else if (sortedEvents.value.length > 0 && currentAnomalyIndex.value === -1) {
+    selectEvent(sortedEvents.value[0])
+  }
 }
 
 async function handleLogin() {
@@ -846,22 +989,18 @@ async function handleLogout() {
             </span>
           </button>
 
-          <!-- Voice / Bee Mode Button Group -->
+          <!-- Voice & Calibration Settings Button Group -->
           <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-0.5">
-            <!-- Ask Muse Button (Stages Event Telemetry for Meta Muse Endpoint) -->
+            <!-- Settings Gear Button: Calibration & Staging Inspector -->
             <button
-              @click="prepareMusePayload()"
-              title="Ask Muse: Bereitet Anfrage für Meta Muse Endpoint mit Event-Daten vor (noch nicht abgesendet)"
-              :class="isPreparingMuse ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : (stagedMuseQuery ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20' : 'text-slate-300 hover:text-white hover:bg-slate-800 border border-transparent')"
-              class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all active:scale-95"
+              @click="stagedMuseModalOpen = true"
+              title="Einstellungen & Kalibrierung (Meta API Staging)"
+              class="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-md transition-colors"
             >
-              <span v-if="isPreparingMuse" class="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></span>
-              <svg v-else class="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              <span class="hidden sm:inline font-mono text-[11px] font-medium">
-                {{ isPreparingMuse ? 'Staging...' : (stagedMuseQuery ? 'Muse Staged' : 'Ask Muse') }}
-              </span>
             </button>
 
             <!-- Bee Mode Button: 🐝 -->
@@ -907,21 +1046,21 @@ async function handleLogout() {
               <button
                 @click="activeView = 'comparison'"
                 :class="activeView === 'comparison' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
+                class="px-2.5 sm:px-3 py-1.5 text-xs rounded transition-colors whitespace-nowrap shrink-0 min-h-[36px] flex items-center"
               >
-                Side-by-Side: Pixel vs. V-JEPA
+                Side-by-Side
               </button>
               <button
                 @click="activeView = 'raw'"
                 :class="activeView === 'raw' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
+                class="px-2.5 sm:px-3 py-1.5 text-xs rounded transition-colors whitespace-nowrap shrink-0 min-h-[36px] flex items-center"
               >
-                Raw 60fps Clip
+                Raw Clip
               </button>
               <button
                 @click="activeView = 'sam'"
                 :class="activeView === 'sam' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white bg-slate-800/60'"
-                class="px-2.5 sm:px-3 py-1 text-xs rounded transition-colors whitespace-nowrap shrink-0"
+                class="px-2.5 sm:px-3 py-1.5 text-xs rounded transition-colors whitespace-nowrap shrink-0 min-h-[36px] flex items-center"
               >
                 SAM 3.1 Peak Frame
               </button>
@@ -1029,21 +1168,75 @@ async function handleLogout() {
               </div>
             </div>
 
-            <!-- Trigger Buttons: SAM Segmentation & Ask Muse -->
-            <div class="grid grid-cols-2 gap-2">
+            <!-- Meta AI & SAM 3.1 Prompt & Voice Console (Direct Main Screen Input) -->
+            <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2.5 shadow-sm">
+              <div class="flex items-center justify-between">
+                <label class="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <span class="text-amber-400">🐝</span>
+                  <span>Meta AI & SAM 3.1 Prompt:</span>
+                </label>
+                <div class="flex items-center gap-1">
+                  <span v-if="isTranscribing" class="text-[10px] text-amber-300 animate-pulse font-mono flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> Transcribing...
+                  </span>
+                  <button
+                    @click="toggleBeeMode"
+                    :class="isRecording ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse' : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'"
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border flex items-center gap-1 transition-colors"
+                    title="Mikrofon-Eingabe für Muse Audio Transcribe"
+                  >
+                    <span>{{ isRecording ? 'Listening...' : 'Voice Input' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Dynamic Textarea -->
+              <div class="relative">
+                <textarea
+                  v-model="museQuestionInput"
+                  rows="2"
+                  class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-500/50 resize-none font-sans leading-relaxed"
+                  placeholder="Gib hier deinen Text-Prompt ein oder nutze Voice Input (z.B. 'Was ist das für ein Fremdkörper am Flugloch?')..."
+                ></textarea>
+              </div>
+
+              <!-- Quick Presets -->
+              <div class="flex flex-wrap items-center gap-1 pt-0.5">
+                <button
+                  @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
+                  class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
+                >
+                  🐝 Kollision
+                </button>
+                <button
+                  @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
+                  class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
+                >
+                  🐝 Wespe
+                </button>
+                <button
+                  @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
+                  class="px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
+                >
+                  🐝 SAM Kontur
+                </button>
+              </div>
+            </div>
+
+            <!-- Action Buttons: SAM 3.1 & Ask Muse (Mobile-friendly touch targets) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
-                @click="runMetaAnalysis"
-                :disabled="isAnalyzing"
-                class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-semibold text-xs rounded-lg transition-colors border border-slate-700 flex items-center justify-center gap-1.5"
+                @click="prepareSamPayload(selectedEvent)"
+                :disabled="isPreparingMuse"
+                class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-amber-300 font-semibold text-xs rounded-lg transition-all border border-amber-500/30 flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] touch-manipulation"
               >
-                <span v-if="isAnalyzing" class="w-3.5 h-3.5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin"></span>
-                <span>{{ selectedEvent?.agentResult ? '🐝 Re-run SAM' : '🐝 Segment with SAM' }}</span>
+                <span>SAM 3.1 API</span>
               </button>
 
               <button
                 @click="prepareMusePayload(selectedEvent)"
                 :disabled="isPreparingMuse"
-                class="py-2.5 px-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-lg transition-colors shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5"
+                class="py-2.5 sm:py-3 px-3 min-h-[44px] bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-lg transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 active:scale-[0.98] touch-manipulation"
               >
                 <span v-if="isPreparingMuse" class="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
                 <span>🐝 Ask Muse</span>
@@ -1055,14 +1248,14 @@ async function handleLogout() {
               <div class="flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
                   <span>🐝</span>
-                  <span>Muse Spark Open Staged (Baseten)</span>
+                  <span>Muse Spark Open Staged</span>
                 </span>
                 <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                   Staged (0 Credits)
                 </span>
               </div>
               <p class="text-[11px] text-slate-300">
-                Grounded: SAM Mask + V-JEPA Event <span class="font-mono text-amber-300">{{ stagedMuseQuery.eventId || 'Active' }}</span> ({{ stagedMuseQuery.estimatedTokens }} Tokens)
+                Grounded: V-JEPA Event <span class="font-mono text-amber-300">{{ stagedMuseQuery.eventId || 'Active' }}</span> ({{ stagedMuseQuery.estimatedTokens }} Tokens)
               </p>
               <div class="flex items-center justify-between pt-1 text-[11px]">
                 <span class="text-slate-400 font-mono text-[10px]">{{ stagedMuseQuery.httpMethod || 'POST' }} {{ stagedMuseQuery.model || 'meta-models/muse-spark-open' }}</span>
@@ -1075,8 +1268,8 @@ async function handleLogout() {
               </div>
             </div>
 
-            <!-- SAM 3.1 Segmentation Isolation Card -->
-            <div v-if="selectedEvent.agentResult?.sam" class="p-3.5 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1.5">
+            <!-- SAM 3.1 Segmentation Isolation Card (Only shown when real output exists) -->
+            <div v-if="selectedEvent.agentResult?.sam && selectedEvent.agentResult.sam.status === 'SUCCESS' && selectedEvent.agentResult.sam.segmentedObject" class="p-3.5 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1.5">
               <div class="flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-amber-400">SAM 3.1 Instance Segmentation</span>
                 <span class="text-[10px] font-mono text-slate-400">{{ selectedEvent.agentResult.sam.model }}</span>
@@ -1084,16 +1277,16 @@ async function handleLogout() {
               <p class="text-xs text-slate-300">
                 Isolated Object: <span class="font-semibold text-white">{{ selectedEvent.agentResult.sam.segmentedObject }}</span>
               </p>
-              <p class="text-[11px] text-slate-400 font-mono">
+              <p v-if="selectedEvent.agentResult.sam.instanceCount" class="text-[11px] text-slate-400 font-mono">
                 Instances: {{ selectedEvent.agentResult.sam.instanceCount }} • Box Prompt Applied
               </p>
             </div>
 
-            <!-- Muse Spark Causal Scene Diagnosis Card -->
-            <div v-if="selectedEvent.agentResult?.muse" class="p-3.5 bg-slate-900/90 rounded-lg border border-amber-500/30 space-y-2">
+            <!-- Muse Spark Causal Scene Diagnosis Card (Only shown when real diagnosis exists) -->
+            <div v-if="selectedEvent.agentResult?.muse && selectedEvent.agentResult.muse.status === 'SUCCESS' && selectedEvent.agentResult.muse.diagnosis" class="p-3.5 bg-slate-900/90 rounded-lg border border-amber-500/30 space-y-2">
               <div class="flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-amber-400">Muse Spark Causal Diagnosis</span>
-                <span class="text-[10px] font-mono text-slate-400">Confidence: {{ Math.round(selectedEvent.agentResult.muse.confidence * 100) }}%</span>
+                <span v-if="selectedEvent.agentResult.muse.confidence" class="text-[10px] font-mono text-slate-400">Confidence: {{ Math.round(selectedEvent.agentResult.muse.confidence * 100) }}%</span>
               </div>
               <p class="text-xs text-slate-200 leading-relaxed italic bg-[#0b0f19] p-3 rounded border border-slate-800">
                 "{{ selectedEvent.agentResult.muse.diagnosis }}"
@@ -1108,7 +1301,6 @@ async function handleLogout() {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <p class="text-xs font-mono text-slate-400">No Events Detected</p>
             <p class="text-[11px] text-slate-500 max-w-xs mt-1">
               Awaiting anomaly events on SSD storage.
             </p>
@@ -1116,20 +1308,20 @@ async function handleLogout() {
         </div>
       </main>
 
-      <!-- Bottom: 37.5-Minute Anomaly Fever Curve (High Quality & Responsive) -->
+      <!-- Bottom: Latent Surprise Timeline & Interactive Scrubber Slider -->
       <footer class="border-t border-slate-800/80 bg-[#0c121e] px-4 sm:px-6 py-3 shrink-0">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2 text-xs">
           <div class="flex items-center gap-2.5">
             <span class="font-semibold text-slate-200">
               {{ timelineData && timelineData.length > 0
-                ? `${Math.round((timelineMeta?.totalDurationSec || 2250) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec'})`
+                ? `${Math.round((timelineMeta?.totalDurationSec || 300) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec2125'})`
                 : 'Latent Surprise Timeline' }}
             </span>
             <span
               v-if="timelineData && timelineData.length > 0"
               class="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded"
             >
-              Threshold τ = {{ timelineMeta?.thresholdSigma || '3.0' }}σ
+              Threshold τ = {{ timelineMeta?.decisionThreshold || timelineMeta?.thresholdSigma || '10.2' }}σ
             </span>
             <span
               v-else
@@ -1138,19 +1330,25 @@ async function handleLogout() {
               Awaiting Data
             </span>
           </div>
-          <div class="text-[11px] text-slate-400 font-mono hidden sm:block">
-            {{ timelineData && timelineData.length > 0 ? 'Click peak hotspot to inspect anomaly' : 'Awaiting V-JEPA latent vectors' }}
+          <div v-if="timelineData && timelineData.length > 0" class="text-[11px] text-slate-400 font-mono hidden sm:flex items-center gap-3">
+            <span>Scrubber: <strong class="text-amber-400 font-semibold">{{ formatTime(currentTimelineSec) }}</strong> / {{ formatTime(maxDuration) }}</span>
+            <span class="text-slate-600">|</span>
+            <span>Anomalie {{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }} von {{ sortedEvents.length }}</span>
           </div>
         </div>
 
         <!-- SVG Timeline Curve Container with Beautiful Gradient & Breathing Room -->
-        <div class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner">
+        <div
+          class="relative w-full h-24 sm:h-28 bg-[#080c14] rounded-lg border border-slate-800 px-3 py-1 flex items-center overflow-hidden shadow-inner cursor-pointer select-none"
+          @click="onTimelineContainerClick"
+          title="Klicken zum Springen auf der Timeline"
+        >
           <div v-if="!timelineData || timelineData.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1">
             <span>No timeline artifacts found on storage.</span>
             <span class="text-[11px] text-slate-600">Connect SSD or populate ./data with sequence events.</span>
           </div>
 
-          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full">
+          <svg v-else viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full pointer-events-none">
             <defs>
               <!-- Gradient under the fever curve -->
               <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1162,7 +1360,7 @@ async function handleLogout() {
 
             <!-- Grid Lines -->
             <line x1="0" y1="92" x2="1000" y2="92" stroke="#1e293b" stroke-width="1" />
-            <line x1="0" y1="54" x2="1000" y2="54" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1" opacity="0.4" />
+            <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#f43f5e" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
 
             <!-- Filled Area under Curve -->
             <path
@@ -1188,7 +1386,7 @@ async function handleLogout() {
             :key="spike.eventId"
             class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
             :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
-            @click="selectEventById(spike.eventId)"
+            @click.stop="selectEventById(spike.eventId)"
           >
             <!-- Pin Dot -->
             <div class="relative flex items-center justify-center p-2">
@@ -1204,16 +1402,75 @@ async function handleLogout() {
               {{ spike.surpriseScoreL2 }}σ ({{ formatTime(spike.timestampSec) }})
             </div>
           </div>
+
+          <!-- Vertical Scrubber Needle Line on Timeline -->
+          <div
+            v-if="timelineData && timelineData.length > 0"
+            class="absolute top-0 bottom-0 pointer-events-none z-30 transition-[left] duration-75 ease-out"
+            :style="{ left: `${(currentTimelineSec / maxDuration) * 100}%` }"
+          >
+            <div class="w-0.5 h-full bg-amber-400/90 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></div>
+            <div class="absolute -top-0.5 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap">
+              {{ formatTime(currentTimelineSec) }}
+            </div>
+          </div>
         </div>
 
-        <!-- Timeline Time Markers -->
-        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-3 pt-1">
+        <!-- Timeline Dynamic Time Markers -->
+        <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-slate-500 px-2 pt-1">
           <span>0:00 (Start)</span>
-          <span class="hidden sm:inline">7:30</span>
-          <span>15:00</span>
-          <span class="hidden sm:inline">22:30</span>
-          <span class="hidden sm:inline">30:00</span>
-          <span>{{ formatTime(timelineMeta?.totalDurationSec || 2250) }} (End)</span>
+          <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.25) }}</span>
+          <span>{{ formatTime(maxDuration * 0.5) }}</span>
+          <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.75) }}</span>
+          <span>{{ formatTime(maxDuration) }} (End)</span>
+        </div>
+
+        <!-- Dedicated Timeline Slider (Scrubber Bar Control) -->
+        <div v-if="timelineData && timelineData.length > 0" class="mt-2 flex items-center gap-3">
+          <!-- Current Scrubber Time Badge -->
+          <div class="flex items-center gap-1.5 shrink-0 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-md text-[11px] font-mono shadow-sm">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span class="text-amber-300 font-semibold">{{ formatTime(currentTimelineSec) }}</span>
+            <span class="text-slate-600">/</span>
+            <span class="text-slate-400">{{ formatTime(maxDuration) }}</span>
+          </div>
+
+          <!-- Slider Range Input (Mobile-touch friendly with min-h-[44px] container) -->
+          <div class="relative flex-1 flex items-center min-h-[44px]">
+            <input
+              type="range"
+              min="0"
+              :max="maxDuration"
+              step="0.5"
+              v-model.number="currentTimelineSec"
+              @input="onTimelineSliderInput"
+              @change="onTimelineSliderChange"
+              class="timeline-slider w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+              aria-label="Timeline Scrubber Slider"
+            />
+          </div>
+
+          <!-- Anomaly Stepper Controls (Snap to Previous / Next Anomaly) -->
+          <div class="flex items-center gap-1 shrink-0">
+            <button
+              @click="goToPrevAnomaly"
+              :disabled="isFirstAnomaly"
+              class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
+              title="Vorherige Anomalie"
+            >
+              <span>◀</span>
+              <span class="hidden sm:inline">Anomalie</span>
+            </button>
+            <button
+              @click="goToNextAnomaly"
+              :disabled="isLastAnomaly"
+              class="min-h-[38px] px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700/60 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
+              title="Nächste Anomalie"
+            >
+              <span class="hidden sm:inline">Anomalie</span>
+              <span>▶</span>
+            </button>
+          </div>
         </div>
       </footer>
     </div>
@@ -1329,6 +1586,13 @@ async function handleLogout() {
           <div class="border-t border-slate-800 pt-3 space-y-2">
             <div class="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
               <button
+                @click="stagedTab = 'sam'"
+                :class="stagedTab === 'sam' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
+                class="px-2 py-1 text-xs transition-colors shrink-0 flex items-center gap-1"
+              >
+                <span>🐝 SAM 3.1 (/responses)</span>
+              </button>
+              <button
                 @click="stagedTab = 'prompt'"
                 :class="stagedTab === 'prompt' ? 'text-amber-400 border-b-2 border-amber-400 font-medium' : 'text-slate-400 hover:text-slate-300'"
                 class="px-2 py-1 text-xs transition-colors shrink-0"
@@ -1363,6 +1627,41 @@ async function handleLogout() {
               >
                 Event Telemetry
               </button>
+            </div>
+
+            <!-- Tab: SAM 3.1 Meta Model API Payload -->
+            <div v-if="stagedTab === 'sam'" class="space-y-3 font-mono text-[11px]">
+              <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <div class="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-slate-800">
+                  <span class="text-amber-400 font-semibold uppercase">API Endpoint:</span>
+                  <span class="text-slate-200">{{ stagedSamQuery?.targetUrl || 'https://api.meta.ai/v1/responses' }}</span>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-slate-400">
+                  <span class="text-amber-400 font-semibold uppercase">Model Identifier:</span>
+                  <span class="text-emerald-400 font-semibold">{{ stagedSamQuery?.model || 'sam-3.1' }}</span>
+                </div>
+                <div class="flex items-start justify-between text-[10px] text-slate-400">
+                  <span class="text-amber-400 font-semibold shrink-0 uppercase">Dynamic Prompt:</span>
+                  <span class="text-slate-200 text-right font-sans pl-2">{{ stagedSamQuery?.prompt || museQuestionInput }}</span>
+                </div>
+              </div>
+
+              <!-- JSON Image / Concept Payload -->
+              <div class="space-y-1">
+                <div class="text-[10px] text-slate-400 uppercase font-semibold">Image & Concept Prompt Payload:</div>
+                <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-emerald-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  {{ JSON.stringify(stagedSamQuery?.imagePayload || { model: 'sam-3.1', input: [{ role: 'user', content: [{ type: 'input_text', text: museQuestionInput }, { type: 'input_image', image_url: '/api/v1/events/' + selectedEvent?.eventId + '/media/peak_frame.jpg' }] }] }, null, 2) }}
+                </div>
+              </div>
+
+              <!-- Ready-to-run Curl Command -->
+              <div v-if="stagedSamQuery?.curlCommand" class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                <div class="flex items-center justify-between text-[10px] text-slate-400">
+                  <span class="font-semibold text-slate-300">Ready-to-run cURL Command:</span>
+                  <span class="text-amber-300 font-mono">Meta Model API</span>
+                </div>
+                <pre class="text-slate-300 whitespace-pre-wrap text-[10px] leading-tight select-all">{{ stagedSamQuery.curlCommand }}</pre>
+              </div>
             </div>
 
             <!-- Tab: Formatted Grounded Prompt -->

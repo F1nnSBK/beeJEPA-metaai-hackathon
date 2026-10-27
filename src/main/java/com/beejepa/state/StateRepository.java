@@ -6,6 +6,7 @@ import com.beejepa.state.model.MuseLogEntry;
 import com.beejepa.state.model.ProcessingRun;
 import com.beejepa.state.model.SystemState;
 import com.beejepa.storage.StorageService;
+import com.beejepa.telemetry.TelemetryEntry;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -81,6 +82,22 @@ public class StateRepository {
                         timestamp TEXT NOT NULL
                     );
                     """);
+
+            // Telemetry Logs table for all platform & HTTP requests
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS telemetry_logs (
+                        id TEXT PRIMARY KEY,
+                        platform TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        uri TEXT NOT NULL,
+                        status_code INTEGER NOT NULL,
+                        duration_ms REAL NOT NULL,
+                        client_ip TEXT,
+                        timestamp TEXT NOT NULL
+                    );
+                    """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_uri ON telemetry_logs(uri);");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry_logs(timestamp);");
 
             // Beekeeper User Management table
             stmt.execute("""
@@ -333,5 +350,74 @@ public class StateRepository {
             LOG.error("Error counting beekeepers: {}", e.getMessage());
         }
         return 0;
+    }
+
+    // ---------------- Telemetry Logs (Prometheus & Latency Storage) ----------------
+
+    public void saveTelemetry(TelemetryEntry entry) {
+        String sql = """
+                INSERT INTO telemetry_logs (id, platform, method, uri, status_code, duration_ms, client_ip, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, entry.id());
+            ps.setString(2, entry.platform());
+            ps.setString(3, entry.method());
+            ps.setString(4, entry.uri());
+            ps.setInt(5, entry.statusCode());
+            ps.setDouble(6, entry.durationMs());
+            ps.setString(7, entry.clientIp());
+            ps.setString(8, entry.timestamp().toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to save telemetry entry: {}", e.getMessage());
+        }
+    }
+
+    public List<TelemetryEntry> getRecentTelemetry(int limit) {
+        List<TelemetryEntry> list = new ArrayList<>();
+        String sql = "SELECT id, platform, method, uri, status_code, duration_ms, client_ip, timestamp FROM telemetry_logs ORDER BY timestamp DESC LIMIT ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, Math.max(1, limit));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new TelemetryEntry(
+                            rs.getString("id"),
+                            rs.getString("platform"),
+                            rs.getString("method"),
+                            rs.getString("uri"),
+                            rs.getInt("status_code"),
+                            rs.getDouble("duration_ms"),
+                            rs.getString("client_ip"),
+                            Instant.parse(rs.getString("timestamp"))
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.error("Failed to query recent telemetry: {}", e.getMessage());
+        }
+        return list;
+    }
+
+    public List<TelemetryEntry> getAllTelemetry() {
+        List<TelemetryEntry> list = new ArrayList<>();
+        String sql = "SELECT id, platform, method, uri, status_code, duration_ms, client_ip, timestamp FROM telemetry_logs ORDER BY timestamp ASC";
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new TelemetryEntry(
+                        rs.getString("id"),
+                        rs.getString("platform"),
+                        rs.getString("method"),
+                        rs.getString("uri"),
+                        rs.getInt("status_code"),
+                        rs.getDouble("duration_ms"),
+                        rs.getString("client_ip"),
+                        Instant.parse(rs.getString("timestamp"))
+                ));
+            }
+        } catch (SQLException e) {
+            LOG.error("Failed to query all telemetry: {}", e.getMessage());
+        }
+        return list;
     }
 }

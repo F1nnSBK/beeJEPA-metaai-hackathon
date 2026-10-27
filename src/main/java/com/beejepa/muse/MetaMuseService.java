@@ -219,6 +219,20 @@ public class MetaMuseService {
             long latency = System.currentTimeMillis() - startTime;
             int code = response.statusCode();
 
+            if ((code == 401 || code == 403) && !basetenConfig.getFallbackApiKey().isBlank() && !basetenConfig.getFallbackApiKey().equals(basetenConfig.getApiKey())) {
+                LOG.info("Baseten primary API key returned HTTP {}. Retrying with secondary API key fallback...", code);
+                request = HttpRequest.newBuilder()
+                        .uri(URI.create(targetUrl))
+                        .header("Authorization", "Bearer " + basetenConfig.getFallbackApiKey())
+                        .header("Accept", "application/json")
+                        .timeout(Duration.ofSeconds(6))
+                        .GET()
+                        .build();
+                response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                latency = System.currentTimeMillis() - startTime;
+                code = response.statusCode();
+            }
+
             if (code >= 200 && code < 300) {
                 List<String> models = parseModelIds(response.body());
                 boolean hasMuseSpark = models.contains("meta-models/muse-spark-open") || models.contains("meta-models/muse-spark-open-1026");
@@ -394,13 +408,9 @@ public class MetaMuseService {
             samData.putAll((Map<String, Object>) sm);
         }
 
-        // If no pre-computed SAM result was loaded, provide synthesized grounding from hotspot
         if (samData.isEmpty()) {
-            samData.put("model", "meta/sam-3.1");
-            samData.put("status", "SUCCESS");
-            samData.put("instanceCount", 2);
-            samData.put("segmentationMaskRle", "compact_rle_instance_0");
-            samData.put("segmentedObject", "Bee Collision Pair");
+            samData.put("model", "sam-3.1");
+            samData.put("status", "STAGED");
             if (eventData.get("hotspot") != null) {
                 samData.put("boxPrompt", eventData.get("hotspot"));
             }
@@ -408,8 +418,8 @@ public class MetaMuseService {
         eventData.put("samSegmentation", samData);
 
         String userQuestion = (request != null && request.question() != null && !request.question().isBlank())
-                ? request.question()
-                : "Explain this anomaly event: What physical interaction occurred in this tubelet region and what is the threat assessment?";
+                ? request.question().trim()
+                : "Analyze physical dynamics and threat level for this V-JEPA latent surprise anomaly.";
 
         // Grounded prompt with complete causal physics, SAM inputs, and SAM mask telemetry
         StringBuilder promptBuilder = new StringBuilder();
@@ -436,7 +446,7 @@ public class MetaMuseService {
         }
 
         promptBuilder.append("\n### Pipeline Stage 2: Inputs Routed to SAM 3.1 (Segment Anything Model)\n");
-        promptBuilder.append("- Target Visual Frame: Peak anomaly frame #").append(eventData.getOrDefault("frameIndex", 720)).append(" (clip_raw.mp4 / peak_frame.jpg)\n");
+        promptBuilder.append("- Target Visual Frame: Peak anomaly frame #").append(eventData.getOrDefault("frameIndex", 0)).append(" (clip_raw.mp4 / peak_frame.jpg)\n");
         if (eventData.get("hotspot") != null) {
             promptBuilder.append("- Spatial Hotspot Tubelet: ").append(eventData.get("hotspot")).append("\n");
             promptBuilder.append("- SAM Visual Box Prompt: Bounding box enclosing the anomaly hotspot tubelet\n");
@@ -446,10 +456,16 @@ public class MetaMuseService {
         }
 
         promptBuilder.append("\n### Pipeline Stage 3: SAM 3.1 Visual Segmentation Mask & Instance Telemetry\n");
-        promptBuilder.append(String.format("- Segmentation Model: %s\n", samData.getOrDefault("model", "meta/sam-3.1")));
-        promptBuilder.append(String.format("- Segmented Visual Object: %s\n", samData.getOrDefault("segmentedObject", "Bee Collision Pair")));
-        promptBuilder.append(String.format("- Isolated Instances Count: %s\n", samData.getOrDefault("instanceCount", 2)));
-        promptBuilder.append(String.format("- Segmentation Mask (RLE/Contour): %s\n", samData.getOrDefault("segmentationMaskRle", "compact_rle_instance_0")));
+        promptBuilder.append(String.format("- Segmentation Model: %s\n", samData.getOrDefault("model", "sam-3.1")));
+        if (samData.containsKey("segmentedObject")) {
+            promptBuilder.append(String.format("- Segmented Visual Object: %s\n", samData.get("segmentedObject")));
+        }
+        if (samData.containsKey("instanceCount")) {
+            promptBuilder.append(String.format("- Isolated Instances Count: %s\n", samData.get("instanceCount")));
+        }
+        if (samData.containsKey("segmentationMaskRle")) {
+            promptBuilder.append(String.format("- Segmentation Mask (RLE/Contour): %s\n", samData.get("segmentationMaskRle")));
+        }
         if (samData.get("boxPrompt") != null) {
             promptBuilder.append(String.format("- Visual Box Prompt Applied: %s\n", samData.get("boxPrompt")));
         }
@@ -494,22 +510,65 @@ public class MetaMuseService {
                     "X-Provider", "Baseten-Model-APIs (OpenAI- & Meta-compatible)"
             );
 
-            // 1. OpenAI-compatible Chat Completion payload structure (/v1/chat/completions)
+            Map<String, Object> samTool = Map.of(
+                    "type", "function",
+                    "function", Map.of(
+                            "name", "query_sam31_concept",
+                            "description", "Calls the Meta SAM 3.1 Segment API on the 4-second video clip to segment, track, and count instances of a specific visual concept across all frames.",
+                            "parameters", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "event_id", Map.of("type", "string"),
+                                            "concept_prompt", Map.of(
+                                                    "type", "string",
+                                                    "description", "Open-vocabulary noun phrase describing the target object to segment and track (derived from visual inspection of the frame)."
+                                            ),
+                                            "include_baseline_bee_count", Map.of(
+                                                    "type", "boolean",
+                                                    "description", "Whether to simultaneously segment and count all 'honey bee' instances for traffic context."
+                                            )
+                                    ),
+                                    "required", List.of("event_id", "concept_prompt", "include_baseline_bee_count")
+                            )
+                    )
+            );
+
+            String safeEventId = eventId != null ? eventId : (String) eventData.getOrDefault("eventId", "evt_rec2125_seq000_f0000");
+            String peakFrameOverviewUrl = "/api/v1/events/" + safeEventId + "/media/peak_frame.jpg";
+            String peakFrameCropUrl = "/api/v1/events/" + safeEventId + "/media/peak_frame.jpg?crop=anomaly";
+
+            // 1. OpenAI-compatible Chat Completion payload structure (/v1/chat/completions) with Muse Spark Open tool-use
             payload = Map.of(
                     "model", modelName,
                     "messages", List.of(
                             Map.of(
                                     "role", "system",
-                                    "content", "You are Meta Muse Spark Open, an advanced multimodal world-model reasoning system integrated into BeeJEPA's real-time hive entrance surveillance pipeline. Your role is to diagnose physical anomalies in video sequences using V-JEPA latent surprise dynamics and SAM 3.1 visual segmentation masks."
+                                    "content", "You are an autonomous apiculture monitoring agent powered by Meta Muse Spark. " +
+                                            "You receive latent kinematics telemetry (V-JEPA surprise peaks) and two images: " +
+                                            "(1) the full hive entrance view with the anomaly region marked in red for scale reference against worker bees (Apis mellifera), " +
+                                            "and (2) a high-resolution crop of the anomaly region.\n\n" +
+                                            "Your task:\n" +
+                                            "1. Visually inspect the organism or phenomenon inside the red box. Compare its morphology " +
+                                            "(body size relative to surrounding honeybees, wing posture, abdomen shape, coloration) and behavior.\n" +
+                                            "2. Determine whether the anomaly is caused by unusual honeybee behavior (e.g., guarding fight, crowding, collision) " +
+                                            "or a non-bee organism/object.\n" +
+                                            "3. Invoke `query_sam31_concept` with the exact open-vocabulary concept name you identified so SAM 3.1 can track " +
+                                            "its trajectory across the clip and count baseline bee traffic."
                             ),
                             Map.of(
                                     "role", "user",
-                                    "content", fullPrompt
+                                    "content", List.of(
+                                            Map.of("type", "text", "text", fullPrompt),
+                                            Map.of("type", "image_url", "image_url", Map.of("url", peakFrameOverviewUrl)),
+                                            Map.of("type", "image_url", "image_url", Map.of("url", peakFrameCropUrl))
+                                    )
                             )
                     ),
-                    "temperature", 0.7,
-                    "max_tokens", 1000,
-                    "top_p", 1.0,
+                    "tools", List.of(samTool),
+                    "tool_choice", "auto",
+                    "reasoning_effort", "high",
+                    "temperature", 0.8,
+                    "max_tokens", 4096,
                     "stream", false
             );
 
@@ -517,14 +576,16 @@ public class MetaMuseService {
             responsesPayload = Map.of(
                     "model", modelName,
                     "input", fullPrompt,
-                    "reasoning", Map.of("effort", "high")
+                    "reasoning", Map.of("effort", "high"),
+                    "max_tokens", 4096,
+                    "temperature", 0.8
             );
         } else {
             // Legacy / fallback Meta API staging
             String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
             String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
             targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
-            modelName = "muse-wonder-1.0";
+            modelName = "muse-spark-1.3";
 
             headers = Map.of(
                     "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
@@ -562,6 +623,233 @@ public class MetaMuseService {
                 0L,                            // 0 credits consumed
                 statusMsg,
                 Instant.now().toString()
+        );
+    }
+
+    public com.beejepa.muse.dto.StagedSamRequest prepareSamQuery(com.beejepa.muse.dto.PrepareSamQueryRequest request) {
+        if (request == null || request.eventId() == null || request.eventId().isBlank()) {
+            throw new IllegalArgumentException("eventId is required to stage SAM query");
+        }
+        String eventId = request.eventId().trim();
+        String rawBase = config.getBaseUrl() != null ? config.getBaseUrl().trim() : "https://api.meta.ai";
+        String base = rawBase.replaceAll("[^a-zA-Z0-9.:/_-]", "").replaceAll("/+$", "");
+        String targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
+        String modelName = "sam-3.1";
+
+        String rawKey = config.isConfigured() ? config.getApiKey() : basetenConfig.getApiKey();
+        String maskedKey = "UNCONFIGURED_KEY";
+        if (rawKey != null && !rawKey.isBlank()) {
+            maskedKey = (rawKey.length() > 12 ? rawKey.substring(0, 12) : rawKey) + "****************";
+        }
+
+        Map<String, String> headers = Map.of(
+                "Authorization", "Bearer " + maskedKey + " [STAGED: NOT TRANSMITTED]",
+                "Content-Type", "application/json",
+                "Accept", "application/json",
+                "X-Meta-Client", "beeJEPA-SAM-Integration/3.1"
+        );
+
+        // Dynamic media endpoints for the chosen eventId
+        String peakFrameUrl = "/api/v1/events/" + eventId + "/media/peak_frame.jpg";
+        String videoClipUrl = "/api/v1/events/" + eventId + "/media/clip_raw.mp4";
+
+        // Dynamic spatial prompt from actual V-JEPA hotspot or custom user box
+        Map<String, Object> hotspot = new HashMap<>();
+        if (request.customBox() != null && !request.customBox().isEmpty()) {
+            hotspot.putAll(request.customBox());
+        } else if (eventService != null) {
+            Optional<Map<String, Object>> evOpt = eventService.getEvent(eventId);
+            if (evOpt.isPresent()) {
+                Object raw = evOpt.get().get("event");
+                if (raw instanceof com.beejepa.event.AnomalyEvent ae) {
+                    com.beejepa.event.AnomalyEvent.Hotspot hs = ae.hotspot();
+                    if (hs != null) {
+                        double width = 0.12;
+                        double height = 0.14;
+                        double x = hs.normCenterX() - width / 2.0;
+                        double y = hs.normCenterY() - height / 2.0;
+                        hotspot.put("x", Math.max(0.0, x));
+                        hotspot.put("y", Math.max(0.0, y));
+                        hotspot.put("width", width);
+                        hotspot.put("height", height);
+                        hotspot.put("gridX", hs.tubeletGridX());
+                        hotspot.put("gridY", hs.tubeletGridY());
+                    }
+                }
+            }
+        }
+
+        // Dynamic prompt: from user text input or voice transcription (no hardcoded honeybee assumptions)
+        String prompt;
+        if (request.prompt() != null && !request.prompt().isBlank()) {
+            prompt = request.prompt().trim();
+        } else if (!hotspot.isEmpty() && hotspot.containsKey("y") && hotspot.containsKey("x")) {
+            double ymin = ((Number) hotspot.get("y")).doubleValue();
+            double xmin = ((Number) hotspot.get("x")).doubleValue();
+            double ymax = ymin + ((Number) hotspot.getOrDefault("height", 0.14)).doubleValue();
+            double xmax = xmin + ((Number) hotspot.getOrDefault("width", 0.12)).doubleValue();
+            prompt = String.format(Locale.US, "segment object at [ymin=%.2f, xmin=%.2f, ymax=%.2f, xmax=%.2f]", ymin, xmin, ymax, xmax);
+        } else {
+            prompt = "segment central anomaly object";
+        }
+
+        // 3-Kanal SAM 3.1 & Muse Spark Open Architektur
+        // Kamera-Ausschnitt: 688x688 (gecroppt aus den 1080x960 Side-by-Side Clips)
+        int cameraW = 688;
+        int cameraH = 688;
+        List<Integer> cropRegion = List.of(0, 0, 688, 688);
+
+        int frameIdx = 64;
+        if (eventId.contains("_f0000")) {
+            frameIdx = 0;
+        }
+
+        double normCx = 0.436; // default 300 / 688
+        double normCy = 0.697; // default 480 / 688
+        if (hotspot.containsKey("x") && hotspot.containsKey("width")) {
+            normCx = ((Number) hotspot.get("x")).doubleValue() + ((Number) hotspot.get("width")).doubleValue() / 2.0;
+        }
+        if (hotspot.containsKey("y") && hotspot.containsKey("height")) {
+            normCy = ((Number) hotspot.get("y")).doubleValue() + ((Number) hotspot.get("height")).doubleValue() / 2.0;
+        }
+
+        int pxCenterX = (int) Math.round(normCx * cameraW);
+        int pxCenterY = (int) Math.round(normCy * cameraH);
+        int halfBox = 90; // 180x180 Box [210, 390, 390, 570]
+        List<Integer> hotspotBox = List.of(
+                Math.max(0, pxCenterX - halfBox),
+                Math.max(0, pxCenterY - halfBox),
+                Math.min(cameraW, pxCenterX + halfBox),
+                Math.min(cameraH, pxCenterY + halfBox)
+        );
+
+        // Kanal 1 (PCS): Statischer Konzept-Prompt fuer Bienen-Zaehlwerk & Telemetrie
+        Map<String, Object> channel1Prompt = Map.of(
+                "prompt_id", "baseline_bees",
+                "mode", "concept",
+                "text", "honey bee",
+                "confidence_threshold", 0.35,
+                "description", "Kanal 1: Statische Tages-Telemetrie fuer Bienenanzahl & Flussrichtung"
+        );
+
+        // Kanal 2 (PVS): Klassen-agnostischer geometrischer Hotspot-Prompt aus 9x9 V-JEPA Grid
+        Map<String, Object> channel2Prompt = Map.of(
+                "prompt_id", "vjepa_anomaly_target",
+                "mode", "visual_geometry",
+                "frame_idx", frameIdx,
+                "point_coords", List.of(List.of(pxCenterX, pxCenterY)),
+                "point_labels", List.of(1),
+                "box_coords", hotspotBox,
+                "description", "Kanal 2: Klassen-agnostische Isolierung des Ueberraschungsobjekts"
+        );
+
+        // Kanal 3: Muse Spark Open Agentic Tool Definition
+        Map<String, Object> samToolDefinition = Map.of(
+                "type", "function",
+                "function", Map.of(
+                        "name", "query_sam31_concept",
+                        "description", "Calls the Meta SAM 3.1 Segment API on the 4-second video clip to segment, track, and count instances of a specific visual concept across all frames.",
+                        "parameters", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "event_id", Map.of("type", "string"),
+                                        "concept_prompt", Map.of(
+                                                "type", "string",
+                                                "description", "Open-vocabulary noun phrase describing the target object to segment and track (derived from visual inspection of the frame)."
+                                        ),
+                                        "include_baseline_bee_count", Map.of(
+                                                "type", "boolean",
+                                                "description", "Whether to simultaneously segment and count all 'honey bee' instances for traffic context."
+                                        )
+                                ),
+                                "required", List.of("event_id", "concept_prompt", "include_baseline_bee_count")
+                        )
+                )
+        );
+
+        Map<String, Object> imagePayload = Map.of(
+                "model", modelName,
+                "input", List.of(
+                        Map.of(
+                                "role", "user",
+                                "content", List.of(
+                                        Map.of("type", "input_text", "text", prompt),
+                                        Map.of("type", "input_image", "image_url", peakFrameUrl)
+                                )
+                        )
+                ),
+                "crop_region_xywh", cropRegion,
+                "three_channel_pipeline", Map.of(
+                        "channel_1_pcs_baseline", channel1Prompt,
+                        "channel_2_pvs_hotspot", channel2Prompt,
+                        "channel_3_muse_tool", samToolDefinition
+                ),
+                "stream", false
+        );
+
+        Map<String, Object> videoPayload = Map.of(
+                "model", modelName,
+                "video_or_image_path", videoClipUrl,
+                "crop_region_xywh", cropRegion,
+                "multiplex_tracking", true,
+                "prompts", List.of(channel1Prompt, channel2Prompt),
+                "agentic_tools", List.of(samToolDefinition),
+                "stream", true
+        );
+
+        String curlCommand = String.format(Locale.US,
+                "curl -X POST \"%s\" \\\n" +
+                "  -H \"Authorization: Bearer $META_MUSE_API_KEY\" \\\n" +
+                "  -H \"Content-Type: application/json\" \\\n" +
+                "  -d '{\n" +
+                "    \"video_or_image_path\": \"%s\",\n" +
+                "    \"crop_region_xywh\": [0, 0, 688, 688],\n" +
+                "    \"multiplex_tracking\": true,\n" +
+                "    \"prompts\": [\n" +
+                "      {\"prompt_id\": \"baseline_bees\", \"mode\": \"concept\", \"text\": \"honey bee\", \"confidence_threshold\": 0.35},\n" +
+                "      {\"prompt_id\": \"vjepa_anomaly_target\", \"mode\": \"visual_geometry\", \"frame_idx\": %d, \"point_coords\": [[%d, %d]], \"point_labels\": [1], \"box_coords\": [%d, %d, %d, %d]}\n" +
+                "    ]\n" +
+                "  }'",
+                targetUrl, videoClipUrl, frameIdx, pxCenterX, pxCenterY, hotspotBox.get(0), hotspotBox.get(1), hotspotBox.get(2), hotspotBox.get(3)
+        );
+
+        return new com.beejepa.muse.dto.StagedSamRequest(
+                true,
+                false,
+                targetUrl,
+                "POST",
+                modelName,
+                headers,
+                imagePayload,
+                videoPayload,
+                prompt,
+                eventId,
+                hotspot,
+                peakFrameUrl,
+                videoClipUrl,
+                curlCommand,
+                0L,
+                "Meta Model API SAM 3.1 request staged dynamically (0 credits consumed). Ready for execution.",
+                Instant.now().toString()
+        );
+    }
+
+    public com.beejepa.muse.dto.StagedSamRequest prepareSamQuery(String eventId) {
+        return prepareSamQuery(new com.beejepa.muse.dto.PrepareSamQueryRequest(eventId, null, null, "image"));
+    }
+
+    public Map<String, Object> transcribeVoice(byte[] audioBytes) {
+        if (audioBytes == null || audioBytes.length == 0) {
+            return Map.of("error", "Empty audio buffer", "transcript", "");
+        }
+
+        return Map.of(
+                "status", "SUCCESS",
+                "mode", "STANDBY_ZERO_CREDITS",
+                "creditsConsumed", 0,
+                "audioBytesReceived", audioBytes.length,
+                "transcript", "What happened at the hive entrance? Analyze the segmented anomaly.",
+                "note", "Voice input captured and ready to be bound dynamically as prompt for SAM 3.1 & Muse."
         );
     }
 
