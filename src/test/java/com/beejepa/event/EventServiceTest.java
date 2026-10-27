@@ -21,7 +21,7 @@ public class EventServiceTest {
     @BeforeEach
     void setUp() {
         StorageConfig storageConfig = new StorageConfig();
-        storageConfig.getData().setPath(Paths.get("data").toAbsolutePath().toString());
+        storageConfig.getData().setPath(Paths.get("src/test/resources/data").toAbsolutePath().toString());
         storageConfig.getData().setRequireSymlink(false);
 
         StorageService storageService = new StorageService(storageConfig);
