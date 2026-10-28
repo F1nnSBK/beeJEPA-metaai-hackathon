@@ -6,8 +6,8 @@ html, body, #app {
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0b0f19;
-  color: #f3f4f6;
+  background-color: #0b0906;
+  color: #f3e9d2;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -23,12 +23,12 @@ html, body, #app {
 }
 .timeline-slider::-webkit-slider-runnable-track {
   height: 6px;
-  background: #1e293b;
+  background: #241e16;
   border-radius: 9999px;
   transition: background 0.15s ease;
 }
 .timeline-slider:hover::-webkit-slider-runnable-track {
-  background: #334155;
+  background: #3a3125;
 }
 .timeline-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -37,7 +37,7 @@ html, body, #app {
   width: 18px;
   border-radius: 50%;
   background: #f59e0b;
-  border: 2px solid #0f172a;
+  border: 2px solid #15110b;
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
   margin-top: -6px;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
@@ -49,19 +49,19 @@ html, body, #app {
 }
 .timeline-slider::-moz-range-track {
   height: 6px;
-  background: #1e293b;
+  background: #241e16;
   border-radius: 9999px;
   transition: background 0.15s ease;
 }
 .timeline-slider:hover::-moz-range-track {
-  background: #334155;
+  background: #3a3125;
 }
 .timeline-slider::-moz-range-thumb {
   height: 18px;
   width: 18px;
   border-radius: 50%;
   background: #f59e0b;
-  border: 2px solid #0f172a;
+  border: 2px solid #15110b;
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
