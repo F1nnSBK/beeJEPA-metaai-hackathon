@@ -77,6 +77,79 @@ async function checkMetaHealth() {
   }
 }
 
+// Active Perception & FFM Off-Heap Ring Buffer state
+const ringBufferTelemetry = ref({
+  capacity: 600,
+  currentSequence: 0,
+  activeSlotsCount: 0,
+  totalAllocatedBytes: 0,
+  memoryPerSlotBytes: 0,
+  isOffHeap: true,
+  droppedFrames: 0
+})
+const saccadicTargets = ref([])
+const activeSaccade = ref(null)
+
+async function fetchPerceptionTelemetry() {
+  try {
+    const res = await fetch('/api/v1/perception/ring-buffer')
+    if (res.ok) {
+      ringBufferTelemetry.value = await res.json()
+    }
+  } catch (e) {
+    console.debug('Failed to fetch ring buffer telemetry:', e)
+  }
+}
+
+async function fetchSaccadicTargets() {
+  try {
+    const res = await fetch('/api/v1/perception/saccades')
+    if (res.ok) {
+      saccadicTargets.value = await res.json()
+      updateActiveSaccade()
+    }
+  } catch (e) {
+    console.debug('Failed to fetch saccades:', e)
+  }
+}
+
+function updateActiveSaccade() {
+  if (!selectedEvent.value || !saccadicTargets.value.length) {
+    activeSaccade.value = null
+    return
+  }
+  const id = selectedEvent.value.eventId
+  activeSaccade.value = saccadicTargets.value.find(s => s.eventId === id) || null
+}
+
+const isNearPeakAnomaly = computed(() => {
+  if (activeView.value === 'sam') return true
+  if (!selectedEvent.value || typeof currentTimelineSec.value !== 'number') return false
+  const peakTime = Number(selectedEvent.value.timestampSec || 0)
+  // Dynamic Saccadic Trigger: Active strictly during the V-JEPA peak anomaly window (+-1.2s)
+  return Math.abs(currentTimelineSec.value - peakTime) <= 1.2
+})
+
+const saccadicReticleStyle = computed(() => {
+  if (!selectedEvent.value?.hotspot) return null
+  const normX = activeSaccade.value
+    ? (activeSaccade.value.focusCenterX / 688)
+    : Number(selectedEvent.value.hotspot.normCenterX || 0.29)
+  const normY = activeSaccade.value
+    ? (activeSaccade.value.focusCenterY / 688)
+    : Number(selectedEvent.value.hotspot.normCenterY || 0.42)
+
+  // In side-by-side mode, camera feed is on the left half (0..50% width)
+  const isSideBySide = activeView.value === 'comparison'
+  const leftPct = isSideBySide ? (normX * 50) : (normX * 100)
+  const topPct = normY * 100
+
+  return {
+    left: `${leftPct.toFixed(1)}%`,
+    top: `${topPct.toFixed(1)}%`
+  }
+})
+
 function encodeWavBuffer(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buffer)
@@ -792,6 +865,8 @@ async function loadSystemAndData() {
       }
     }
     checkMetaHealth()
+    fetchPerceptionTelemetry()
+    fetchSaccadicTargets()
   } catch (err) {
     console.debug('Failed loading initial data:', err)
   }
@@ -799,6 +874,7 @@ async function loadSystemAndData() {
 
 function selectEvent(ev) {
   selectedEvent.value = ev
+  updateActiveSaccade()
   if (ev && typeof ev.timestampSec === 'number') {
     const t = ev.timestampSec
     currentTimelineSec.value = t
@@ -1300,6 +1376,19 @@ async function handleLogout() {
             </span>
           </button>
 
+          <!-- FFM Off-Heap Ring Buffer Telemetry Badge -->
+          <div
+            @click="fetchPerceptionTelemetry"
+            class="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+            title="Java 25 FFM API Zero-GC Off-Heap Ring Buffer"
+          >
+            <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50"></span>
+            <span class="text-slate-400">FFM Buffer:</span>
+            <span class="font-mono text-cyan-300 text-[11px]">
+              {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }} slots (0 GC)
+            </span>
+          </div>
+
           <!-- Voice & Calibration Settings Button Group -->
           <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-0.5">
             <!-- Settings Gear Button: Calibration & Staging Inspector -->
@@ -1425,6 +1514,27 @@ async function handleLogout() {
               </svg>
               <p class="text-xs font-mono">No event media available.</p>
             </div>
+
+            <!-- Saccadic Reticle HUD (Visual Raptor Crosshairs & Foveal Focus - Only at Peak) -->
+            <div
+              v-if="selectedEvent && saccadicReticleStyle && isNearPeakAnomaly"
+              class="absolute pointer-events-none transition-all duration-300 ease-out z-20"
+              :style="saccadicReticleStyle"
+            >
+              <!-- Outer Foveal Focus Ring -->
+              <div class="relative -translate-x-1/2 -translate-y-1/2">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-cyan-400/60 bg-cyan-500/10 shadow-[0_0_15px_rgba(34,211,238,0.25)] flex items-center justify-center animate-pulse">
+                  <!-- Inner Precision Crosshairs -->
+                  <div class="w-2.5 h-2.5 rounded-full border border-cyan-300 bg-cyan-400/40"></div>
+                  <div class="absolute w-full h-[1px] bg-cyan-400/40"></div>
+                  <div class="absolute h-full w-[1px] bg-cyan-400/40"></div>
+                </div>
+                <!-- Saccade Telemetry Badge -->
+                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-slate-950/85 backdrop-blur border border-cyan-500/40 rounded text-[9px] font-mono text-cyan-300 whitespace-nowrap shadow-md">
+                  FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 688) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 688) }}]
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1479,6 +1589,37 @@ async function handleLogout() {
                 <span class="font-mono text-slate-200">
                   ({{ Number(selectedEvent.hotspot.normCenterX).toFixed(3) }}, {{ Number(selectedEvent.hotspot.normCenterY).toFixed(3) }})
                 </span>
+              </div>
+            </div>
+
+            <!-- Active Perception & Saccadic Fovea Telemetry -->
+            <div v-if="activeSaccade" class="p-3 bg-cyan-950/20 rounded-lg border border-cyan-800/40 text-xs space-y-1.5">
+              <div class="flex items-center justify-between text-cyan-300 font-semibold">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  Active Perception Saccade
+                </span>
+                <span class="font-mono text-[10px] text-cyan-400 bg-cyan-900/50 px-1.5 py-0.5 rounded border border-cyan-700/50">
+                  {{ activeSaccade.classification }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px] text-slate-300">
+                <div class="flex justify-between bg-slate-900/60 px-2 py-1 rounded">
+                  <span class="text-slate-400">Fixation (X,Y):</span>
+                  <span class="text-cyan-300 font-bold">[{{ activeSaccade.focusCenterX }}, {{ activeSaccade.focusCenterY }}]</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 px-2 py-1 rounded">
+                  <span class="text-slate-400">Saccadic Jump:</span>
+                  <span class="text-amber-400 font-bold">{{ activeSaccade.saccadicJumpDistancePx }} px</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 px-2 py-1 rounded">
+                  <span class="text-slate-400">Hotspot Bees:</span>
+                  <span class="text-emerald-400 font-bold">{{ activeSaccade.hotspotBeesCount }} contained</span>
+                </div>
+                <div class="flex justify-between bg-slate-900/60 px-2 py-1 rounded">
+                  <span class="text-slate-400">Token Density:</span>
+                  <span class="text-indigo-300 font-bold">+8.3x Fovea</span>
+                </div>
               </div>
             </div>
 

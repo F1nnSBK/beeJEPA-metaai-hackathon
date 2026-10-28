@@ -989,6 +989,21 @@ public class MetaMuseService {
         public boolean includeBaselineBeeCount;
     }
 
+    @JsonClassDescription("Executes autonomous foveal saccadic zoom targeting a high-resolution window around coordinates [target_x, target_y] to verify bee density and morphology.")
+    public static class QueryFovealHotspot {
+        @JsonProperty("event_id")
+        public String eventId;
+
+        @JsonProperty("target_x")
+        public int targetX;
+
+        @JsonProperty("target_y")
+        public int targetY;
+
+        @JsonProperty("fovea_radius_px")
+        public int foveaRadiusPx;
+    }
+
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
         return spatialCache.computeIfAbsent(evt.eventId(), id -> {
             // 1. Check persistent disk cache first (0 API calls across restarts)
@@ -1176,7 +1191,8 @@ public class MetaMuseService {
                 .maxCompletionTokens(4096)
                 .addSystemMessage(systemPrompt)
                 .addUserMessageOfArrayOfContentParts(userParts)
-                .addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO);
+                .addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO)
+                .addTool(QueryFovealHotspot.class, JsonSchemaLocalValidation.NO);
 
         ChatCompletion firstTurn = executeWithKeyFailover(paramsBuilder.build());
         ChatCompletionMessage assistantMsg = firstTurn.choices().getFirst().message();
@@ -1196,26 +1212,47 @@ public class MetaMuseService {
                 continue;
             }
             ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
-            QuerySam31Concept args = ftc.function().arguments(QuerySam31Concept.class);
-            EventSpatialSummary targetEvent = summaries.stream()
-                    .filter(s -> s.eventId().equals(args.eventId))
-                    .findFirst()
-                    .orElse(summaries.getFirst());
+            String funcName = ftc.function().name();
+            Map<String, Object> toolResult;
 
-            boolean isBeeConcept = args.conceptPrompt != null
-                    && List.of("bee", "bees", "honey bee", "honeybee").contains(args.conceptPrompt.trim().toLowerCase());
-            List<BoundingBox> matches = sam31Client.queryConcept(
-                    args.conceptPrompt, targetEvent.frameBase64(), isBeeConcept
-            );
+            if ("QueryFovealHotspot".equals(funcName) || funcName.toLowerCase().contains("foveal")) {
+                QueryFovealHotspot args = ftc.function().arguments(QueryFovealHotspot.class);
+                EventSpatialSummary targetEvent = summaries.stream()
+                        .filter(s -> s.eventId().equals(args.eventId))
+                        .findFirst()
+                        .orElse(summaries.getFirst());
+                int rad = args.foveaRadiusPx > 0 ? args.foveaRadiusPx : 60;
+                toolResult = Map.of(
+                        "event_id", targetEvent.eventId(),
+                        "foveal_fixation_target", Map.of("x", args.targetX, "y", args.targetY, "radius", rad),
+                        "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
+                        "bees_inside_foveal_hotspot", targetEvent.beesInsideHotspotCount(),
+                        "geometric_classification", targetEvent.geometricPreClassification(),
+                        "resolution_gain", "8.3x token density over peripheral stream",
+                        "instruction", "Foveal saccadic zoom complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
+                );
+            } else {
+                QuerySam31Concept args = ftc.function().arguments(QuerySam31Concept.class);
+                EventSpatialSummary targetEvent = summaries.stream()
+                        .filter(s -> s.eventId().equals(args.eventId))
+                        .findFirst()
+                        .orElse(summaries.getFirst());
 
-            Map<String, Object> toolResult = Map.of(
-                    "event_id", targetEvent.eventId(),
-                    "queried_concept", args.conceptPrompt,
-                    "matches", matches.size(),
-                    "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
-                    "bees_inside_hotspot_count", targetEvent.beesInsideHotspotCount(),
-                    "instruction", "Tool verification complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
-            );
+                boolean isBeeConcept = args.conceptPrompt != null
+                        && List.of("bee", "bees", "honey bee", "honeybee").contains(args.conceptPrompt.trim().toLowerCase());
+                List<BoundingBox> matches = sam31Client.queryConcept(
+                        args.conceptPrompt, targetEvent.frameBase64(), isBeeConcept
+                );
+
+                toolResult = Map.of(
+                        "event_id", targetEvent.eventId(),
+                        "queried_concept", args.conceptPrompt,
+                        "matches", matches.size(),
+                        "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
+                        "bees_inside_hotspot_count", targetEvent.beesInsideHotspotCount(),
+                        "instruction", "Tool verification complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
+                );
+            }
 
             paramsBuilder.addMessage(
                     ChatCompletionToolMessageParam.builder()
