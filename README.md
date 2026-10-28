@@ -19,7 +19,12 @@ To provide clear transparency for the hackathon evaluation, the overview below d
   Unsupervised feature extraction from 60 fps 1080x960 hive camera footage using V-JEPA 2.1, producing numerical prediction error tensors ($S(t)$ across a $9\times9$ spatial tubelet grid logged to `mlflow.db`). At this stage, outputs were abstract numerical indices without semantic labeling or language interfaces.
 
 - **Built During the Meta AI Hackathon (System 2 – Grounding, Reasoning & Edge Delivery):**
-  The semantic and multimodal pipeline connecting latent surprise signals to actionable insights: dual-mode SAM 3.1 segmentation, scale-invariant containment analysis ($\text{IoA}_{\text{bee}}$), Meta Muse Spark Open agentic reasoning on Baseten, chronological daily event digests, a deterministic bioacoustic honeybee synthesizer, and a GraalVM native edge server on ARM64.
+  The semantic, cognitive, and active perception pipeline connecting latent surprise signals to actionable insights:
+  - **Active Perception System (Saccadic Foveal Vision):** Decouples continuous 60 fps peripheral surveillance (V-JEPA 2.1) from autonomous foveal targeting (+8.3x token density zoom) driven by Meta Muse tool-calling (`QueryFovealHotspot`).
+  - **Hardware-Accelerated Vector API (SIMD):** Predictor prediction error $S(t) = \|z_{\text{pred}} - z_{\text{target}}\|_2$ evaluated with Java 25 Vector API (`jdk.incubator.vector`) across AVX2/NEON lanes with zero GC overhead.
+  - **Zero-GC Off-Heap Ring Buffer (FFM API):** Circular buffering of 600 slots (10 seconds @ 60 fps) via `java.lang.foreign.Arena` and `MemorySegment`, enabling retrospective keyframe retrieval during cloud API latencies with zero dropped frames.
+  - **3-Channel Grounding Architecture:** Dual-mode SAM 3.1 segmentation, scale-invariant containment analysis ($\text{IoA}_{\text{bee}}$), and dynamic system prompt customization via `.env`.
+  - **Cognitive & Voice Delivery:** Meta Muse Spark Open agentic loop on Baseten, chronological daily event digests, a deterministic bioacoustic honeybee synthesizer, and a GraalVM native edge server on ARM64.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -33,14 +38,17 @@ To provide clear transparency for the hackathon evaluation, the overview below d
 ════════════════════════════╪═════════════════════════════
 ┌───────────────────────────▼────────────────────────────┐
 │  BUILT DURING META AI HACKATHON (System 2)             │
+│  - Active Perception: Foveal Saccadic Vision Engine    │
+│  - Java 25 Vector API (SIMD) Latent Anomaly Evaluator  │
+│  - Java 25 FFM Off-Heap Circular Frame Buffer (600 sl) │
 │  - 3-Channel Grounding Architecture (PCS + PVS + IoA)  │
 │  - Dual-Mode Meta SAM 3.1 Integration (/v1/responses)  │
-│  - Scale-Invariant Bee Containment Metric (IoA_bee)    │
 │  - Meta Muse Spark Open 1026 Agentic Loop on Baseten   │
+│  - Dynamic System Prompt Configuration via .env        │
 │  - Multi-Event Timeline Digest & Beekeeper Briefing   │
 │  - Bioacoustic Honeybee Voice Synthesizer (Java 25)    │
 │  - Micronaut AOT GraalVM Native Edge Server (ARM64)    │
-│  - Embedded Vue 3 + Tailwind Interactive Console       │
+│  - Embedded Vue 3 Saccadic Reticle HUD & Console       │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -49,10 +57,13 @@ To provide clear transparency for the hackathon evaluation, the overview below d
 | Component | Pre-Existing Foundation (System 1: Sensory) | Built During Hackathon (System 2: Cognition & Delivery) |
 | :--- | :--- | :--- |
 | **Vision Foundation Models** | Pre-trained V-JEPA 2.1 encoder | **Dual-Mode Meta SAM 3.1 (`sam-3.1`)** via `/v1/responses`<br>• Channel 1: Promptable Concept Segmentation (`"bee"`)<br>• Channel 2: Promptable Visual Segmentation (`point`/`box` at hotspot) |
-| **Reasoning & Agent Loop** | None (pure numerical loss $S(t)$) | **Meta Muse Spark Open (`meta-models/muse-spark-open-1026`)** on Baseten<br>• Dual visual inputs ($688\times688$ overview + $384\times384$ hotspot crop)<br>• Function calling tool loop (`query_sam31_concept`)<br>• Daily multi-event chronological timeline briefing |
+| **Active Perception & Vision** | Passive uniform video logging | **Foveal Saccadic Vision & Reticle HUD**<br>• Periphery: 60 fps latent monitoring<br>• Saccadic Trigger: Saliency peak ($S(t) \ge \tau$)<br>• Fovea: Autonomous +8.3x high-resolution zoom |
+| **SIMD Latent Evaluator** | Python numpy loops | **Java 25 Vector API (`FloatVector.SPECIES_PREFERRED`)**<br>• Hardware SIMD (AVX2/NEON) latent Euclidean & Cosine distance<br>• Zero GC allocation in hot evaluation loop |
+| **Off-Heap Frame Ingestion** | Local filesystem MP4 reads | **Java 25 FFM API (`Arena`, `MemorySegment`) Ring Buffer**<br>• 600 slots (10s @ 60 fps) circular off-heap memory<br>• Retrospective lookup with 0 dropped frames |
+| **Reasoning & Agent Loop** | None (pure numerical loss $S(t)$) | **Meta Muse Spark Open (`meta-models/muse-spark-open-1026`)** on Baseten<br>• Dual visual inputs ($688\times688$ overview + $384\times384$ hotspot crop)<br>• Function calling loop (`QueryFovealHotspot`, `QuerySam31Concept`)<br>• Dynamic System Prompt configured via `META_MUSE_SYSTEM_PROMPT` |
 | **Spatial / Geometric Grounding**| Abstract $9\times9$ grid indices `[row, col]` | **Scale-Invariant Bee Containment Metric ($\text{IoA}_{\text{bee}}$)**<br>• Differentiates entrance crowding (15 bees in hotspot) from foreign intruders |
 | **Edge Server Runtime** | Python training scripts | **Java 25 / Micronaut 4.7 GraalVM Native Image (AOT)**<br>• Virtual Threads (Project Loom)<br>• SQLite WAL edge cache (`state.db`) on external SSD<br>• Sub-40ms cold start, Prometheus OpenMetrics |
-| **Bioacoustic Edge UI** | None | **Deterministic Honeybee Voice Synthesizer (Java 25)**<br>• 210–460 Hz carrier frequencies, 26–30 Hz wingbeat AM<br>**Embedded Vue 3 SPA** with 37.5-minute fever curve & video inspector |
+| **Bioacoustic Edge UI** | None | **Deterministic Honeybee Voice Synthesizer (Java 25)**<br>• 210–460 Hz carrier frequencies, 26–30 Hz wingbeat AM<br>**Embedded Vue 3 SPA** with 37.5-minute fever curve & Saccadic Reticle HUD |
 
 ---
 

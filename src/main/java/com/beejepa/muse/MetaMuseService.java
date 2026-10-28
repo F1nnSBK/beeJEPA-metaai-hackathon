@@ -530,8 +530,7 @@ public class MetaMuseService {
 
         // Grounded prompt with complete causal physics, SAM inputs, and SAM mask telemetry
         StringBuilder promptBuilder = new StringBuilder();
-        promptBuilder.append("System: You are Meta Muse Spark Open, an advanced multimodal world-model reasoning system integrated into BeeJEPA's real-time hive entrance surveillance pipeline.\n");
-        promptBuilder.append("Your role is to diagnose physical anomalies in video sequences by synthesizing V-JEPA latent temporal surprise dynamics with SAM 3.1 visual instance segmentation masks.\n\n");
+        promptBuilder.append("System: ").append(getEffectiveSystemPrompt()).append("\n\n");
 
         promptBuilder.append("### Pipeline Stage 1: V-JEPA Latent Anomaly Detection\n");
         if (!eventData.isEmpty()) {
@@ -1173,14 +1172,7 @@ public class MetaMuseService {
             ));
         }
 
-        String systemPrompt = "You are an autonomous apiculture assistant powered by Meta Muse Spark. "
-                + "The beekeeper is asking for a holistic summary of what happened at their hive today. "
-                + "You receive a chronological JSON digest of the highest V-JEPA kinematic surprise events, "
-                + "SAM 3.1 landing-board bee counts, hotspot bee containment counts, and the visual hotspot crops.\n\n"
-                + "Rules:\n"
-                + "1. Summarize overall flight traffic trends (minimum/maximum bee counts on the landing board).\n"
-                + "2. Explain each peak event chronologically (whether caused by dense bee congestion/guarding or a non-bee intruder).\n"
-                + "3. Only invoke `query_sam31_concept` if an event has `potential_non_bee_anomaly` or a visible non-bee organism.";
+        String systemPrompt = getEffectiveSystemPrompt();
 
         String activeModel = Optional.ofNullable(getEnvOrProp("BASETEN_MUSE_MODEL"))
                 .or(() -> Optional.ofNullable(basetenConfig.getModel()))
@@ -1292,6 +1284,36 @@ public class MetaMuseService {
             cleaned = cleaned.substring(cleaned.indexOf("</think>") + 8).trim();
         }
         return cleaned.trim();
+    }
+
+    public String getEffectiveSystemPrompt() {
+        if (basetenConfig != null && basetenConfig.getSystemPrompt() != null && !basetenConfig.getSystemPrompt().isBlank()) {
+            return basetenConfig.getSystemPrompt().trim();
+        }
+        String envPrompt = Optional.ofNullable(getEnvOrProp("META_MUSE_SYSTEM_PROMPT"))
+                .or(() -> Optional.ofNullable(getEnvOrProp("MUSE_SYSTEM_PROMPT")))
+                .orElse(null);
+
+        if (envPrompt != null && !envPrompt.isBlank()) {
+            return envPrompt.trim();
+        }
+
+        return getDefaultSystemPrompt();
+    }
+
+    public static String getDefaultSystemPrompt() {
+        return "You are an autonomous apiculture world-model reasoning system powered by Meta Muse Spark Open, integrated into BeeJEPA's Active Perception System.\n\n"
+                + "### Active Perception Architecture:\n"
+                + "- System 1 (Peripheral Vision): V-JEPA 2.1 continuously monitors the 60 fps hive entrance stream, measuring latent prediction error S(t) = ||z_pred - z_target||_2.\n"
+                + "- Saccadic Trigger: When latent prediction error peaks (S(t) >= tau, 10.2 sigma), the system fires a saccadic jump to the spatial hotspot tubelet [x, y].\n"
+                + "- System 2 (Foveal Vision & Saccades): High-resolution foveal zoom (+8.3x token density over peripheral stream) centers on the hotspot coordinates.\n"
+                + "- Scale-Invariant Containment (IoA_bee >= 0.25): Evaluates the fraction of bee area inside the hotspot to distinguish dense entrance clusters/guarding from foreign intruders.\n\n"
+                + "### Objective:\n"
+                + "The beekeeper is asking for a summary or diagnosis of their hive. Synthesize the provided chronological JSON digest of V-JEPA kinematic surprise events, SAM 3.1 landing-board bee counts, foveal hotspot bee containment metrics, and visual crops.\n\n"
+                + "### Autonomous Tool Calling Rules:\n"
+                + "1. Use `QueryFovealHotspot` to execute a saccadic zoom on unresolved spatial coordinates if fine-grained morphology is required.\n"
+                + "2. Use `QuerySam31Concept` only if an event indicates a suspected non-bee organism (e.g. 'hornet', 'wasp', 'pest') needing semantic verification.\n"
+                + "3. Summarize overall flight traffic trends (peak vs. stabilized bee counts), analyze peak events chronologically, and deliver an actionable beekeeper takeaway in clean Markdown.";
     }
 
     public Map<String, EventSpatialSummary> getSpatialCache() {

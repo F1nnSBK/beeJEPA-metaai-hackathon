@@ -16,6 +16,15 @@ public class BasetenConfig {
     private String model = "meta-models/muse-spark-open-1026";
     private Duration timeout = Duration.ofSeconds(30);
     private boolean allowInferenceCalls = false;
+    private String systemPrompt = "";
+
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+
+    public void setSystemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
+    }
 
     public String getApiKey() {
         if (apiKey1 != null && !apiKey1.isBlank()) {

@@ -44,6 +44,7 @@ baseten:
   model: ${BASETEN_MUSE_MODEL:meta-models/muse-spark-open-1026}
   timeout: ${BASETEN_TIMEOUT:30s}
   allow-inference-calls: ${BASETEN_ALLOW_INFERENCE:${ALLOW_LIVE_API:false}}
+  system-prompt: ${META_MUSE_SYSTEM_PROMPT:${MUSE_SYSTEM_PROMPT:}}
 
 beejepa:
   data:
