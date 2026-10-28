@@ -1,4 +1,4 @@
-# 🐝 beeJEPA Edge Server & Console
+# 🐝 beeJEPA
 
 High-performance, lightweight edge server and embedded web console for **beeJEPA**, optimized for deployment on a **Raspberry Pi 4 Model B** (ARM64) using **GraalVM Native Image (AOT)**, **Java 25 Virtual Threads**, and an embedded **Vue 3 + Tailwind CSS** frontend.
 
