@@ -225,21 +225,31 @@ To evaluate the specific effect of V-JEPA kinematic guidance on downstream reaso
 - **Smart SSD Caching:** When an anomaly is analyzed by Meta AI models, the output is saved as `agent_result.json` on the SSD. Subsequent requests load instantly with **0 API credits consumed**.
 - **External SSD Symlink:** Automated symlink validation (`data/ -> /mnt/ssd/beejepa_data`), mount checking, and free disk space telemetry.
 
-### 3. Meta AI Multimodal Pipeline
-- **SAM 3.1 Instance Segmentation:** Applies Meta Segment Anything Model 3.1 with a bounding box prompt centered on the V-JEPA spatial tubelet hotspot grid coordinates `(tubeletGridX, tubeletGridY)`.
-- **Muse Spark Causal Explanation:** Invokes Meta Muse (`meta-models/muse-spark-open-1026`) to synthesize natural-language causal reasoning explaining *why* the latent prediction error spiked (e.g. predatory wasp intrusion, erratic queen flight, or camera occlusion).
+### 3. Active Perception & Saccadic Vision Engine
+- **Peripheral Stream Monitoring:** V-JEPA 2.1 continuously monitors the 60 fps 1080x960 entrance stream, evaluating prediction error $S(t) = \|z_{\text{pred}} - z_{\text{target}}\|_2$.
+- **Saccadic Trigger:** When prediction error exceeds the decision threshold ($\tau = 10.2\sigma$), the engine triggers a saccadic jump targeting the spatial hotspot coordinates $(x^*, y^*)$.
+- **Foveal Zoom (+8.3x Token Density):** Replaces uniform full-frame downsampling with an autonomous foveal crop ($384\times384$ px, 729 visual tokens vs. 88 tokens in uncropped frames) centered on the anomaly locus.
+- **Java 25 Vector API (SIMD):** Latent prediction error and cosine similarity are evaluated using `FloatVector.SPECIES_PREFERRED` across 256-bit / 128-bit SIMD lanes (AVX2/NEON) with 0 GC heap allocations in the hot path.
+- **Java 25 FFM Off-Heap Ring Buffer:** Circular off-heap frame buffer allocated via `java.lang.foreign.Arena.ofShared()` and `MemorySegment` holding 600 slots (10 seconds at 60 fps, 600 MB) for retrospective keyframe retrieval during model API requests.
+- **Dynamic System Prompt Configuration:** Configured via `META_MUSE_SYSTEM_PROMPT` in `.env`, enabling dynamic prompt adjustments for active perception, saccadic zoom, and beekeeper briefing rules without modifying source code.
 
-### 4. Deterministic Bee Voice Acoustic Synthesizer (Java 25)
-- **Bioacoustic Grounding:** Converts text responses from Meta Muse into authentic honeybee communication signals based on scientific bioacoustic literature (210–460 Hz fundamental frequencies, 26–30 Hz wingbeat amplitude modulation, harmonic overtone series, and comb resonance).
-- **Deterministic Word-to-Acoustic Mapping:** Every specific word always generates the exact same bee phonetic pitch, duration, and timbre.
+### 4. Meta AI Multimodal Pipeline
+- **SAM 3.1 Instance Segmentation:** Applies Meta Segment Anything Model 3.1 with a bounding box prompt centered on the V-JEPA spatial tubelet hotspot grid coordinates `(tubeletGridX, tubeletGridY)`.
+- **Scale-Invariant Containment Analysis ($\text{IoA}_{\text{bee}}$):** Measures the proportion of bee area enclosed within the hotspot bounding box ($\text{IoA}_{\text{bee}} \ge 0.25$) to distinguish normal cluster density from foreign objects.
+- **Muse Spark Causal Explanation:** Invokes Meta Muse (`meta-models/muse-spark-open-1026`) with tool calling (`QueryFovealHotspot`, `QuerySam31Concept`) to provide natural-language causal reasoning grounded in observed kinematics.
+
+### 5. Deterministic Bee Voice Acoustic Synthesizer (Java 25)
+- **Bioacoustic Grounding:** Converts text responses from Meta Muse into honeybee acoustic signals based on bioacoustic literature (210–460 Hz fundamental frequencies, 26–30 Hz wingbeat amplitude modulation, harmonic overtone series, and comb resonance).
+- **Deterministic Word-to-Acoustic Mapping:** Every specific word generates repeatable bee phonetic pitch, duration, and timbre.
 - **Sentence Prosody:** Interrogative pitch lifts (`?`), declarative cadences (`.`), and alarm piping flourishes (`!`).
 - **Sub-3ms Performance:** In-memory PCM 16-bit 22.05 kHz WAV generation with zero disk I/O and zero external audio libraries.
-- **Live Device Microphone:** In-browser Web Speech API and `getUserMedia` integration allowing live voice queries (*"Hey Muse, how are my bees doing?"*) in safe, zero-credit test mode.
+- **Live Device Microphone:** In-browser Web Speech API and `getUserMedia` integration allowing voice queries in safe test mode.
 
-### 5. Embedded Vue 3 Frontend
-- **37.5-Minute Latent Surprise Timeline:** Interactive area curve with threshold line ($\tau = 3.0\sigma$) and HTML pin markers with hover tooltips and ping animation.
-- **Multi-View Video Inspector:** Instant toggle between *Side-by-Side (Pixel vs. V-JEPA)*, *Raw 60fps Clip*, and *SAM 3.1 Peak Frame* with animated hotspot bounding box overlay.
-- **Dynamic 3D Bee Swarm Background:** Canvas-based low-temperature random walk simulation with stratified grid spawn and Boids mutual separation force to eliminate clumping.
+### 6. Embedded Vue 3 Frontend
+- **37.5-Minute Latent Surprise Timeline:** Interactive area curve with threshold line ($\tau = 10.2\sigma$) and HTML pin markers with hover tooltips and ping animation.
+- **Saccadic Reticle HUD:** Synchronized crosshairs overlay active during peak anomaly windows ($\pm 1.2\text{s}$) with side-by-side coordinate scaling.
+- **Multi-View Video Inspector:** Toggle between *Side-by-Side (Pixel vs. V-JEPA)*, *Raw 60fps Clip*, and *SAM 3.1 Peak Frame* with hotspot bounding box overlay.
+- **Dynamic 3D Bee Swarm Background:** Canvas-based random walk simulation with stratified grid spawn and mutual separation force.
 
 ---
 
@@ -277,10 +287,12 @@ beeJEPA/
     │   │   │   ├── AuthController.java        # Login, logout & session profile
     │   │   │   ├── EventController.java       # Timeline, events, media & SAM/Muse triggers
     │   │   │   ├── MuseController.java        # Muse status, test voice query & WAV stream
+    │   │   │   ├── PerceptionController.java  # Ring buffer telemetry, saccadic trajectories & SIMD eval
     │   │   │   ├── StateController.java       # SQLite state key-value endpoints
     │   │   │   └── SystemInfoController.java  # Healthcheck & ping
     │   │   ├── event/                         # AnomalyEvent record & EventService
     │   │   ├── muse/                          # Muse client, service, DTOs & BeeAcousticSynthesizer
+    │   │   ├── perception/                    # FFM Ring Buffer, SIMD Evaluator, ActivePerceptionService
     │   │   ├── state/                         # SQLite StateRepository & schema migrations
     │   │   └── storage/                       # StorageService & SSD symlink verification
     │   └── resources/
@@ -313,6 +325,9 @@ Edit `.env` as needed:
 META_MUSE_API_KEY=your_key_here
 META_MUSE_BASE_URL=https://api.muse.meta.com
 BASETEN_API_KEY=your_baseten_key_here
+BASETEN_MUSE_MODEL=meta-models/muse-spark-open
+BASETEN_ALLOW_INFERENCE=false
+META_MUSE_SYSTEM_PROMPT="You are an autonomous apiculture world-model reasoning system powered by Meta Muse Spark Open, integrated into BeeJEPA's Active Perception System..."
 PORT=8080
 BEEJEPA_DATA_PATH=./data
 BEEJEPA_REQUIRE_SYMLINK=false
@@ -402,6 +417,14 @@ The server starts in **< 40 ms**, consumes minimal memory, and serves both the R
 | `GET` | `/api/v1/muse/voice?text=...` | Stream dynamically synthesized 22.05 kHz WAV bee voice audio |
 | `POST` | `/api/v1/muse/generate` | Dispatch inference request to Meta Muse |
 | `POST` | `/api/v1/muse/embeddings` | Compute embeddings via Meta Muse |
+
+### Active Perception & SIMD Evaluator
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/perception/ring-buffer` | FFM off-heap ring buffer telemetry (active slots, memory, dropped frames) |
+| `GET` | `/api/v1/perception/saccades` | Ordered saccadic jump trajectories across timeline peak events |
+| `GET` | `/api/v1/perception/saccades/{id}` | Saccadic target coordinates and foveal crop bounds for a specific event |
+| `POST` | `/api/v1/perception/simd-eval` | Hardware SIMD (Vector API) latent distance and cosine evaluation |
 
 ### Telemetry & Performance Metrics (Prometheus)
 | Method | Endpoint | Description |
