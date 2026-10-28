@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_DIR = PROJECT_ROOT / "data" / "hackathon_sample"
 OUTPUT_DIR = PROJECT_ROOT / "frontend" / "public" / "landing"
 
-FOCUS_EVENT_ID = "evt_rec2125_seq000_f0000"
+FOCUS_EVENT_ID = "evt_rec2125_seq000_f1217"
 HEADER_LUMINANCE_THRESHOLD = 40.0
 HEADER_MIN_BRIGHT_RUN = 24
 HEAT_NOISE_FLOOR = 36.0
@@ -119,6 +119,15 @@ def shift_boxes_into_panel(sam_summary: dict, geometry: PanelGeometry) -> list[l
     return boxes
 
 
+def shift_board_boxes_into_panel(sam_summary: dict, geometry: PanelGeometry) -> list[list[int]]:
+    boxes = []
+    for raw_box in sam_summary.get("boardBees", []):
+        x1, y1, x2, y2 = raw_box
+        if x2 <= geometry.panel_width:
+            boxes.append([x1, y1 - geometry.header_height, x2, y2 - geometry.header_height])
+    return boxes
+
+
 def build_snapshot() -> dict:
     manifest = load_json(SAMPLE_DIR / "manifest.json")
     sam_summary = load_json(SAMPLE_DIR / "cache" / f"sam_spatial_{FOCUS_EVENT_ID}.json")
@@ -153,6 +162,8 @@ def build_snapshot() -> dict:
         "focus": {
             "eventId": FOCUS_EVENT_ID,
             "formattedTime": focus_event["formatted_time"],
+            "timeSec": focus_event["time_sec_global"],
+            "frameIdx": focus_event["frame_approx"],
             "surprise": focus_event["surprise_score"],
             "boardBeesVjepaDetector": focus_event["board_bees"],
             "boardBeesSam": sam_summary["landingBoardBeeCount"],
@@ -160,6 +171,7 @@ def build_snapshot() -> dict:
             "classification": sam_summary["geometricPreClassification"],
             "frame": {"width": geometry.panel_width, "height": geometry.panel_height},
             "samBoxes": shift_boxes_into_panel(sam_summary, geometry),
+            "boardBoxes": shift_board_boxes_into_panel(sam_summary, geometry),
             "attention": describe_attention(heat),
         },
         "muse": {

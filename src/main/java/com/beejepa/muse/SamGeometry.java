@@ -8,8 +8,8 @@ public final class SamGeometry {
 
     public static final int FRAME_SIZE = 688;
     public static final int LEFT_PANEL_MAX_X = 535;
-    public static final int BOARD_MIN_Y = 310;
-    public static final int BOARD_MAX_Y = 440;
+    public static final int BOARD_MIN_Y = 372;
+    public static final int BOARD_MAX_Y = 518;
 
     private SamGeometry() {}
 
@@ -51,9 +51,9 @@ public final class SamGeometry {
 
     public static BoundingBox defaultEntranceHotspot() {
         int cx = 315;
-        int cy = 390;
+        int cy = 426;
         int halfW = 80;
-        int halfH = 60;
+        int halfH = 54;
         return new BoundingBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
     }
 
@@ -62,10 +62,10 @@ public final class SamGeometry {
     }
 
     public static BoundingBox hotspotFromNormCenter(double normCenterX, double normCenterY, int imageWidth, int imageHeight) {
-        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * FRAME_SIZE), 220, 410) : 315;
-        int cy = 390;
+        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * FRAME_SIZE), 180, 410) : 315;
+        int cy = 426;
         int halfW = 80;
-        int halfH = 60;
+        int halfH = 54;
         int x1 = Math.max(0, cx - halfW);
         int y1 = Math.max(0, cy - halfH);
         int x2 = Math.min(imageWidth, cx + halfW);

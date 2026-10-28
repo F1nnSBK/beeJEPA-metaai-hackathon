@@ -188,10 +188,10 @@ export class HiveScene {
     this.ribbon.setReveal(smoothstep(0.05, 1.2, story))
     this.pillars.setGrowth(smoothstep(1.9, 2.7, story))
     this.stage.setOpacity(saccade)
-    this.stage.setHeat(smoothstep(3.0, 3.25, story))
-    this.stage.setBoxReveal(smoothstep(3.25, 3.8, story))
+    this.stage.setHeat(smoothstep(3.0, 3.22, story))
+    this.stage.setBoxReveal(smoothstep(3.15, 3.55, story))
     this.stage.setReticle(saccade, saccade * (1 - smoothstep(4.2, 4.6, story) * 0.65))
-    this.swarm.setLanding(smoothstep(3.3, 3.9, story))
+    this.swarm.setLanding(smoothstep(3.2, 3.6, story))
   }
 
   resize() {

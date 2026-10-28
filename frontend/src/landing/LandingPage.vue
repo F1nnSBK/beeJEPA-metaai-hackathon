@@ -35,6 +35,15 @@ const smoothstep = (edge0, edge1, x) => {
 
 const diveDarkness = computed(() => smoothstep(4.55, 5.0, storyPosition.value))
 
+function actOpacity(act) {
+  if (reducedMotion) return 1
+  const pos = storyPosition.value
+  const fadeOutStart = act === ACT.SACCADE ? act + 0.7 : act + 0.48
+  const fadeOutEnd = act === ACT.SACCADE ? act + 0.92 : act + 0.78
+  if (pos <= fadeOutStart) return 1
+  return 1 - smoothstep(fadeOutStart, fadeOutEnd, pos)
+}
+
 const facts = computed(() => {
   const data = snapshot.value
   if (!data) return null
@@ -49,6 +58,8 @@ const facts = computed(() => {
     maxSurprise: source.maxSurprise.toFixed(2),
     dataset: source.dataset,
     focusTime: focus.formattedTime,
+    focusSurprise: focus.surprise.toFixed(2),
+    focusFrame: focus.frameIdx,
     boardBeesSam: focus.boardBeesSam,
     hotspotBeesSam: focus.hotspotBeesSam,
     boardBeesDetector: focus.boardBeesVjepaDetector,
@@ -167,7 +178,7 @@ onBeforeUnmount(() => {
     <main v-if="facts" class="landing__story">
       <section :ref="bindSection(ACT.ARRIVAL)" class="act act--arrival" :class="{ 'is-seen': isSeen(ACT.ARRIVAL) }">
         <div class="act__content">
-          <div class="act__inner">
+          <div class="act__inner" :style="{ opacity: actOpacity(ACT.ARRIVAL) }">
             <p class="eyebrow">Hive entrance monitoring</p>
             <h1 class="act__title act__title--hero">
               <CalligraphyWord word="beeJEPA" :drawn="sceneState !== 'loading'" />
@@ -187,7 +198,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.PERIPHERY)" class="act" :class="{ 'is-seen': isSeen(ACT.PERIPHERY) }">
         <div class="act__content">
-          <div class="act__inner">
+          <div class="act__inner" :style="{ opacity: actOpacity(ACT.PERIPHERY) }">
             <p class="eyebrow">Act I · System 1</p>
             <h2 class="act__title"><CalligraphyWord word="Periphery" :drawn="isSeen(ACT.PERIPHERY)" /></h2>
             <p class="body">
@@ -201,14 +212,15 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.SURPRISE)" class="act" :class="{ 'is-seen': isSeen(ACT.SURPRISE) }">
         <div class="act__content">
-          <div class="act__inner">
+          <div class="act__inner" :style="{ opacity: actOpacity(ACT.SURPRISE) }">
             <p class="eyebrow">Act II · Latent prediction error</p>
             <h2 class="act__title"><CalligraphyWord word="Surprise" :drawn="isSeen(ACT.SURPRISE)" /></h2>
             <p class="formula">S(t) = ‖z<sub>pred</sub> − z<sub>target</sub>‖<sub>2</sub></p>
             <p class="body">
-              S(t) rises when the observed dynamics differ from the prediction. The {{ facts.measurementCount }}
-              measurements contain {{ facts.eventCount }} peak events. The highest is
-              <strong>{{ facts.maxSurprise }}σ</strong> at {{ facts.focusTime }}.
+              S(t) rises when observed dynamics differ from prediction ({{ facts.eventCount }} peaks in
+              {{ facts.measurementCount }} windows). At 00:00 ({{ facts.maxSurprise }}σ), camera placement shakes the
+              whole frame including the grass; at {{ facts.focusTime }} (<strong>{{ facts.focusSurprise }}σ</strong>,
+              frame #{{ facts.focusFrame }}), the camera is stationary and attention localizes on the flight board.
             </p>
             <p class="data">Peak events glow vermilion · height = recorded S(t)</p>
           </div>
@@ -217,12 +229,12 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.SACCADE)" class="act act--tall" :class="{ 'is-seen': isSeen(ACT.SACCADE) }">
         <div class="act__content">
-          <div class="act__inner">
-            <p class="eyebrow">Act III · Foveal crop</p>
+          <div class="act__inner" :style="{ opacity: actOpacity(ACT.SACCADE) }">
+            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} ({{ facts.focusSurprise }}<span class="sigma">σ</span>)</p>
             <h2 class="act__title"><CalligraphyWord word="Saccade" :drawn="isSeen(ACT.SACCADE)" /></h2>
             <p class="body">
-              The view moves to the region marked by the V-JEPA attention map. SAM 3.1 segments the bees in that
-              region of the keyframe.
+              The view moves to the region marked by the V-JEPA attention map at {{ facts.focusTime }}. SAM 3.1
+              segments the bees on the landing board and isolates the active cluster inside the attention hotspot.
             </p>
             <dl class="readout">
               <div>
@@ -248,7 +260,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.REPORT)" class="act" :class="{ 'is-seen': isSeen(ACT.REPORT) }">
         <div class="act__content">
-          <div class="act__inner">
+          <div class="act__inner" :style="{ opacity: actOpacity(ACT.REPORT) }">
             <p class="eyebrow">Act IV · System 2</p>
             <h2 class="act__title"><CalligraphyWord word="Report" :drawn="isSeen(ACT.REPORT)" /></h2>
             <blockquote class="quote">
@@ -405,7 +417,7 @@ onBeforeUnmount(() => {
 }
 
 .act--tall {
-  min-height: 230svh;
+  min-height: 260svh;
 }
 
 .act--enter {
@@ -428,6 +440,16 @@ onBeforeUnmount(() => {
   gap: 0.9rem;
   width: 100%;
   max-width: 34rem;
+}
+
+.act:not(.act--enter) .act__inner {
+  padding: 1.15rem 1.25rem;
+  border: 1px solid rgba(232, 163, 61, 0.16);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(11, 9, 6, 0.88) 0%, rgba(11, 9, 6, 0.96) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72);
 }
 
 .act__inner > * {
@@ -471,6 +493,10 @@ onBeforeUnmount(() => {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--wax-muted);
+}
+
+.sigma {
+  text-transform: none;
 }
 
 .act__title {

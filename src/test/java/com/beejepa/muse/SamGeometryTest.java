@@ -22,17 +22,17 @@ class SamGeometryTest {
 
     @Test
     void testLandingBoardFilter() {
-        // Landing board ROI: cx <= 535, 310 <= cy <= 440
-        BoundingBox onBoard = new BoundingBox(300, 350, 360, 410);
+        // Landing board ROI: cx <= 535, 372 <= cy <= 518
+        BoundingBox onBoard = new BoundingBox(300, 390, 360, 450);
         Assertions.assertTrue(onBoard.isOnLandingBoard());
 
-        BoundingBox offBoardRight = new BoundingBox(550, 350, 600, 410);
+        BoundingBox offBoardRight = new BoundingBox(550, 390, 600, 450);
         Assertions.assertFalse(offBoardRight.isOnLandingBoard());
 
-        BoundingBox offBoardTop = new BoundingBox(300, 100, 350, 150);
+        BoundingBox offBoardTop = new BoundingBox(300, 310, 350, 360);
         Assertions.assertFalse(offBoardTop.isOnLandingBoard());
 
-        BoundingBox offBoardBottom = new BoundingBox(300, 500, 350, 550);
+        BoundingBox offBoardBottom = new BoundingBox(300, 540, 350, 590);
         Assertions.assertFalse(offBoardBottom.isOnLandingBoard());
     }
 
@@ -58,10 +58,10 @@ class SamGeometryTest {
 
     @Test
     void testFindContainedBeesAndClassification() {
-        BoundingBox hotspot = SamGeometry.defaultEntranceHotspot(); // [235, 330, 395, 450]
+        BoundingBox hotspot = SamGeometry.defaultEntranceHotspot(); // [235, 372, 395, 480]
 
-        BoundingBox bee1 = new BoundingBox(250, 350, 290, 390); // inside
-        BoundingBox bee2 = new BoundingBox(310, 370, 350, 410); // inside
+        BoundingBox bee1 = new BoundingBox(250, 390, 290, 430); // inside
+        BoundingBox bee2 = new BoundingBox(310, 410, 350, 450); // inside
         BoundingBox bee3 = new BoundingBox(10, 10, 40, 40);     // outside
 
         List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, List.of(bee1, bee2, bee3));

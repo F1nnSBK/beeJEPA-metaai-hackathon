@@ -77,8 +77,11 @@ export class KeyframeStage {
     })
     this.group.add(new Mesh(this.planeGeometry, this.planeMaterial))
 
-    this.boxes = this.createSamBoxes(focus.samBoxes)
-    this.group.add(this.boxes)
+    this.boardBoxes = this.createBoxLines(focus.boardBoxes || [], PALETTE.waxMuted)
+    this.group.add(this.boardBoxes.lines)
+
+    this.boxes = this.createBoxLines(focus.samBoxes, PALETTE.honey)
+    this.group.add(this.boxes.lines)
 
     this.reticle = this.createReticle()
     this.reticle.position.copy(this.localPointAt(...focus.attention.peak, OVERLAY_OFFSET * 2))
@@ -94,9 +97,9 @@ export class KeyframeStage {
     return this.localPointAt(px, py).add(this.group.position)
   }
 
-  createSamBoxes(samBoxes) {
+  createBoxLines(boxList, colorHex) {
     const vertices = []
-    for (const [x1, y1, x2, y2] of samBoxes) {
+    for (const [x1, y1, x2, y2] of boxList) {
       const corners = [
         this.localPointAt(x1, y1, OVERLAY_OFFSET),
         this.localPointAt(x2, y1, OVERLAY_OFFSET),
@@ -108,12 +111,12 @@ export class KeyframeStage {
         vertices.push(corner.x, corner.y, corner.z, next.x, next.y, next.z)
       })
     }
-    this.boxGeometry = new BufferGeometry()
-    this.boxGeometry.setAttribute('position', new Float32BufferAttribute(vertices, 3))
-    this.boxMaterial = new LineBasicMaterial({ color: PALETTE.honey, transparent: true, depthWrite: false })
-    const lines = new LineSegments(this.boxGeometry, this.boxMaterial)
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3))
+    const material = new LineBasicMaterial({ color: colorHex, transparent: true, depthWrite: false })
+    const lines = new LineSegments(geometry, material)
     lines.renderOrder = 2
-    return lines
+    return { geometry, material, lines, count: boxList.length }
   }
 
   createReticle() {
@@ -155,9 +158,13 @@ export class KeyframeStage {
 
   /** Reveals the real SAM 3.1 boxes one by one. */
   setBoxReveal(value) {
-    const visibleBoxes = Math.round(value * this.focus.samBoxes.length)
-    this.boxGeometry.setDrawRange(0, visibleBoxes * 8)
-    this.boxMaterial.opacity = Math.min(1, value * 3)
+    const visibleHotspot = Math.round(value * this.boxes.count)
+    this.boxes.geometry.setDrawRange(0, visibleHotspot * 8)
+    this.boxes.material.opacity = Math.min(1, value * 3)
+
+    const visibleBoard = Math.round(value * this.boardBoxes.count)
+    this.boardBoxes.geometry.setDrawRange(0, visibleBoard * 8)
+    this.boardBoxes.material.opacity = Math.min(0.42, value * 1.4)
   }
 
   /** lock = 0: reticle wide and loose, lock = 1: snapped onto the attention peak. */
@@ -177,8 +184,10 @@ export class KeyframeStage {
     for (const disposable of [
       this.planeGeometry,
       this.planeMaterial,
-      this.boxGeometry,
-      this.boxMaterial,
+      this.boxes.geometry,
+      this.boxes.material,
+      this.boardBoxes.geometry,
+      this.boardBoxes.material,
       this.ringGeometry,
       this.reticleMaterial,
       this.tickGeometry,
