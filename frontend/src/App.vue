@@ -133,11 +133,11 @@ const isNearPeakAnomaly = computed(() => {
 const saccadicReticleStyle = computed(() => {
   if (!selectedEvent.value?.hotspot) return null
   const normX = activeSaccade.value
-    ? (activeSaccade.value.focusCenterX / 688)
-    : Number(selectedEvent.value.hotspot.normCenterX || 0.29)
+    ? (activeSaccade.value.focusCenterX / 540)
+    : Number(selectedEvent.value.hotspot.normCenterX || 0.58)
   const normY = activeSaccade.value
-    ? (activeSaccade.value.focusCenterY / 688)
-    : Number(selectedEvent.value.hotspot.normCenterY || 0.42)
+    ? (activeSaccade.value.focusCenterY / 960)
+    : Number(selectedEvent.value.hotspot.normCenterY || 0.40)
 
   // In side-by-side mode, camera feed is on the left half (0..50% width)
   const isSideBySide = activeView.value === 'comparison'
@@ -1531,7 +1531,7 @@ async function handleLogout() {
                 </div>
                 <!-- Saccade Telemetry Badge -->
                 <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-slate-950/85 backdrop-blur border border-cyan-500/40 rounded text-[9px] font-mono text-cyan-300 whitespace-nowrap shadow-md">
-                  FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 688) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 688) }}]
+                  FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 960) }}]
                 </div>
               </div>
             </div>

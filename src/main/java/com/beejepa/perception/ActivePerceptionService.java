@@ -20,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Autonomous Active Perception Service coordinating peripheral stream tracking,
- * saccadic target acquisition, and foveal zoom over the hive entrance flight board.
+ * saccadic target acquisition, and foveal zoom over the hive entrance flight
+ * board.
  */
 @Singleton
 @Context
@@ -39,8 +40,7 @@ public class ActivePerceptionService {
     public ActivePerceptionService(
             OffHeapFrameRingBuffer ringBuffer,
             SimdLatentEvaluator simdEvaluator,
-            EventService eventService
-    ) {
+            EventService eventService) {
         this.ringBuffer = ringBuffer;
         this.simdEvaluator = simdEvaluator;
         this.eventService = eventService;
@@ -53,7 +53,8 @@ public class ActivePerceptionService {
     }
 
     /**
-     * Synchronizes and calculates the sequential saccadic trajectory across real events.
+     * Synchronizes and calculates the sequential saccadic trajectory across real
+     * events.
      */
     public synchronized List<SaccadicTarget> refreshTrajectory() {
         trajectory.clear();
@@ -73,11 +74,11 @@ public class ActivePerceptionService {
             int boardBees = ev.get("boardBees") instanceof Number n ? n.intValue() : 24;
 
             AnomalyEvent.Hotspot hotspot = ev.get("hotspot") instanceof AnomalyEvent.Hotspot h ? h : null;
-            double normCx = hotspot != null ? hotspot.normCenterX() : 0.29;
-            double normCy = hotspot != null ? hotspot.normCenterY() : 0.42;
+            double normCx = hotspot != null ? hotspot.normCenterX() : 0.58;
+            double normCy = hotspot != null ? hotspot.normCenterY() : 0.40;
 
-            int focusX = (int) Math.round(normCx * SamGeometry.FRAME_SIZE);
-            int focusY = (int) Math.round(normCy * SamGeometry.FRAME_SIZE);
+            int focusX = (int) Math.round(normCx * 540);
+            int focusY = (int) Math.round(normCy * 960);
 
             // Calculate Euclidean saccadic jump distance from previous fixation point
             double dx = focusX - prevX;
@@ -112,8 +113,7 @@ public class ActivePerceptionService {
                     boardBees,
                     hotspotBees,
                     classification,
-                    jumpDistance
-            );
+                    jumpDistance);
 
             trajectory.add(target);
             targetsCache.put(eventId, target);
@@ -129,8 +129,7 @@ public class ActivePerceptionService {
             double timestampSec,
             float surpriseSigma,
             float focusX,
-            float focusY
-    ) {
+            float focusY) {
         Optional<File> frameFile = eventService.getMediaFile(eventId, "peak_frame.jpg");
         if (frameFile.isPresent() && frameFile.get().exists()) {
             try {
@@ -138,7 +137,8 @@ public class ActivePerceptionService {
                 long timestampNs = (long) (timestampSec * 1_000_000_000L);
                 ringBuffer.appendFrame(timestampNs, frameIndex, surpriseSigma, focusX, focusY, bytes);
             } catch (IOException e) {
-                LOG.warn("Failed to ingest keyframe into off-heap ring buffer for event {}: {}", eventId, e.getMessage());
+                LOG.warn("Failed to ingest keyframe into off-heap ring buffer for event {}: {}", eventId,
+                        e.getMessage());
             }
         }
     }
@@ -169,4 +169,3 @@ public class ActivePerceptionService {
         return ringBuffer;
     }
 }
-

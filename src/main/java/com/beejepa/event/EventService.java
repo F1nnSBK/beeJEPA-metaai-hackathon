@@ -92,14 +92,15 @@ public class EventService {
                 item.put("pixelDiffBaseline", 0.0142);
                 item.put("horizonDeltaFrames", 60);
 
-                // Realistic entrance board hotspot coordinates (y in hive entrance corridor [0.38, 0.46])
-                int gridX = Math.abs(eventId.hashCode()) % 20 + 10;
-                int gridY = 18;
-                double normCenterX = 0.15 + (Math.abs(eventId.hashCode()) % 30) / 100.0;
-                double normCenterY = 0.42;
-                int boxW = 130;
-                int boxH = 95;
-                int xPx = (int) (normCenterX * 1080);
+                // Real entrance board hotspot coordinates (centered on flight board traffic
+                // cluster)
+                int gridX = 4;
+                int gridY = 2;
+                double normCenterX = 0.58 + ((Math.abs(eventId.hashCode()) % 7) - 3) * 0.015;
+                double normCenterY = 0.40;
+                int boxW = 140;
+                int boxH = 90;
+                int xPx = (int) (normCenterX * 540);
                 int yPx = (int) (normCenterY * 960);
                 int[] boxPx = new int[] { yPx - boxH / 2, xPx - boxW / 2, yPx + boxH / 2, xPx + boxW / 2 };
                 item.put("hotspot", new AnomalyEvent.Hotspot(gridX, gridY, normCenterX, normCenterY, boxPx));
@@ -110,8 +111,10 @@ public class EventService {
                 item.put("isCached", hasCached);
                 if (hasCached) {
                     try {
-                        item.put("agentResult", objectMapper.readValue(Files.readAllBytes(cachedResultFile), Map.class));
-                    } catch (Exception ignored) {}
+                        item.put("agentResult",
+                                objectMapper.readValue(Files.readAllBytes(cachedResultFile), Map.class));
+                    } catch (Exception ignored) {
+                    }
                 }
 
                 // Media presence
@@ -135,42 +138,45 @@ public class EventService {
 
         try (Stream<Path> stream = Files.list(eventsDir)) {
             stream.filter(Files::isDirectory)
-                  .sorted(Comparator.comparing(Path::getFileName))
-                  .forEach(eventFolder -> {
-                      Path metaFile = eventFolder.resolve("meta.json");
-                      if (Files.exists(metaFile)) {
-                          try {
-                              AnomalyEvent event = objectMapper.readValue(Files.readAllBytes(metaFile), AnomalyEvent.class);
-                              Map<String, Object> item = new HashMap<>();
-                              item.put("eventId", event.eventId());
-                              item.put("sequenceId", event.sequenceId());
-                              item.put("timestampSec", event.timestampSec());
-                              item.put("frameIndex", event.frameIndex());
-                              item.put("surpriseScoreL2", event.surpriseScoreL2());
-                              item.put("pixelDiffBaseline", event.pixelDiffBaseline());
-                              item.put("horizonDeltaFrames", event.horizonDeltaFrames());
-                              item.put("hotspot", event.hotspot());
+                    .sorted(Comparator.comparing(Path::getFileName))
+                    .forEach(eventFolder -> {
+                        Path metaFile = eventFolder.resolve("meta.json");
+                        if (Files.exists(metaFile)) {
+                            try {
+                                AnomalyEvent event = objectMapper.readValue(Files.readAllBytes(metaFile),
+                                        AnomalyEvent.class);
+                                Map<String, Object> item = new HashMap<>();
+                                item.put("eventId", event.eventId());
+                                item.put("sequenceId", event.sequenceId());
+                                item.put("timestampSec", event.timestampSec());
+                                item.put("frameIndex", event.frameIndex());
+                                item.put("surpriseScoreL2", event.surpriseScoreL2());
+                                item.put("pixelDiffBaseline", event.pixelDiffBaseline());
+                                item.put("horizonDeltaFrames", event.horizonDeltaFrames());
+                                item.put("hotspot", event.hotspot());
 
-                              Path agentResultFile = eventFolder.resolve("agent_result.json");
-                              boolean hasCachedResult = Files.exists(agentResultFile);
-                              item.put("isCached", hasCachedResult);
-                              if (hasCachedResult) {
-                                  try {
-                                      Map<?, ?> agentResult = objectMapper.readValue(Files.readAllBytes(agentResultFile), Map.class);
-                                      item.put("agentResult", agentResult);
-                                  } catch (Exception ignored) {}
-                              }
+                                Path agentResultFile = eventFolder.resolve("agent_result.json");
+                                boolean hasCachedResult = Files.exists(agentResultFile);
+                                item.put("isCached", hasCachedResult);
+                                if (hasCachedResult) {
+                                    try {
+                                        Map<?, ?> agentResult = objectMapper
+                                                .readValue(Files.readAllBytes(agentResultFile), Map.class);
+                                        item.put("agentResult", agentResult);
+                                    } catch (Exception ignored) {
+                                    }
+                                }
 
-                              item.put("hasRawClip", Files.exists(eventFolder.resolve("clip_raw.mp4")));
-                              item.put("hasComparisonClip", Files.exists(eventFolder.resolve("clip_comparison.mp4")));
-                              item.put("hasPeakFrame", Files.exists(eventFolder.resolve("peak_frame.jpg")));
+                                item.put("hasRawClip", Files.exists(eventFolder.resolve("clip_raw.mp4")));
+                                item.put("hasComparisonClip", Files.exists(eventFolder.resolve("clip_comparison.mp4")));
+                                item.put("hasPeakFrame", Files.exists(eventFolder.resolve("peak_frame.jpg")));
 
-                              result.add(item);
-                          } catch (IOException e) {
-                              LOG.error("Failed to read meta.json from {}: {}", metaFile, e.getMessage());
-                          }
-                      }
-                  });
+                                result.add(item);
+                            } catch (IOException e) {
+                                LOG.error("Failed to read meta.json from {}: {}", metaFile, e.getMessage());
+                            }
+                        }
+                    });
         } catch (IOException e) {
             LOG.error("Failed to list events from {}: {}", eventsDir, e.getMessage());
         }
@@ -192,8 +198,7 @@ public class EventService {
                         Double.parseDouble(String.valueOf(ev.get("surpriseScoreL2"))),
                         Double.parseDouble(String.valueOf(ev.get("pixelDiffBaseline"))),
                         Integer.parseInt(String.valueOf(ev.get("horizonDeltaFrames"))),
-                        hotspot
-                );
+                        hotspot);
                 map.put("event", event);
                 map.put("cached", ev.getOrDefault("isCached", false));
                 if (ev.containsKey("agentResult")) {
@@ -284,7 +289,6 @@ public class EventService {
         return Optional.empty();
     }
 
-
     private synchronized void extractFrameLazily(String eventId) {
         Path frameDir = getHackathonSampleDirectory().resolve("event_frames");
         Path framePath = frameDir.resolve(eventId + ".jpg");
@@ -304,8 +308,7 @@ public class EventService {
                     "-vframes", "1",
                     "-q:v", "2",
                     framePath.toString(),
-                    "-y"
-            );
+                    "-y");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             boolean finished = process.waitFor(4, java.util.concurrent.TimeUnit.SECONDS);
