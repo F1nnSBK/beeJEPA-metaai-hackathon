@@ -121,7 +121,7 @@ export class KeyframeStage {
 
   createReticle() {
     const radius = (FOVEA_RADIUS_PX / this.focus.frame.width) * this.width
-    this.reticleMaterial = new MeshBasicMaterial({ color: PALETTE.vermilion, transparent: true, depthWrite: false })
+    this.reticleMaterial = new MeshBasicMaterial({ color: PALETTE.electric, transparent: true, depthWrite: false })
     this.ringGeometry = new RingGeometry(radius * 0.94, radius, 64)
 
     const tick = radius * 0.45
@@ -138,7 +138,7 @@ export class KeyframeStage {
         3
       )
     )
-    this.tickMaterial = new LineBasicMaterial({ color: PALETTE.vermilion, transparent: true, depthWrite: false })
+    this.tickMaterial = new LineBasicMaterial({ color: PALETTE.electric, transparent: true, depthWrite: false })
 
     const reticle = new Group()
     reticle.add(new Mesh(this.ringGeometry, this.reticleMaterial))

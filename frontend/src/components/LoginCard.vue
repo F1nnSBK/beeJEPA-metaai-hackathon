@@ -63,12 +63,12 @@ async function submit() {
   gap: 1rem;
   width: 100%;
   padding: clamp(1.25rem, 4vw, 2rem);
-  border: 1px solid rgba(232, 163, 61, 0.22);
+  border: 1px solid #202224;
   border-radius: 1.25rem;
-  background: rgba(17, 13, 8, 0.82);
+  background: rgba(17, 19, 21, 0.86);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65);
 }
 
 .login-card__field {
@@ -78,16 +78,16 @@ async function submit() {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8c7a5b;
+  color: #939599;
 }
 
 .login-card__field input {
   min-height: 48px;
   padding: 0 0.9rem;
-  border: 1px solid rgba(243, 233, 210, 0.14);
+  border: 1px solid #202224;
   border-radius: 0.75rem;
-  background: rgba(11, 9, 6, 0.9);
-  color: #f3e9d2;
+  background: rgba(6, 7, 9, 0.92);
+  color: #EAEBED;
   /* 16px prevents iOS Safari from zooming into focused inputs. */
   font-size: 16px;
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -98,7 +98,7 @@ async function submit() {
 
 .login-card__field input:focus {
   outline: none;
-  border-color: #e8a33d;
+  border-color: #EAA23A;
 }
 
 .login-card__submit {
@@ -110,8 +110,8 @@ async function submit() {
   margin-top: 0.25rem;
   border: none;
   border-radius: 0.75rem;
-  background: linear-gradient(135deg, #f7db9a, #e8a33d 55%, #b7731f);
-  color: #0b0906;
+  background: linear-gradient(135deg, #F6BD73, #EAA23A 55%, #D28A09);
+  color: #060709;
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-size: 1.25rem;
   font-weight: 500;
@@ -135,7 +135,7 @@ async function submit() {
 .login-card__spinner {
   width: 1rem;
   height: 1rem;
-  border: 2px solid #0b0906;
+  border: 2px solid #060709;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -144,10 +144,10 @@ async function submit() {
 .login-card__error {
   margin: 0;
   padding: 0.75rem;
-  border: 1px solid rgba(217, 71, 43, 0.45);
+  border: 1px solid rgba(243, 108, 71, 0.45);
   border-radius: 0.6rem;
-  background: rgba(217, 71, 43, 0.1);
-  color: #f0a08f;
+  background: rgba(243, 108, 71, 0.12);
+  color: #FEB4A0;
   font-size: 0.85rem;
 }
 
@@ -155,12 +155,12 @@ async function submit() {
   margin: 0.25rem 0 0;
   text-align: center;
   font-size: 0.75rem;
-  color: #8c7a5b;
+  color: #939599;
 }
 
 .login-card__hint code {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: #e8a33d;
+  color: #EAA23A;
 }
 
 @keyframes spin {

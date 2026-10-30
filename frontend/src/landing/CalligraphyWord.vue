@@ -63,9 +63,9 @@ onMounted(async () => {
   >
     <defs>
       <linearGradient :id="gradientId" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#F7DB9A" />
-        <stop offset="45%" stop-color="#E8A33D" />
-        <stop offset="100%" stop-color="#B7731F" />
+        <stop offset="0%" stop-color="#F9D6AC" />
+        <stop offset="45%" stop-color="#EAA23A" />
+        <stop offset="100%" stop-color="#D28A09" />
       </linearGradient>
       <mask :id="maskId" maskUnits="userSpaceOnUse">
         <path
@@ -101,7 +101,7 @@ onMounted(async () => {
   width: 100%;
   height: auto;
   overflow: visible;
-  filter: drop-shadow(0 0 18px rgba(232, 163, 61, 0.22));
+  filter: drop-shadow(0 0 18px rgba(234, 162, 58, 0.22));
 }
 
 .calligraphy__mask-stroke,
@@ -120,7 +120,7 @@ onMounted(async () => {
 }
 
 .calligraphy__pen {
-  stroke: #f7db9a;
+  stroke: #F9D6AC;
   stroke-width: 1.4;
   opacity: 0.9;
 }

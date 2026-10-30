@@ -1,4 +1,18 @@
 /** @type {import('tailwindcss').Config} */
+const ink = {
+    50: '#F6F7F8',
+    100: '#EAEBED',
+    200: '#D6D8DA',
+    300: '#B8BBBE',
+    400: '#939599',
+    500: '#6C6F72',
+    600: '#4D5053',
+    700: '#333638',
+    800: '#202224',
+    900: '#111315',
+    950: '#060709',
+}
+
 export default {
     content: [
         "./index.html",
@@ -6,21 +20,63 @@ export default {
     ],
     theme: {
         extend: {
+            fontFamily: {
+                math: ['"Fira Math"', '"STIX Two Math"', '"Cambria Math"', 'serif'],
+            },
             colors: {
-                // Warm neutral scale derived from the landing page's propolis black (#0b0906).
-                // Lightness steps mirror Tailwind's slate scale so existing contrast ratios hold.
-                propolis: {
-                    50: '#faf8f4',
-                    100: '#f3efe7',
-                    200: '#e6dfd2',
-                    300: '#cfc4b1',
-                    400: '#a39580',
-                    500: '#786b58',
-                    600: '#574c3d',
-                    700: '#3a3125',
-                    800: '#241e16',
-                    900: '#15110b',
-                    950: '#0b0906',
+                ink,
+                propolis: ink,
+                honey: {
+                    50: '#FDF5EC',
+                    100: '#FBEAD5',
+                    200: '#F9D6AC',
+                    300: '#F6BD73',
+                    400: '#EAA23A',
+                    500: '#D28A09',
+                    600: '#AB6F01',
+                    700: '#845502',
+                    800: '#603C00',
+                    900: '#3E2501',
+                    950: '#261500',
+                },
+                electric: {
+                    50: '#F2F7FE',
+                    100: '#E0EFFF',
+                    200: '#C4DFFE',
+                    300: '#A1CDFF',
+                    400: '#77B7FE',
+                    500: '#4E9FF5',
+                    600: '#3680CC',
+                    700: '#2462A2',
+                    800: '#164677',
+                    900: '#092C4F',
+                    950: '#021A34',
+                },
+                ember: {
+                    50: '#FEF4F1',
+                    100: '#FEE7E1',
+                    200: '#FED0C4',
+                    300: '#FEB4A0',
+                    400: '#FE9072',
+                    500: '#F36C47',
+                    600: '#CA5231',
+                    700: '#A03B1F',
+                    800: '#752812',
+                    900: '#4E1607',
+                    950: '#330901',
+                },
+                clover: {
+                    50: '#F2F9F5',
+                    100: '#E2F1E8',
+                    200: '#C5E6D3',
+                    300: '#A1D8B9',
+                    400: '#7EC59F',
+                    500: '#63AE87',
+                    600: '#4A8D6B',
+                    700: '#356E51',
+                    800: '#234F39',
+                    900: '#133323',
+                    950: '#071F13',
                 },
             },
         },

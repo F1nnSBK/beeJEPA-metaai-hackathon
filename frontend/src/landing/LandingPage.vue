@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
             </p>
             <p class="data">
               {{ facts.durationSec }} s · {{ facts.fps }} fps · {{ facts.sequenceCount }} sequences ·
-              {{ facts.eventCount }} peak events · τ = {{ facts.tau }}σ
+              {{ facts.eventCount }} peak events · <span class="math">𝜏 = {{ facts.tau }}𝜎</span>
             </p>
             <span class="scroll-cue" aria-hidden="true">Scroll</span>
           </div>
@@ -205,7 +205,7 @@ onBeforeUnmount(() => {
               V-JEPA 2.1 encodes the flight board recorded at {{ facts.fps }} fps. It does not label objects. It
               predicts the next latent state and measures the prediction error.
             </p>
-            <p class="data">{{ facts.measurementCount }} measurements of S(t) · {{ facts.dataset }}</p>
+            <p class="data">{{ facts.measurementCount }} measurements of <span class="math">𝑆(𝑡)</span> · {{ facts.dataset }}</p>
           </div>
         </div>
       </section>
@@ -215,14 +215,14 @@ onBeforeUnmount(() => {
           <div class="act__inner" :style="{ opacity: actOpacity(ACT.SURPRISE) }">
             <p class="eyebrow">Act II · Latent prediction error</p>
             <h2 class="act__title"><CalligraphyWord word="Surprise" :drawn="isSeen(ACT.SURPRISE)" /></h2>
-            <p class="formula">S(t) = ‖z<sub>pred</sub> − z<sub>target</sub>‖<sub>2</sub></p>
+            <p class="formula math">𝑆(𝑡) = ‖𝑧<sub>pred</sub> − 𝑧<sub>target</sub>‖<sub>2</sub></p>
             <p class="body">
-              S(t) rises when observed dynamics differ from prediction ({{ facts.eventCount }} peaks in
-              {{ facts.measurementCount }} windows). At 00:00 ({{ facts.maxSurprise }}σ), camera placement shakes the
-              whole frame including the grass; at {{ facts.focusTime }} (<strong>{{ facts.focusSurprise }}σ</strong>,
+              <span class="math">𝑆(𝑡)</span> rises when observed dynamics differ from prediction ({{ facts.eventCount }} peaks in
+              {{ facts.measurementCount }} windows). At 00:00 (<span class="math">{{ facts.maxSurprise }}𝜎</span>), camera placement shakes the
+              whole frame including the grass; at {{ facts.focusTime }} (<strong class="math">{{ facts.focusSurprise }}𝜎</strong>,
               frame #{{ facts.focusFrame }}), the camera is stationary and attention localizes on the flight board.
             </p>
-            <p class="data">Peak events glow vermilion · height = recorded S(t)</p>
+            <p class="data">Peak events glow ember · height = recorded <span class="math">𝑆(𝑡)</span></p>
           </div>
         </div>
       </section>
@@ -230,7 +230,7 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.SACCADE)" class="act act--tall" :class="{ 'is-seen': isSeen(ACT.SACCADE) }">
         <div class="act__content">
           <div class="act__inner" :style="{ opacity: actOpacity(ACT.SACCADE) }">
-            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} ({{ facts.focusSurprise }}<span class="sigma">σ</span>)</p>
+            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} (<span class="math">{{ facts.focusSurprise }}𝜎</span>)</p>
             <h2 class="act__title"><CalligraphyWord word="Saccade" :drawn="isSeen(ACT.SACCADE)" /></h2>
             <p class="body">
               The view moves to the region marked by the V-JEPA attention map at {{ facts.focusTime }}. SAM 3.1
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
                 <dd>{{ facts.boardBeesSam }} <small>bees</small></dd>
               </div>
               <div>
-                <dt>Hotspot · IoA ≥ {{ IOA_THRESHOLD }}</dt>
+                <dt>Hotspot · <span class="math">IoA ≥ {{ IOA_THRESHOLD }}</span></dt>
                 <dd>{{ facts.hotspotBeesSam }} <small>bees</small></dd>
               </div>
               <div>
@@ -296,11 +296,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .landing {
-  --propolis: #0b0906;
-  --honey: #e8a33d;
-  --wax: #f3e9d2;
-  --wax-muted: #8c7a5b;
-  --vermilion: #d9472b;
+  --propolis: #060709;
+  --honey: #eaa23a;
+  --electric: #77b7fe;
+  --wax: #eaebed;
+  --wax-muted: #939599;
+  --vermilion: #f36c47;
   --serif: 'Cormorant Garamond', Georgia, serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --gutter: clamp(1.25rem, 5vw, 2.5rem);
@@ -334,7 +335,7 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 38%, rgba(11, 9, 6, 0.82), var(--propolis) 68%);
+  background: radial-gradient(circle at 50% 38%, rgba(6, 7, 9, 0.82), var(--propolis) 68%);
 }
 
 /* Fixed to the viewport so the text area stays dark no matter where a section is scrolled to. */
@@ -343,7 +344,7 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: linear-gradient(to top, rgba(11, 9, 6, 0.97) 0%, rgba(11, 9, 6, 0.9) 34%, rgba(11, 9, 6, 0) 56%);
+  background: linear-gradient(to top, rgba(6, 7, 9, 0.97) 0%, rgba(6, 7, 9, 0.9) 34%, rgba(6, 7, 9, 0) 56%);
 }
 
 .landing__bar {
@@ -355,7 +356,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: calc(env(safe-area-inset-top) + 0.75rem) calc(env(safe-area-inset-right) + var(--gutter)) 1.5rem
     calc(env(safe-area-inset-left) + var(--gutter));
-  background: linear-gradient(to bottom, rgba(11, 9, 6, 0.88) 0%, rgba(11, 9, 6, 0.5) 60%, rgba(11, 9, 6, 0) 100%);
+  background: linear-gradient(to bottom, rgba(6, 7, 9, 0.88) 0%, rgba(6, 7, 9, 0.5) 60%, rgba(6, 7, 9, 0) 100%);
   pointer-events: none;
 }
 
@@ -378,9 +379,9 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   min-height: 44px;
   padding: 0 1.1rem;
-  border: 1px solid rgba(232, 163, 61, 0.35);
+  border: 1px solid #333638;
   border-radius: 999px;
-  background: rgba(11, 9, 6, 0.55);
+  background: rgba(17, 19, 21, 0.65);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--wax);
@@ -437,6 +438,7 @@ onBeforeUnmount(() => {
 
 .act__inner {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.9rem;
   width: 100%;
   max-width: 34rem;
@@ -444,9 +446,9 @@ onBeforeUnmount(() => {
 
 .act:not(.act--enter) .act__inner {
   padding: 1.15rem 1.25rem;
-  border: 1px solid rgba(232, 163, 61, 0.16);
+  border: 1px solid #202224;
   border-radius: 1rem;
-  background: linear-gradient(180deg, rgba(11, 9, 6, 0.88) 0%, rgba(11, 9, 6, 0.96) 100%);
+  background: linear-gradient(180deg, rgba(17, 19, 21, 0.88) 0%, rgba(6, 7, 9, 0.96) 100%);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72);
@@ -495,17 +497,29 @@ onBeforeUnmount(() => {
   color: var(--wax-muted);
 }
 
-.sigma {
-  text-transform: none;
-}
-
 .act__title {
   width: clamp(11rem, 56vw, 26rem);
   font-weight: inherit;
 }
 
+/* Fira Math has a taller x-height than Cormorant and a smaller one than JetBrains Mono. */
+.body .math {
+  font-size: 0.86em;
+}
+
+.eyebrow .math,
+.data .math,
+.readout dt .math {
+  font-size: 1.12em;
+}
+
 .act__title--hero {
   width: clamp(16rem, 86vw, 40rem);
+}
+
+.act__title,
+.act__title--hero {
+  max-width: 100%;
 }
 
 .lead {
@@ -518,7 +532,7 @@ onBeforeUnmount(() => {
   font-family: var(--serif);
   font-size: clamp(1.15rem, 3.9vw, 1.45rem);
   line-height: 1.42;
-  color: rgba(243, 233, 210, 0.88);
+  color: rgba(234, 235, 237, 0.9);
 }
 
 .body strong {
@@ -536,8 +550,8 @@ onBeforeUnmount(() => {
 .formula {
   padding-left: 0.9rem;
   border-left: 2px solid var(--vermilion);
-  font-family: var(--mono);
-  font-size: clamp(0.95rem, 3.4vw, 1.15rem);
+  font-size: clamp(1.15rem, 4vw, 1.4rem);
+  line-height: 1.5;
 }
 
 .readout {
@@ -657,7 +671,7 @@ onBeforeUnmount(() => {
 /* ---------- Landscape and desktop: text column left, scene on the right ---------- */
 @media (min-aspect-ratio: 9/10) and (min-width: 720px) {
   .landing__scrim {
-    background: linear-gradient(to right, rgba(11, 9, 6, 0.95) 0%, rgba(11, 9, 6, 0.75) 34%, rgba(11, 9, 6, 0) 52%);
+    background: linear-gradient(to right, rgba(6, 7, 9, 0.95) 0%, rgba(6, 7, 9, 0.75) 34%, rgba(6, 7, 9, 0) 52%);
   }
 
   .act__content {

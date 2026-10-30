@@ -2,12 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fira Math (SIL OFL 1.1), subset to Latin, Greek, operators and math alphanumerics. */
+@font-face {
+  font-family: 'Fira Math';
+  src: url('./assets/fonts/FiraMath-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Every formula, symbol and quantity with a unit like σ or τ is set in Fira Math. */
+.math {
+  font-family: 'Fira Math', 'STIX Two Math', 'Cambria Math', serif;
+  font-style: normal;
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.math sub,
+.math sup {
+  font-size: 0.68em;
+  line-height: 0;
+}
+
 html, body, #app {
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0b0906;
-  color: #f3e9d2;
+  background-color: #060709;
+  color: #EAEBED;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -23,12 +49,12 @@ html, body, #app {
 }
 .timeline-slider::-webkit-slider-runnable-track {
   height: 6px;
-  background: #241e16;
+  background: #202224;
   border-radius: 9999px;
   transition: background 0.15s ease;
 }
 .timeline-slider:hover::-webkit-slider-runnable-track {
-  background: #3a3125;
+  background: #333638;
 }
 .timeline-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -36,38 +62,38 @@ html, body, #app {
   height: 18px;
   width: 18px;
   border-radius: 50%;
-  background: #f59e0b;
-  border: 2px solid #15110b;
-  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  background: #EAA23A;
+  border: 2px solid #111315;
+  box-shadow: 0 0 10px rgba(234, 162, 58, 0.55);
   margin-top: -6px;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .timeline-slider::-webkit-slider-thumb:hover,
 .timeline-slider:active::-webkit-slider-thumb {
   transform: scale(1.25);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.9);
+  box-shadow: 0 0 16px rgba(234, 162, 58, 0.85);
 }
 .timeline-slider::-moz-range-track {
   height: 6px;
-  background: #241e16;
+  background: #202224;
   border-radius: 9999px;
   transition: background 0.15s ease;
 }
 .timeline-slider:hover::-moz-range-track {
-  background: #3a3125;
+  background: #333638;
 }
 .timeline-slider::-moz-range-thumb {
   height: 18px;
   width: 18px;
   border-radius: 50%;
-  background: #f59e0b;
-  border: 2px solid #15110b;
-  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  background: #EAA23A;
+  border: 2px solid #111315;
+  box-shadow: 0 0 10px rgba(234, 162, 58, 0.55);
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .timeline-slider::-moz-range-thumb:hover,
 .timeline-slider:active::-moz-range-thumb {
   transform: scale(1.25);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.9);
+  box-shadow: 0 0 16px rgba(234, 162, 58, 0.85);
 }
