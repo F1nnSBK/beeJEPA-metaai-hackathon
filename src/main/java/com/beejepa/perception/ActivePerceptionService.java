@@ -2,10 +2,12 @@ package com.beejepa.perception;
 
 import com.beejepa.event.AnomalyEvent;
 import com.beejepa.event.EventService;
+import com.beejepa.muse.MuseDiskCache;
 import com.beejepa.muse.SamGeometry;
 import com.beejepa.muse.VisualCropRenderer;
 import io.micronaut.context.annotation.Context;
 import jakarta.annotation.PostConstruct;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,7 @@ public class ActivePerceptionService {
     private final OffHeapFrameRingBuffer ringBuffer;
     private final SimdLatentEvaluator simdEvaluator;
     private final EventService eventService;
+    private final MuseDiskCache museDiskCache;
 
     private final Map<String, SaccadicTarget> targetsCache = new ConcurrentHashMap<>();
     private final List<SaccadicTarget> trajectory = new ArrayList<>();
@@ -41,9 +44,19 @@ public class ActivePerceptionService {
             OffHeapFrameRingBuffer ringBuffer,
             SimdLatentEvaluator simdEvaluator,
             EventService eventService) {
+        this(ringBuffer, simdEvaluator, eventService, null);
+    }
+
+    @Inject
+    public ActivePerceptionService(
+            OffHeapFrameRingBuffer ringBuffer,
+            SimdLatentEvaluator simdEvaluator,
+            EventService eventService,
+            MuseDiskCache museDiskCache) {
         this.ringBuffer = ringBuffer;
         this.simdEvaluator = simdEvaluator;
         this.eventService = eventService;
+        this.museDiskCache = museDiskCache;
     }
 
     @PostConstruct
@@ -87,17 +100,30 @@ public class ActivePerceptionService {
             prevX = focusX;
             prevY = focusY;
 
-            int y1 = Math.max(0, focusY - DEFAULT_FOVEA_RADIUS);
+            int y1 = Math.max(SamGeometry.HEADER_HEIGHT_PX, focusY - DEFAULT_FOVEA_RADIUS);
             int x1 = Math.max(0, focusX - DEFAULT_FOVEA_RADIUS);
-            int y2 = Math.min(SamGeometry.FRAME_SIZE, focusY + DEFAULT_FOVEA_RADIUS);
-            int x2 = Math.min(SamGeometry.FRAME_SIZE, focusX + DEFAULT_FOVEA_RADIUS);
+            int y2 = Math.min(SamGeometry.FULL_FRAME_HEIGHT_PX, focusY + DEFAULT_FOVEA_RADIUS);
+            int x2 = Math.min(SamGeometry.PANEL_WIDTH_PX, focusX + DEFAULT_FOVEA_RADIUS);
+            if (hotspot != null && hotspot.boundingBoxPx() != null && hotspot.boundingBoxPx().length == 4) {
+                y1 = hotspot.boundingBoxPx()[0];
+                x1 = hotspot.boundingBoxPx()[1];
+                y2 = hotspot.boundingBoxPx()[2];
+                x2 = hotspot.boundingBoxPx()[3];
+            }
 
             // Ingest real keyframe into FFM off-heap ring buffer if available
             ingestFrameIntoRingBuffer(eventId, frameIndex, timestampSec, (float) surprise, focusX, focusY);
 
-            // Estimate hotspot contained bees based on surprise and board counts
-            int hotspotBees = surprise >= 14.0 ? 15 : (surprise >= 12.0 ? 11 : (surprise >= 10.0 ? 6 : 2));
-            String classification = hotspotBees >= 2 ? "multi_bee_interaction_cluster" : "single_bee_inspection";
+            // Use real SAM 3.1 cached spatial summary if available, otherwise real measured active V-JEPA cells
+            Optional<SamGeometry.EventSpatialSummary> cachedSam = museDiskCache != null
+                    ? museDiskCache.loadSpatialSummary(eventId)
+                    : Optional.empty();
+            int hotspotBees = cachedSam
+                    .map(SamGeometry.EventSpatialSummary::beesInsideHotspotCount)
+                    .orElseGet(() -> ev.get("activeCells") instanceof Number n ? n.intValue() : 0);
+            String classification = cachedSam
+                    .map(SamGeometry.EventSpatialSummary::geometricPreClassification)
+                    .orElseGet(() -> hotspotBees >= 2 ? "multi_bee_interaction_cluster" : "single_anomalous_honeybee");
 
             SaccadicTarget target = new SaccadicTarget(
                     eventId,

@@ -92,18 +92,37 @@ public class EventService {
                 item.put("pixelDiffBaseline", 0.0142);
                 item.put("horizonDeltaFrames", 60);
 
-                // Real entrance board hotspot coordinates (centered on flight board traffic
-                // cluster)
-                int gridX = 4;
-                int gridY = 2;
-                double normCenterX = 0.58 + ((Math.abs(eventId.hashCode()) % 7) - 3) * 0.015;
-                double normCenterY = 0.40;
-                int boxW = 140;
-                int boxH = 90;
-                int xPx = (int) (normCenterX * 540);
-                int yPx = (int) (normCenterY * 960);
-                int[] boxPx = new int[] { yPx - boxH / 2, xPx - boxW / 2, yPx + boxH / 2, xPx + boxW / 2 };
+                // Real V-JEPA 43x43 native grid hotspot measured from event_frames/<event_id>.jpg
+                // (accounting for the 35px top caption header bar in the 1080x960 frame)
+                Map<String, Object> rawHotspot = ev.get("hotspot") instanceof Map<?, ?> m
+                        ? (Map<String, Object>) m
+                        : null;
+                int gridX = rawHotspot != null && rawHotspot.get("grid_x") instanceof Number n ? n.intValue() : 20;
+                int gridY = rawHotspot != null && rawHotspot.get("grid_y") instanceof Number n ? n.intValue() : 18;
+                double normCenterX = rawHotspot != null && rawHotspot.get("norm_center_x") instanceof Number n
+                        ? n.doubleValue()
+                        : 246.0 / 540.0;
+                double normCenterY = rawHotspot != null && rawHotspot.get("norm_center_y") instanceof Number n
+                        ? n.doubleValue()
+                        : 419.0 / 960.0;
+                int xPx = (int) Math.round(normCenterX * 540);
+                int yPx = (int) Math.round(normCenterY * 960);
+                int[] boxPx;
+                if (rawHotspot != null && rawHotspot.get("box_px") instanceof List<?> list && list.size() == 4) {
+                    boxPx = new int[] {
+                            ((Number) list.get(0)).intValue(),
+                            ((Number) list.get(1)).intValue(),
+                            ((Number) list.get(2)).intValue(),
+                            ((Number) list.get(3)).intValue()
+                    };
+                } else {
+                    int r = 68;
+                    boxPx = new int[] { Math.max(35, yPx - r), Math.max(0, xPx - r), Math.min(960, yPx + r), Math.min(540, xPx + r) };
+                }
                 item.put("hotspot", new AnomalyEvent.Hotspot(gridX, gridY, normCenterX, normCenterY, boxPx));
+                if (rawHotspot != null && rawHotspot.get("active_cells") instanceof Number n) {
+                    item.put("activeCells", n.intValue());
+                }
 
                 // Check cached agent analysis
                 Path cachedResultFile = resultsDir.resolve(eventId + ".json");

@@ -134,19 +134,19 @@ const saccadicReticleStyle = computed(() => {
   if (!selectedEvent.value?.hotspot) return null
   const normX = activeSaccade.value
     ? (activeSaccade.value.focusCenterX / 540)
-    : Number(selectedEvent.value.hotspot.normCenterX || 0.58)
+    : Number(selectedEvent.value.hotspot.normCenterX || 0.456)
+  // focusCenterY and normCenterY already account for the 35px top black header bar in the 1080x960 frame
   const normY = activeSaccade.value
     ? (activeSaccade.value.focusCenterY / 960)
-    : Number(selectedEvent.value.hotspot.normCenterY || 0.40)
+    : Number(selectedEvent.value.hotspot.normCenterY || 0.436)
 
-  // In side-by-side mode, camera feed is on the left half (0..50% width)
-  const isSideBySide = activeView.value === 'comparison'
-  const leftPct = isSideBySide ? (normX * 50) : (normX * 100)
-  const topPct = normY * 100
+  // All 1080x960 event media (sequence, raw clip, peak frame) have the camera panel on the left half (0..50% width)
+  const leftPct = normX * 50
+  const topPct = Math.max(35 / 960, normY) * 100
 
   return {
-    left: `${leftPct.toFixed(1)}%`,
-    top: `${topPct.toFixed(1)}%`
+    left: `${leftPct.toFixed(2)}%`,
+    top: `${topPct.toFixed(2)}%`
   }
 })
 
@@ -773,19 +773,29 @@ const activeMediaSource = computed(() => {
   return ''
 })
 
-// Hotspot Bounding Box style in percentage
+// Hotspot Bounding Box style in percentage of the 1080x960 (9:8) frame
 const hotspotBoxStyle = computed(() => {
   if (!selectedEvent.value?.hotspot) return {}
   const hs = selectedEvent.value.hotspot
-  const cx = hs.normCenterX * 100
-  const cy = hs.normCenterY * 100
-  const w = 16
-  const h = 16
+  const box = hs.boundingBoxPx || hs.boxPx
+  if (Array.isArray(box) && box.length === 4) {
+    const [y1, x1, y2, x2] = box.map(Number)
+    return {
+      left: `${((x1 / 1080) * 100).toFixed(2)}%`,
+      top: `${((Math.max(35, y1) / 960) * 100).toFixed(2)}%`,
+      width: `${(((x2 - x1) / 1080) * 100).toFixed(2)}%`,
+      height: `${(((y2 - Math.max(35, y1)) / 960) * 100).toFixed(2)}%`
+    }
+  }
+  const cx = Number(hs.normCenterX || 0.456) * 50
+  const cy = Number(hs.normCenterY || 0.436) * 100
+  const w = (160 / 1080) * 100
+  const h = (108 / 960) * 100
   return {
-    left: `${Math.max(0, Math.min(100 - w, cx - w / 2)).toFixed(1)}%`,
-    top: `${Math.max(0, Math.min(100 - h, cy - h / 2)).toFixed(1)}%`,
-    width: `${w}%`,
-    height: `${h}%`
+    left: `${Math.max(0, Math.min(50 - w, cx - w / 2)).toFixed(2)}%`,
+    top: `${Math.max((35 / 960) * 100, Math.min(100 - h, cy - h / 2)).toFixed(2)}%`,
+    width: `${w.toFixed(2)}%`,
+    height: `${h.toFixed(2)}%`
   }
 })
 
@@ -1186,34 +1196,58 @@ async function handleLogout() {
           </div>
 
           <!-- Video / Frame Canvas -->
-          <div class="relative w-full aspect-[4/3] sm:aspect-video lg:aspect-auto lg:flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[240px] sm:min-h-[300px]">
-            <!-- Video Mode: Sequence Stream or Event Clip -->
-            <video
-              v-if="activeView !== 'sam' && activeMediaSource"
-              ref="videoPlayer"
-              :src="activeMediaSource"
-              @loadedmetadata="onVideoLoaded"
-              @timeupdate="onVideoTimeUpdate"
-              @ended="onVideoEnded"
-              @click="toggleVideoPlayPause"
-              autoplay
-              :loop="activeView === 'raw'"
-              muted
-              playsinline
-              controls
-              class="w-full h-full object-contain cursor-pointer"
-            ></video>
+          <div class="relative w-full aspect-[9/8] sm:aspect-video lg:aspect-auto lg:flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[240px] sm:min-h-[300px]">
+            <!-- Aspect-locked 1080x960 (9:8) stage so Fovea & SAM overlays align pixel-accurately with the video/frame -->
+            <div v-if="(activeView !== 'sam' && activeMediaSource) || (activeView === 'sam' && peakFrameUrl)" class="relative aspect-[9/8] max-h-full max-w-full flex items-center justify-center">
+              <!-- Video Mode: Sequence Stream or Event Clip -->
+              <video
+                v-if="activeView !== 'sam' && activeMediaSource"
+                ref="videoPlayer"
+                :src="activeMediaSource"
+                @loadedmetadata="onVideoLoaded"
+                @timeupdate="onVideoTimeUpdate"
+                @ended="onVideoEnded"
+                @click="toggleVideoPlayPause"
+                autoplay
+                :loop="activeView === 'raw'"
+                muted
+                playsinline
+                controls
+                class="w-full h-full block cursor-pointer"
+              ></video>
 
-            <!-- SAM 3.1 Peak Frame Mode -->
-            <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative w-full h-full flex items-center justify-center">
-              <img :src="peakFrameUrl" alt="SAM Peak Frame" class="w-full h-full object-contain" />
-              <!-- Hotspot Bounding Box Overlay -->
+              <!-- SAM 3.1 Peak Frame Mode -->
+              <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative w-full h-full flex items-center justify-center">
+                <img :src="peakFrameUrl" alt="SAM Peak Frame" class="w-full h-full block" />
+                <!-- Hotspot Bounding Box Overlay -->
+                <div
+                  class="absolute border-2 border-honey-400 bg-honey-400/20 rounded shadow-lg pointer-events-none animate-pulse"
+                  :style="hotspotBoxStyle"
+                >
+                  <div class="absolute -top-5 left-0 bg-honey-500 text-ink-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap">
+                    SAM 3.1 Box Prompt
+                  </div>
+                </div>
+              </div>
+
+              <!-- Saccadic Reticle HUD (Visual Raptor Crosshairs & Foveal Focus - Only at Peak) -->
               <div
-                class="absolute border-2 border-honey-400 bg-honey-400/20 rounded shadow-lg pointer-events-none animate-pulse"
-                :style="hotspotBoxStyle"
+                v-if="selectedEvent && saccadicReticleStyle && isNearPeakAnomaly"
+                class="absolute pointer-events-none transition-all duration-300 ease-out z-20"
+                :style="saccadicReticleStyle"
               >
-                <div class="absolute -top-5 left-0 bg-honey-500 text-ink-950 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap">
-                  SAM 3.1 Box Prompt
+                <!-- Outer Foveal Focus Ring -->
+                <div class="relative -translate-x-1/2 -translate-y-1/2">
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-electric-400/60 bg-electric-500/10 shadow-[0_0_15px_rgba(119,183,254,0.28)] flex items-center justify-center animate-pulse">
+                    <!-- Inner Precision Crosshairs -->
+                    <div class="w-2.5 h-2.5 rounded-full border border-electric-300 bg-electric-400/40"></div>
+                    <div class="absolute w-full h-[1px] bg-electric-400/40"></div>
+                    <div class="absolute h-full w-[1px] bg-electric-400/40"></div>
+                  </div>
+                  <!-- Saccade Telemetry Badge -->
+                  <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-ink-950/85 backdrop-blur border border-electric-500/40 rounded text-[9px] font-mono text-electric-300 whitespace-nowrap shadow-md">
+                    FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 960) }}] · GRID [{{ selectedEvent.hotspot.tubeletGridX }}, {{ selectedEvent.hotspot.tubeletGridY }}]
+                  </div>
                 </div>
               </div>
             </div>
@@ -1224,27 +1258,6 @@ async function handleLogout() {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <p class="text-xs font-mono">No event media available.</p>
-            </div>
-
-            <!-- Saccadic Reticle HUD (Visual Raptor Crosshairs & Foveal Focus - Only at Peak) -->
-            <div
-              v-if="selectedEvent && saccadicReticleStyle && isNearPeakAnomaly"
-              class="absolute pointer-events-none transition-all duration-300 ease-out z-20"
-              :style="saccadicReticleStyle"
-            >
-              <!-- Outer Foveal Focus Ring -->
-              <div class="relative -translate-x-1/2 -translate-y-1/2">
-                <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-electric-400/60 bg-electric-500/10 shadow-[0_0_15px_rgba(119,183,254,0.28)] flex items-center justify-center animate-pulse">
-                  <!-- Inner Precision Crosshairs -->
-                  <div class="w-2.5 h-2.5 rounded-full border border-electric-300 bg-electric-400/40"></div>
-                  <div class="absolute w-full h-[1px] bg-electric-400/40"></div>
-                  <div class="absolute h-full w-[1px] bg-electric-400/40"></div>
-                </div>
-                <!-- Saccade Telemetry Badge -->
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-ink-950/85 backdrop-blur border border-electric-500/40 rounded text-[9px] font-mono text-electric-300 whitespace-nowrap shadow-md">
-                  FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 960) }}]
-                </div>
-              </div>
             </div>
           </div>
         </div>

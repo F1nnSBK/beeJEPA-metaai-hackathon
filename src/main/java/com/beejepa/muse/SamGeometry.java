@@ -7,6 +7,9 @@ import java.util.List;
 public final class SamGeometry {
 
     public static final int FRAME_SIZE = 688;
+    public static final int HEADER_HEIGHT_PX = 35;
+    public static final int PANEL_WIDTH_PX = 540;
+    public static final int FULL_FRAME_HEIGHT_PX = 960;
     public static final int LEFT_PANEL_MAX_X = 535;
     public static final int BOARD_MIN_Y = 372;
     public static final int BOARD_MAX_Y = 518;
@@ -62,13 +65,14 @@ public final class SamGeometry {
     }
 
     public static BoundingBox hotspotFromNormCenter(double normCenterX, double normCenterY, int imageWidth, int imageHeight) {
-        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * FRAME_SIZE), 180, 410) : 315;
-        int cy = 426;
+        int panelW = imageWidth >= 1080 ? PANEL_WIDTH_PX : imageWidth;
+        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * panelW), 60, panelW - 60) : 315;
+        int cy = (normCenterY > 0.01) ? Math.clamp((int) Math.round(normCenterY * imageHeight), HEADER_HEIGHT_PX + 54, imageHeight - 54) : 426;
         int halfW = 80;
         int halfH = 54;
         int x1 = Math.max(0, cx - halfW);
-        int y1 = Math.max(0, cy - halfH);
-        int x2 = Math.min(imageWidth, cx + halfW);
+        int y1 = Math.max(HEADER_HEIGHT_PX, cy - halfH);
+        int x2 = Math.min(panelW, cx + halfW);
         int y2 = Math.min(imageHeight, cy + halfH);
         return new BoundingBox(x1, y1, x2, y2);
     }

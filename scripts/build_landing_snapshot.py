@@ -86,12 +86,16 @@ def normalize_for_display(heat: np.ndarray) -> np.ndarray:
     return np.clip(heat / reference, 0.0, 1.0)
 
 
-def describe_attention(heat: np.ndarray) -> dict:
+def describe_attention(heat: np.ndarray, focus_event: dict) -> dict:
     rows, cols = np.indices(heat.shape)
     total = float(heat.sum())
     centroid_x = float((cols * heat).sum() / total)
     centroid_y = float((rows * heat).sum() / total)
-    peak_y, peak_x = np.unravel_index(int(np.argmax(heat)), heat.shape)
+    hs = focus_event.get("hotspot")
+    if hs and "panel_x" in hs and "panel_y" in hs:
+        peak_x, peak_y = int(hs["panel_x"]), int(hs["panel_y"])
+    else:
+        peak_y, peak_x = np.unravel_index(int(np.argmax(heat)), heat.shape)
     return {
         "centroid": [round(centroid_x, 1), round(centroid_y, 1)],
         "peak": [int(peak_x), int(peak_y)],
@@ -172,7 +176,7 @@ def build_snapshot() -> dict:
             "frame": {"width": geometry.panel_width, "height": geometry.panel_height},
             "samBoxes": shift_boxes_into_panel(sam_summary, geometry),
             "boardBoxes": shift_board_boxes_into_panel(sam_summary, geometry),
-            "attention": describe_attention(heat),
+            "attention": describe_attention(heat, focus_event),
         },
         "muse": {
             "model": "meta-models/muse-spark-open-1026",

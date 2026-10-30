@@ -11,6 +11,7 @@ import {
   Vector3,
   WebGLRenderer
 } from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { ACT } from '../story.js'
 import { BeeSwarm } from './BeeSwarm.js'
 import { CameraDirector } from './CameraDirector.js'
@@ -45,15 +46,17 @@ async function loadTexture(loader, url, colorSpace) {
  */
 export class HiveScene {
   static async create({ canvas, snapshot, quality, assetBaseUrl }) {
-    const loader = new TextureLoader()
-    const [frameTexture, attentionTexture] = await Promise.all([
-      loadTexture(loader, `${assetBaseUrl}/keyframe.webp`, SRGBColorSpace),
-      loadTexture(loader, `${assetBaseUrl}/attention.png`, NoColorSpace)
+    const textureLoader = new TextureLoader()
+    const gltfLoader = new GLTFLoader()
+    const [frameTexture, attentionTexture, beeGltf] = await Promise.all([
+      loadTexture(textureLoader, `${assetBaseUrl}/keyframe.webp`, SRGBColorSpace),
+      loadTexture(textureLoader, `${assetBaseUrl}/attention.png`, NoColorSpace),
+      gltfLoader.loadAsync(`${assetBaseUrl}/bee.glb`)
     ])
-    return new HiveScene({ canvas, snapshot, quality, frameTexture, attentionTexture })
+    return new HiveScene({ canvas, snapshot, quality, frameTexture, attentionTexture, beeScene: beeGltf.scene })
   }
 
-  constructor({ canvas, snapshot, quality, frameTexture, attentionTexture }) {
+  constructor({ canvas, snapshot, quality, frameTexture, attentionTexture, beeScene }) {
     this.canvas = canvas
     this.quality = quality
     this.textures = [frameTexture, attentionTexture]
@@ -71,13 +74,13 @@ export class HiveScene {
 
     this.scene = new Scene()
     this.scene.fog = new FogExp2(PALETTE.propolis, FOG_DENSITY)
-    this.scene.add(new HemisphereLight(new Color(PALETTE.wax), new Color(PALETTE.propolis), 0.55))
-    const morningSun = new DirectionalLight(new Color(PALETTE.honey), 2.2)
+    this.scene.add(new HemisphereLight(new Color(PALETTE.wax), new Color(PALETTE.propolis), 0.95))
+    const morningSun = new DirectionalLight(new Color(PALETTE.honey), 2.6)
     morningSun.position.set(-8, 4, 6)
     this.scene.add(morningSun)
 
     this.camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.01, 100)
-    this.buildWorld(snapshot, frameTexture, attentionTexture)
+    this.buildWorld(snapshot, frameTexture, attentionTexture, beeScene)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(canvas)
@@ -86,7 +89,7 @@ export class HiveScene {
     this.resize()
   }
 
-  buildWorld(snapshot, frameTexture, attentionTexture) {
+  buildWorld(snapshot, frameTexture, attentionTexture, beeScene) {
     const space = new TimelineSpace(snapshot.source, snapshot.timeline)
     const focusEvent = snapshot.events.find((event) => event.id === snapshot.focus.eventId)
 
@@ -103,7 +106,7 @@ export class HiveScene {
         STAGE_DEPTH_OFFSET
       )
     })
-    this.swarm = new BeeSwarm(this.stage)
+    this.swarm = new BeeSwarm(this.stage, beeScene)
     this.director = new CameraDirector({
       camera: this.camera,
       space,
