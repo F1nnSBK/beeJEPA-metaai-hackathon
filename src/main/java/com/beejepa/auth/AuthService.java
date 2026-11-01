@@ -82,6 +82,8 @@ public class AuthService {
         repository.updateBeekeeperLoginTime(user.id());
         String token = "bk_session_" + UUID.randomUUID().toString().replace("-", "");
         activeSessions.put(token, user.username());
+        Instant now = Instant.now();
+        repository.saveSession(token, user.id(), user.username(), user.role(), now, now.plusSeconds(7 * 24 * 3600));
 
         LOG.info("Beekeeper '{}' successfully authenticated.", user.username());
         return new AuthResponse(true, "Authentication successful", token, user.username(), user.role());
@@ -90,7 +92,15 @@ public class AuthService {
     public Optional<BeekeeperUser> validateSession(String token) {
         if (token == null) return Optional.empty();
         String cleanToken = token.startsWith("Bearer ") ? token.substring(7).trim() : token.trim();
+        if (cleanToken.isBlank()) return Optional.empty();
         String username = activeSessions.get(cleanToken);
+        if (username == null) {
+            Optional<String> dbUser = repository.findSessionUsername(cleanToken);
+            if (dbUser.isPresent()) {
+                username = dbUser.get();
+                activeSessions.put(cleanToken, username);
+            }
+        }
         if (username == null) return Optional.empty();
         return repository.findBeekeeperByUsername(username);
     }
@@ -99,6 +109,7 @@ public class AuthService {
         if (token != null) {
             String cleanToken = token.startsWith("Bearer ") ? token.substring(7).trim() : token.trim();
             activeSessions.remove(cleanToken);
+            repository.deleteSession(cleanToken);
         }
     }
 

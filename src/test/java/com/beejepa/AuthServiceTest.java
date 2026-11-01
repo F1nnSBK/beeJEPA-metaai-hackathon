@@ -3,6 +3,7 @@ package com.beejepa;
 import com.beejepa.auth.AuthService;
 import com.beejepa.auth.BeekeeperUser;
 import com.beejepa.auth.PasswordHasher;
+import com.beejepa.state.StateRepository;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
@@ -18,6 +19,9 @@ class AuthServiceTest {
 
     @Inject
     PasswordHasher passwordHasher;
+
+    @Inject
+    StateRepository stateRepository;
 
     @Test
     void testPasswordHasherGeneratesSaltedHash() {
@@ -50,5 +54,17 @@ class AuthServiceTest {
         // Wrong password fails
         AuthService.AuthResponse failRes = authService.authenticate("beekeeper", "invalid_password");
         Assertions.assertFalse(failRes.success());
+
+        // Session persists in SQLite across a fresh AuthService instance (simulating server restart)
+        AuthService restartedService = new AuthService(stateRepository, passwordHasher);
+        Optional<BeekeeperUser> restoredUser = restartedService.validateSession(res.token());
+        Assertions.assertTrue(restoredUser.isPresent());
+        Assertions.assertEquals("beekeeper", restoredUser.get().username());
+
+        // Logout removes session from both memory and SQLite
+        restartedService.logout(res.token());
+        Assertions.assertTrue(restartedService.validateSession(res.token()).isEmpty());
+        AuthService thirdService = new AuthService(stateRepository, passwordHasher);
+        Assertions.assertTrue(thirdService.validateSession(res.token()).isEmpty());
     }
 }

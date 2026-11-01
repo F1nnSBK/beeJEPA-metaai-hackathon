@@ -15,7 +15,7 @@ public class BasetenConfig {
     private String baseUrl = "https://inference.baseten.co/v1";
     private String model = "meta-models/muse-spark-open-1026";
     private Duration timeout = Duration.ofSeconds(30);
-    private boolean allowInferenceCalls = false;
+    private boolean allowInferenceCalls = true;
     private String systemPrompt = "";
 
     public String getSystemPrompt() {

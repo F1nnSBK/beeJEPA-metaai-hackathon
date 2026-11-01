@@ -104,7 +104,8 @@ def describe_attention(heat: np.ndarray, focus_event: dict) -> dict:
 
 
 def extract_muse_statement(muse_cache: dict) -> str:
-    report = muse_cache["default"]
+    report = re.sub(r"(?is)<spoken>.*?</spoken>", "", muse_cache["default"])
+    report = re.sub(r"(?is)</?report>", "", report)
     takeaway = report.split("### Beekeeper Takeaway", maxsplit=1)[1].strip()
     sentences = re.split(r"(?<=\.)\s+", takeaway)
     selected = [s for s in sentences if s.startswith("Zero") or s.startswith("No beekeeper")]

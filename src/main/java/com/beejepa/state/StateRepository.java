@@ -31,6 +31,7 @@ public class StateRepository {
 
     private final StorageService storageService;
     private final StorageConfig storageConfig;
+    private final java.util.concurrent.locks.ReentrantLock writeLock = new java.util.concurrent.locks.ReentrantLock(true);
     private String jdbcUrl;
 
     public StateRepository(StorageService storageService, StorageConfig storageConfig) {
@@ -112,6 +113,18 @@ public class StateRepository {
                     );
                     """);
 
+            // Persistent Beekeeper Sessions table (survives JVM restart)
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS beekeeper_sessions (
+                        token TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    );
+                    """);
+
             LOG.info("SQLite database schema verified successfully on SSD.");
         } catch (SQLException e) {
             LOG.error("Failed to initialize SQLite database: {}", e.getMessage(), e);
@@ -120,7 +133,16 @@ public class StateRepository {
     }
 
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(jdbcUrl);
+        Connection conn = DriverManager.getConnection(jdbcUrl);
+        int busyTimeout = (storageConfig != null && storageConfig.getSqlite() != null)
+                ? storageConfig.getSqlite().getBusyTimeoutMs()
+                : 5000;
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA busy_timeout=" + busyTimeout + ";");
+            stmt.execute("PRAGMA synchronous=NORMAL;");
+            stmt.execute("PRAGMA foreign_keys=ON;");
+        }
+        return conn;
     }
 
     // ---------------- System State (Key-Value) ----------------
@@ -133,6 +155,7 @@ public class StateRepository {
                     state_value = excluded.state_value,
                     updated_at = excluded.updated_at;
                 """;
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, key);
             ps.setString(2, value);
@@ -141,6 +164,8 @@ public class StateRepository {
         } catch (SQLException e) {
             LOG.error("Error setting state for key {}: {}", key, e.getMessage());
             throw new RuntimeException(e);
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -195,6 +220,7 @@ public class StateRepository {
                     details = excluded.details,
                     updated_at = excluded.updated_at;
                 """;
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, run.id());
             ps.setString(2, run.taskType());
@@ -206,6 +232,8 @@ public class StateRepository {
         } catch (SQLException e) {
             LOG.error("Error saving run {}: {}", run.id(), e.getMessage());
             throw new RuntimeException(e);
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -240,6 +268,7 @@ public class StateRepository {
                 INSERT INTO muse_logs (id, endpoint, request_summary, status_code, latency_ms, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """;
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, entry.id());
             ps.setString(2, entry.endpoint());
@@ -250,6 +279,8 @@ public class StateRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.warn("Failed to log Muse API call {}: {}", entry.id(), e.getMessage());
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -314,6 +345,7 @@ public class StateRepository {
                     role = excluded.role,
                     last_login_at = excluded.last_login_at;
                 """;
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, user.id());
             ps.setString(2, user.username());
@@ -326,17 +358,76 @@ public class StateRepository {
         } catch (SQLException e) {
             LOG.error("Error saving beekeeper {}: {}", user.username(), e.getMessage());
             throw new RuntimeException(e);
+        } finally {
+            writeLock.unlock();
         }
     }
 
     public void updateBeekeeperLoginTime(String userId) {
         String sql = "UPDATE beekeepers SET last_login_at = ? WHERE id = ?";
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, Instant.now().toString());
             ps.setString(2, userId);
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.warn("Failed to update last login for {}: {}", userId, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public void saveSession(String token, String userId, String username, String role, Instant createdAt, Instant expiresAt) {
+        String sql = """
+                INSERT INTO beekeeper_sessions (token, user_id, username, role, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(token) DO UPDATE SET
+                    expires_at = excluded.expires_at;
+                """;
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, token);
+            ps.setString(2, userId);
+            ps.setString(3, username);
+            ps.setString(4, role);
+            ps.setString(5, createdAt.toString());
+            ps.setString(6, expiresAt.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to persist session for {}: {}", username, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public Optional<String> findSessionUsername(String token) {
+        String sql = "SELECT username, expires_at FROM beekeeper_sessions WHERE token = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, token);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                    if (Instant.now().isBefore(expiresAt)) {
+                        return Optional.of(rs.getString("username"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error querying session token: {}", e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public void deleteSession(String token) {
+        String sql = "DELETE FROM beekeeper_sessions WHERE token = ?";
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, token);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to delete session token: {}", e.getMessage());
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -359,6 +450,7 @@ public class StateRepository {
                 INSERT INTO telemetry_logs (id, platform, method, uri, status_code, duration_ms, client_ip, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
+        writeLock.lock();
         try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, entry.id());
             ps.setString(2, entry.platform());
@@ -371,6 +463,8 @@ public class StateRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.warn("Failed to save telemetry entry: {}", e.getMessage());
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -401,7 +495,7 @@ public class StateRepository {
 
     public List<TelemetryEntry> getAllTelemetry() {
         List<TelemetryEntry> list = new ArrayList<>();
-        String sql = "SELECT id, platform, method, uri, status_code, duration_ms, client_ip, timestamp FROM telemetry_logs ORDER BY timestamp ASC";
+        String sql = "SELECT id, platform, method, uri, status_code, duration_ms, client_ip, timestamp FROM telemetry_logs ORDER BY timestamp DESC LIMIT 5000";
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 list.add(new TelemetryEntry(

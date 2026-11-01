@@ -38,6 +38,7 @@ public class MuseController {
     private final EventService eventService;
     private final StateRepository stateRepository;
 
+    @jakarta.inject.Inject
     public MuseController(MetaMuseService museService,
                           BeeAcousticSynthesizer acousticSynthesizer,
                           AudioSpectralAnalyzer spectralAnalyzer,
@@ -94,18 +95,21 @@ public class MuseController {
     @Get("/status")
     public Map<String, Object> getStatus() {
         com.beejepa.muse.dto.MetaHealthCheckResult health = museService.checkHealth();
-        return Map.of(
-                "configured", health.configured(),
-                "liveConnection", health.liveConnection(),
-                "baseUrl", health.baseUrl(),
-                "status", health.status(),
-                "statusCode", health.statusCode(),
-                "latencyMs", health.latencyMs(),
-                "availableModels", health.availableModels(),
-                "creditsConsumed", 0,
-                "message", health.message(),
-                "thread", Thread.currentThread().toString()
-        );
+        Map<String, Object> statusMap = new LinkedHashMap<>();
+        statusMap.put("configured", health.configured());
+        statusMap.put("liveConnection", health.liveConnection());
+        statusMap.put("baseUrl", health.baseUrl());
+        statusMap.put("status", health.status());
+        statusMap.put("statusCode", health.statusCode());
+        statusMap.put("latencyMs", health.latencyMs());
+        statusMap.put("availableModels", health.availableModels());
+        statusMap.put("creditsConsumed", 0);
+        statusMap.put("message", health.message());
+        statusMap.put("thread", Thread.currentThread().toString());
+        if (museService.getResilientExecutor() != null) {
+            statusMap.put("resilience", museService.getResilientExecutor().getResilienceMetrics());
+        }
+        return statusMap;
     }
 
     @Get(value = "/voice", produces = "audio/wav")
@@ -146,31 +150,55 @@ public class MuseController {
         Path ttsFile = cacheDir.resolve("tts_" + hash + ".mp3");
 
         if (!Files.exists(ttsFile)) {
+            Path tmpFile = cacheDir.resolve("tts_" + hash + ".mp3.tmp");
             try {
                 Files.createDirectories(cacheDir);
                 String edgeTtsBin = "./.venv/bin/edge-tts";
                 if (!Files.exists(Path.of(".venv", "bin", "edge-tts"))) {
                     edgeTtsBin = "edge-tts";
                 }
-                ProcessBuilder pb = new ProcessBuilder(
-                        edgeTtsBin,
-                        "--voice", "en-US-AvaNeural",
-                        "--text", spokenText,
-                        "--write-media", ttsFile.toAbsolutePath().toString()
-                );
-                pb.redirectErrorStream(true);
-                Process proc = pb.start();
-                boolean finished = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-                if (!finished || proc.exitValue() != 0) {
-                    LOG.warn("edge-tts Process failed or timed out. exitValue={}", finished ? proc.exitValue() : "timeout");
+                for (int attempt = 1; attempt <= 2; attempt++) {
+                    Files.deleteIfExists(tmpFile);
+                    ProcessBuilder pb = new ProcessBuilder(
+                            edgeTtsBin,
+                            "--voice", "en-US-AvaNeural",
+                            "--text", spokenText,
+                            "--write-media", tmpFile.toAbsolutePath().toString()
+                    );
+                    pb.redirectErrorStream(true);
+                    Process proc = pb.start();
+                    boolean finished = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+                    if (!finished) {
+                        proc.destroyForcibly();
+                    }
+                    if (finished && proc.exitValue() == 0 && Files.exists(tmpFile) && Files.size(tmpFile) > 512) {
+                        try {
+                            Files.move(tmpFile, ttsFile,
+                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                        } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
+                            Files.move(tmpFile, ttsFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        break;
+                    }
+                    LOG.warn("edge-tts attempt {}/2 failed or produced invalid file. finished={}", attempt, finished);
                 }
+                Files.deleteIfExists(tmpFile);
             } catch (Exception e) {
                 LOG.error("Failed to generate TTS via edge-tts ProcessBuilder: {}", e.getMessage(), e);
+                try {
+                    Files.deleteIfExists(tmpFile);
+                } catch (Exception ignored) {
+                }
             }
         }
 
         if (Files.exists(ttsFile)) {
             try {
+                if (Files.size(ttsFile) <= 512) {
+                    Files.deleteIfExists(ttsFile);
+                    return HttpResponse.notFound();
+                }
                 byte[] audioBytes = Files.readAllBytes(ttsFile);
                 return HttpResponse.ok(audioBytes)
                         .header("Content-Type", "audio/mpeg")
@@ -321,9 +349,13 @@ public class MuseController {
             }
         }
 
+        boolean forceLive = payload != null && ("true".equalsIgnoreCase(String.valueOf(payload.get("forceLive")))
+                || Boolean.TRUE.equals(payload.get("forceLive")));
+        MetaMuseService.MuseAnswerResult answerResult = museService.answerBeekeeperQuestionWithMeta(
+                question, topEvents, maxEventsToTake, forceLive);
         List<SamGeometry.EventSpatialSummary> summaries = museService.analyzeEventsInParallel(topEvents);
-        String reportMarkdown = museService.answerBeekeeperQuestion(question, topEvents, 3);
-        String spokenSummary = MetaMuseService.extractSpokenSummary(reportMarkdown);
+        String reportMarkdown = answerResult.reportMarkdown();
+        String spokenSummary = answerResult.spokenSummary();
 
         long latency = System.currentTimeMillis() - startTime;
         if (stateRepository != null) {
@@ -337,19 +369,25 @@ public class MuseController {
             ));
         }
 
-        return HttpResponse.ok(Map.of(
-                "question", question,
-                "report", reportMarkdown,
-                "spokenSummary", spokenSummary,
-                "events", summaries,
-                "offlineLocked", !museService.isAllowLiveInference(),
-                "telemetry", Map.of(
-                        "logId", logId,
-                        "latencyMs", latency,
-                        "eventCount", summaries.size(),
-                        "offlineLocked", !museService.isAllowLiveInference()
-                )
-        ));
+        Map<String, Object> telemetry = new LinkedHashMap<>();
+        telemetry.put("logId", logId);
+        telemetry.put("latencyMs", latency);
+        telemetry.put("eventCount", summaries.size());
+        telemetry.put("offlineLocked", !museService.isAllowLiveInference());
+        telemetry.put("sourceMode", answerResult.sourceMode());
+        telemetry.put("degradedFallback", answerResult.degradedFallback());
+
+        Map<String, Object> responseMap = new LinkedHashMap<>();
+        responseMap.put("question", question);
+        responseMap.put("report", reportMarkdown);
+        responseMap.put("spokenSummary", spokenSummary);
+        responseMap.put("events", summaries);
+        responseMap.put("offlineLocked", !museService.isAllowLiveInference());
+        responseMap.put("sourceMode", answerResult.sourceMode());
+        responseMap.put("degradedFallback", answerResult.degradedFallback());
+        responseMap.put("telemetry", telemetry);
+
+        return HttpResponse.ok(responseMap);
     }
 }
 

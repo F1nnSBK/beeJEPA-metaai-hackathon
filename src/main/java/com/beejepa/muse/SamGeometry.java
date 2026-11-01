@@ -48,9 +48,37 @@ public final class SamGeometry {
             int beesInsideHotspotCount,
             String geometricPreClassification,
             List<ContainedBee> containedBees,
+            List<List<Integer>> boardBees,
             String frameBase64,
             String cropBase64
-    ) {}
+    ) {
+        public EventSpatialSummary(
+                String eventId,
+                String timestamp,
+                double surpriseScoreSigma,
+                String severity,
+                int landingBoardBeeCount,
+                int beesInsideHotspotCount,
+                String geometricPreClassification,
+                List<ContainedBee> containedBees,
+                String frameBase64,
+                String cropBase64
+        ) {
+            this(
+                    eventId,
+                    timestamp,
+                    surpriseScoreSigma,
+                    severity,
+                    landingBoardBeeCount,
+                    beesInsideHotspotCount,
+                    geometricPreClassification,
+                    containedBees,
+                    containedBees != null ? containedBees.stream().map(ContainedBee::box).toList() : List.of(),
+                    frameBase64,
+                    cropBase64
+            );
+        }
+    }
 
     public static BoundingBox defaultEntranceHotspot() {
         int cx = 315;
@@ -64,16 +92,41 @@ public final class SamGeometry {
         return hotspotFromNormCenter(normCenterX, normCenterY, FRAME_SIZE, FRAME_SIZE);
     }
 
+    /**
+     * Converts normalized V-JEPA center coordinates (normCenterX in [0..1] of PANEL_WIDTH_PX=540,
+     * normCenterY in [0..1] of FULL_FRAME_HEIGHT_PX=960) into pixel coordinates on the top-left camera panel.
+     */
     public static BoundingBox hotspotFromNormCenter(double normCenterX, double normCenterY, int imageWidth, int imageHeight) {
-        int panelW = imageWidth >= 1080 ? PANEL_WIDTH_PX : imageWidth;
-        int cx = (normCenterX > 0.01) ? Math.clamp((int) Math.round(normCenterX * panelW), 60, panelW - 60) : 315;
-        int cy = (normCenterY > 0.01) ? Math.clamp((int) Math.round(normCenterY * imageHeight), HEADER_HEIGHT_PX + 54, imageHeight - 54) : 426;
-        int halfW = 80;
-        int halfH = 54;
+        int maxW = Math.min(PANEL_WIDTH_PX, imageWidth > 0 ? imageWidth : FRAME_SIZE);
+        int maxH = imageHeight > 0 ? imageHeight : FRAME_SIZE;
+        int cx = (normCenterX > 0.01)
+                ? Math.clamp((int) Math.round(normCenterX * PANEL_WIDTH_PX), 60, maxW - 60)
+                : 315;
+        int cy = (normCenterY > 0.01)
+                ? Math.clamp((int) Math.round(normCenterY * FULL_FRAME_HEIGHT_PX), HEADER_HEIGHT_PX + 54, maxH - 54)
+                : 426;
+        int halfW = 68;
+        int halfH = 68;
         int x1 = Math.max(0, cx - halfW);
         int y1 = Math.max(HEADER_HEIGHT_PX, cy - halfH);
-        int x2 = Math.min(panelW, cx + halfW);
-        int y2 = Math.min(imageHeight, cy + halfH);
+        int x2 = Math.min(maxW, cx + halfW);
+        int y2 = Math.min(maxH, cy + halfH);
+        return new BoundingBox(x1, y1, x2, y2);
+    }
+
+    /**
+     * Converts manifest.json box_px [ymin, xmin, ymax, xmax] into BoundingBox(x1, y1, x2, y2).
+     */
+    public static BoundingBox fromManifestBoxPx(int[] boxPx, int imageWidth, int imageHeight) {
+        if (boxPx == null || boxPx.length < 4) {
+            return defaultEntranceHotspot();
+        }
+        int maxW = Math.min(PANEL_WIDTH_PX, imageWidth > 0 ? imageWidth : FRAME_SIZE);
+        int maxH = imageHeight > 0 ? imageHeight : FRAME_SIZE;
+        int y1 = Math.clamp(boxPx[0], HEADER_HEIGHT_PX, maxH - 10);
+        int x1 = Math.clamp(boxPx[1], 0, maxW - 10);
+        int y2 = Math.clamp(boxPx[2], y1 + 10, maxH);
+        int x2 = Math.clamp(boxPx[3], x1 + 10, maxW);
         return new BoundingBox(x1, y1, x2, y2);
     }
 

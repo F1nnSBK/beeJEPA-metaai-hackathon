@@ -1,126 +1,66 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, defineAsyncComponent } from 'vue'
 import beeLogo from './assets/bee.png'
+import { apiFetch } from './api/client.js'
+import { useHiveStore } from './state/useHiveStore.js'
 
 // The landing page carries three.js; loading it lazily keeps the dashboard bundle lean.
 const LandingPage = defineAsyncComponent(() => import('./landing/LandingPage.vue'))
 
-// Auth state
-const isAuthenticated = ref(false)
-const isAuthResolved = ref(false)
-const currentUser = ref(null)
+const {
+  isAuthenticated,
+  isAuthResolved,
+  currentUser,
+  fetchUserProfile,
+  hardware,
+  storageStatus,
+  metaHealth,
+  resilienceTelemetry,
+  ringBufferTelemetry,
+  checkMetaHealth,
+  fetchPerceptionTelemetry,
+  loadSystemAndData,
+  timelineData,
+  timelineMeta,
+  events,
+  selectedEvent,
+  currentTimelineSec,
+  activeView,
+  isAnalyzing,
+  saccadicTargets,
+  activeSaccade,
+  fetchSaccadicTargets,
+  updateActiveSaccade,
+  runMetaAnalysis,
+  stagedMuseModalOpen,
+  stagedMuseQuery,
+  stagedSamQuery,
+  isPreparingMuse,
+  isTranscribing,
+  voiceTranscript,
+  museQuestionInput,
+  stagedTab,
+  museDiagnosis,
+  isAskingMuse,
+  showRawWirePayload,
+  askMuse,
+  prepareMusePayload,
+  prepareSamPayload,
+  beeModeActive,
+  autoReadAloud,
+  isBeeModePlaying,
+  isPlayingBeeBuzz,
+  isSpeakingAloud,
+  isRecording,
+  isProcessing,
+  stopAllAudio,
+  readAloud,
+  stopReadAloud,
+  playBeeBuzz
+} = useHiveStore()
 
-// Hardware & Storage state
-const hardware = ref('Raspberry Pi 4 Model B')
-const storageStatus = ref({
-  isMounted: false,
-  freeSpaceFormatted: 'Not Connected',
-  isWritable: false
-})
-
-// Timeline & Events state
-const timelineData = ref([])
-const timelineMeta = ref(null)
-const events = ref([])
-const selectedEvent = ref(null)
-const currentTimelineSec = ref(0)
 const videoPlayer = ref(null)
-const activeView = ref('comparison') // 'comparison', 'raw', 'sam'
-const isAnalyzing = ref(false)
-
-// Muse Voice & Natural Speech TTS (Browser SpeechSynthesis & Microphone Input)
-const beeModeActive = ref(false) // Bee Mode: OFF by default in favor of natural TTS
-const isBeeModePlaying = ref(false)
-const isRecording = ref(false)
-const isProcessing = ref(false)
-let beeAudioInstance = null
 let activeStopRecording = null
-
-// Staged Meta Muse & SAM 3.1 Request (Ready for endpoint, not sent yet)
-const stagedMuseModalOpen = ref(false)
-const stagedMuseQuery = ref(null)
-const stagedSamQuery = ref(null)
-const isPreparingMuse = ref(false)
-const isTranscribing = ref(false)
-const voiceTranscript = ref('')
-const museQuestionInput = ref('')
-const stagedTab = ref('prompt') // 'prompt', 'payload'
-
-// Live / Cached Muse Diagnosis & Voice TTS state
-const museDiagnosis = ref(null)
-const isAskingMuse = ref(false)
-const autoReadAloud = ref(true)
-const isSpeakingAloud = ref(false)
-const isPlayingBeeBuzz = ref(false)
-const showRawWirePayload = ref(false)
-
-// Meta Model API Health state
-const metaHealth = ref({
-  configured: false,
-  liveConnection: false,
-  status: 'CHECKING',
-  statusCode: 200,
-  latencyMs: 0,
-  baseUrl: '',
-  availableModels: [],
-  message: 'Checking Meta Model API...'
-})
-
-async function checkMetaHealth() {
-  try {
-    const res = await fetch('/api/v1/muse/health')
-    if (res.ok) {
-      metaHealth.value = await res.json()
-    }
-  } catch (e) {
-    console.debug('Failed to check Meta API health:', e)
-  }
-}
-
-// Active Perception & FFM Off-Heap Ring Buffer state
-const ringBufferTelemetry = ref({
-  capacity: 600,
-  currentSequence: 0,
-  activeSlotsCount: 0,
-  totalAllocatedBytes: 0,
-  memoryPerSlotBytes: 0,
-  isOffHeap: true,
-  droppedFrames: 0
-})
-const saccadicTargets = ref([])
-const activeSaccade = ref(null)
-
-async function fetchPerceptionTelemetry() {
-  try {
-    const res = await fetch('/api/v1/perception/ring-buffer')
-    if (res.ok) {
-      ringBufferTelemetry.value = await res.json()
-    }
-  } catch (e) {
-    console.debug('Failed to fetch ring buffer telemetry:', e)
-  }
-}
-
-async function fetchSaccadicTargets() {
-  try {
-    const res = await fetch('/api/v1/perception/saccades')
-    if (res.ok) {
-      saccadicTargets.value = await res.json()
-      updateActiveSaccade()
-    }
-  } catch (e) {
-    console.debug('Failed to fetch saccades:', e)
-  }
-}
-
-function updateActiveSaccade() {
-  if (!selectedEvent.value || !saccadicTargets.value.length) {
-    activeSaccade.value = null
-    return
-  }
-  const id = selectedEvent.value.eventId
-  activeSaccade.value = saccadicTargets.value.find(s => s.eventId === id) || null
-}
 
 const isNearPeakAnomaly = computed(() => {
   if (activeView.value === 'sam') return true
@@ -190,11 +130,7 @@ async function toggleMicrophoneListening() {
   }
 
   // Stop any currently playing audio before starting recording
-  if (beeAudioInstance) {
-    beeAudioInstance.pause()
-    beeAudioInstance = null
-    isBeeModePlaying.value = false
-  }
+  stopAllAudio()
 
   // Check for Secure Context / MediaDevices support
   const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -326,18 +262,18 @@ async function toggleMicrophoneListening() {
       // Transcribe voice input dynamically via Meta Audio API
       try {
         isTranscribing.value = true
-        const transRes = await fetch('/api/v1/muse/transcribe', {
+        const transRes = await apiFetch('/api/v1/muse/transcribe', {
           method: 'POST',
           headers: { 'Content-Type': 'audio/wav' },
-          body: wavBytes
+          body: wavBytes,
+          cancelKey: 'transcribe',
+          retries: 1,
+          timeoutMs: 15000
         })
-        if (transRes.ok) {
-          const transData = await transRes.json()
-          if (transData && transData.transcript && transData.transcript.trim()) {
-            recognizedText = transData.transcript.trim()
-            voiceTranscript.value = recognizedText
-            museQuestionInput.value = recognizedText
-          }
+        if (transRes.ok && transRes.data?.transcript?.trim()) {
+          recognizedText = transRes.data.transcript.trim()
+          voiceTranscript.value = recognizedText
+          museQuestionInput.value = recognizedText
         }
       } catch (err) {
         console.debug('Transcribe error:', err)
@@ -391,148 +327,8 @@ function toggleVoiceInput() {
   toggleMicrophoneListening()
 }
 
-async function prepareMusePayload(event = null, question = null) {
-  const ev = event || selectedEvent.value
-  const q = question || museQuestionInput.value
-
-  isPreparingMuse.value = true
-  try {
-    const res = await fetch('/api/v1/muse/prepare-query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId: ev?.eventId || (events.value.length > 0 ? events.value[0].eventId : null),
-        question: q,
-        eventData: ev || (events.value.length > 0 ? events.value[0] : null),
-        dryRun: true
-      })
-    })
-    if (res.ok) {
-      const data = await res.json()
-      stagedMuseQuery.value = data
-      stagedTab.value = 'prompt'
-      stagedMuseModalOpen.value = true
-    }
-  } catch (err) {
-    console.error('Failed to prepare Muse query:', err)
-  } finally {
-    isPreparingMuse.value = false
-  }
-}
-
-async function prepareSamPayload(event = null, prompt = null) {
-  const ev = event || selectedEvent.value
-  if (!ev) return
-  const p = prompt || museQuestionInput.value
-
-  isPreparingMuse.value = true
-  try {
-    const res = await fetch('/api/v1/muse/prepare-sam', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId: ev.eventId,
-        prompt: p,
-        customBox: ev.hotspot ? {
-          x: ev.hotspot.normCenterX - 0.06,
-          y: ev.hotspot.normCenterY - 0.07,
-          width: 0.12,
-          height: 0.14
-        } : null,
-        mediaType: 'image'
-      })
-    })
-    if (res.ok) {
-      const data = await res.json()
-      stagedSamQuery.value = data
-      stagedTab.value = 'sam'
-      stagedMuseModalOpen.value = true
-    }
-  } catch (err) {
-    console.error('Failed to prepare SAM query:', err)
-  } finally {
-    isPreparingMuse.value = false
-  }
-}
-
 function setPresetQuestion(q) {
   museQuestionInput.value = q
-}
-
-async function askMuse(question = null) {
-  const q = question || museQuestionInput.value || 'What happened at my hive today?'
-  isAskingMuse.value = true
-  try {
-    const res = await fetch('/api/v1/muse/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: q,
-        eventId: selectedEvent.value?.eventId,
-        maxEvents: 3
-      })
-    })
-    if (res.ok) {
-      const data = await res.json()
-      museDiagnosis.value = data
-
-      // If Bee Mode is active, respond with bioacoustic bee buzzing synthesis
-      if (beeModeActive.value) {
-        const textToBuzz = data.spokenSummary || data.diagnosis || data.cause || 'Anomaly diagnosed by Meta Muse.'
-        playBeeBuzz(textToBuzz)
-      } else if (autoReadAloud.value && data.spokenSummary) {
-        readAloud(data.spokenSummary)
-      }
-    }
-  } catch (err) {
-    console.error('Failed to ask Muse:', err)
-  } finally {
-    isAskingMuse.value = false
-  }
-}
-
-let ttsAudioInstance = null
-
-async function readAloud(text = null) {
-  if (isSpeakingAloud.value) {
-    stopReadAloud()
-    return
-  }
-
-  const content = text || museDiagnosis.value?.spokenSummary || museDiagnosis.value?.diagnosis || ''
-  if (!content) return
-
-  try {
-    if (ttsAudioInstance) {
-      ttsAudioInstance.pause()
-      ttsAudioInstance = null
-    }
-    isSpeakingAloud.value = true
-    const url = '/api/v1/muse/tts?text=' + encodeURIComponent(content)
-    ttsAudioInstance = new Audio(url)
-    ttsAudioInstance.onended = () => {
-      isSpeakingAloud.value = false
-      ttsAudioInstance = null
-    }
-    ttsAudioInstance.onerror = (err) => {
-      console.warn('TTS playback error:', err)
-      isSpeakingAloud.value = false
-      ttsAudioInstance = null
-    }
-    await ttsAudioInstance.play()
-  } catch (err) {
-    console.warn('Failed to play TTS audio:', err)
-    isSpeakingAloud.value = false
-    ttsAudioInstance = null
-  }
-}
-
-function stopReadAloud() {
-  if (ttsAudioInstance) {
-    ttsAudioInstance.pause()
-    ttsAudioInstance = null
-  }
-  isSpeakingAloud.value = false
 }
 
 function formatMarkdownReport(md) {
@@ -586,32 +382,6 @@ function formatMarkdownReport(md) {
   return result.join('')
 }
 
-async function playBeeBuzz(text = null) {
-  try {
-    isPlayingBeeBuzz.value = true
-    isBeeModePlaying.value = true
-    const promptText = text || museDiagnosis.value?.spokenSummary || museDiagnosis.value?.diagnosis || 'Bee colony activity report.'
-    const url = `/api/v1/muse/voice?text=${encodeURIComponent(promptText)}`
-    if (beeAudioInstance) {
-      beeAudioInstance.pause()
-    }
-    beeAudioInstance = new Audio(url)
-    beeAudioInstance.onended = () => {
-      isPlayingBeeBuzz.value = false
-      isBeeModePlaying.value = false
-    }
-    beeAudioInstance.onerror = () => {
-      isPlayingBeeBuzz.value = false
-      isBeeModePlaying.value = false
-    }
-    await beeAudioInstance.play()
-  } catch (err) {
-    console.error('Failed to play bee buzz:', err)
-    isPlayingBeeBuzz.value = false
-    isBeeModePlaying.value = false
-  }
-}
-
 onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
   const token = localStorage.getItem('beejepa_token')
@@ -624,52 +394,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
+  stopAllAudio()
 })
-
-async function fetchUserProfile(token) {
-  try {
-    const res = await fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.ok) {
-      currentUser.value = await res.json()
-      isAuthenticated.value = true
-    } else {
-      localStorage.removeItem('beejepa_token')
-      isAuthenticated.value = false
-    }
-  } catch (err) {
-    isAuthenticated.value = false
-  }
-}
-
-async function loadSystemAndData() {
-  try {
-    const [storageRes, timelineRes, eventsRes] = await Promise.all([
-      fetch('/api/v1/storage'),
-      fetch('/api/v1/timeline'),
-      fetch('/api/v1/events')
-    ])
-    if (storageRes.ok) storageStatus.value = await storageRes.json()
-    if (timelineRes.ok) {
-      const data = await timelineRes.json()
-      timelineData.value = data.timeline || []
-      timelineMeta.value = data
-    }
-    if (eventsRes.ok) {
-      const list = await eventsRes.json()
-      events.value = list
-      if (list.length > 0 && !selectedEvent.value) {
-        selectedEvent.value = list[0]
-      }
-    }
-    checkMetaHealth()
-    fetchPerceptionTelemetry()
-    fetchSaccadicTargets()
-  } catch (err) {
-    console.debug('Failed loading initial data:', err)
-  }
-}
 
 function selectEvent(ev) {
   selectedEvent.value = ev
@@ -699,31 +425,6 @@ function selectEventById(id) {
   const found = events.value.find(e => e.eventId === id)
   if (found) {
     selectEvent(found)
-  }
-}
-
-async function runMetaAnalysis() {
-  if (!selectedEvent.value) return
-  isAnalyzing.value = true
-  try {
-    const res = await fetch(`/api/v1/events/${selectedEvent.value.eventId}/analyze?forceRefresh=true`, {
-      method: 'POST'
-    })
-    if (res.ok) {
-      const data = await res.json()
-      selectedEvent.value.agentResult = data
-      selectedEvent.value.isCached = true
-      // update in list
-      const idx = events.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
-      if (idx !== -1) {
-        events.value[idx].agentResult = data
-        events.value[idx].isCached = true
-      }
-    }
-  } catch (err) {
-    console.error('Meta AI analysis failed:', err)
-  } finally {
-    isAnalyzing.value = false
   }
 }
 
@@ -1028,12 +729,16 @@ async function handleAuthenticated({ token, username, role }) {
 }
 
 async function handleLogout() {
+  stopAllAudio()
   const token = localStorage.getItem('beejepa_token')
   if (token) {
     try {
-      await fetch('/api/v1/auth/logout', {
+      await apiFetch('/api/v1/auth/logout', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        cancelKey: 'authLogout',
+        retries: 0,
+        timeoutMs: 4000
       })
     } catch (e) {}
   }
@@ -1246,7 +951,7 @@ async function handleLogout() {
                   </div>
                   <!-- Saccade Telemetry Badge -->
                   <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-ink-950/85 backdrop-blur border border-electric-500/40 rounded text-[9px] font-mono text-electric-300 whitespace-nowrap shadow-md">
-                    FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round(selectedEvent.hotspot.normCenterX * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round(selectedEvent.hotspot.normCenterY * 960) }}] · GRID [{{ selectedEvent.hotspot.tubeletGridX }}, {{ selectedEvent.hotspot.tubeletGridY }}]
+                    FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round((selectedEvent?.hotspot?.normCenterX ?? 0.456) * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round((selectedEvent?.hotspot?.normCenterY ?? 0.436) * 960) }}] · GRID [{{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }}]
                   </div>
                 </div>
               </div>
@@ -1305,13 +1010,13 @@ async function handleLogout() {
               <div class="flex items-center justify-between text-ink-400 mb-1">
                 <span>Tubelet Hotspot Grid:</span>
                 <span class="font-mono text-honey-400 font-semibold">
-                  ({{ selectedEvent.hotspot.tubeletGridX }}, {{ selectedEvent.hotspot.tubeletGridY }})
+                  ({{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }})
                 </span>
               </div>
               <div class="flex items-center justify-between text-ink-400">
                 <span>Normalized Center:</span>
                 <span class="font-mono text-ink-200">
-                  ({{ Number(selectedEvent.hotspot.normCenterX).toFixed(3) }}, {{ Number(selectedEvent.hotspot.normCenterY).toFixed(3) }})
+                  ({{ Number(selectedEvent?.hotspot?.normCenterX ?? 0.456).toFixed(3) }}, {{ Number(selectedEvent?.hotspot?.normCenterY ?? 0.436).toFixed(3) }})
                 </span>
               </div>
             </div>
@@ -1433,10 +1138,14 @@ async function handleLogout() {
                     <span>Hive Briefing</span>
                   </span>
                   <span
-                    :class="museDiagnosis.offlineLocked ? 'bg-electric-500/20 text-electric-300 border-electric-500/40' : 'bg-clover-500/20 text-clover-300 border-clover-500/40'"
+                    :class="museDiagnosis.degradedFallback
+                      ? 'bg-honey-500/20 text-honey-300 border-honey-500/40'
+                      : (museDiagnosis.offlineLocked || museDiagnosis.sourceMode === 'DISK_CACHE'
+                          ? 'bg-electric-500/20 text-electric-300 border-electric-500/40'
+                          : 'bg-clover-500/20 text-clover-300 border-clover-500/40')"
                     class="px-2 py-0.5 rounded border text-[10px] font-mono"
                   >
-                    {{ museDiagnosis.offlineLocked ? 'Offline Cache' : 'Live' }}
+                    {{ museDiagnosis.degradedFallback ? 'Degraded Fallback' : (museDiagnosis.offlineLocked || museDiagnosis.sourceMode === 'DISK_CACHE' ? 'Offline Cache' : 'Live') }}
                   </span>
                   <span class="text-ink-400 text-[10px] font-mono hidden sm:inline">{{ museDiagnosis.telemetry?.latencyMs || 0 }}ms</span>
                 </div>

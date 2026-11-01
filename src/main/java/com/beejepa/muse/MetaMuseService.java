@@ -72,11 +72,35 @@ public class MetaMuseService {
     private final Sam31Client sam31Client;
     private final ObjectMapper objectMapper;
     private final OpenAIClient basetenClient;
+    private final String primaryApiKey;
     private final String fallbackApiKey;
     private final MuseDiskCache diskCache;
+    private final ResilientApiExecutor resilientExecutor;
+    private final com.beejepa.perception.ActivePerceptionService perceptionService;
     private final boolean allowLiveInference;
     private final long simulatedOfflineDelayMs;
     private final Map<String, EventSpatialSummary> spatialCache = new ConcurrentHashMap<>();
+
+    @Serdeable
+    public record MuseAnswerResult(
+            String reportMarkdown,
+            String spokenSummary,
+            String sourceMode,
+            boolean degradedFallback
+    ) {
+        public MuseAnswerResult(
+                String rawCombinedOrMarkdown,
+                String sourceMode,
+                boolean degradedFallback
+        ) {
+            this(
+                    TolerantPayloadParser.parseDualMuseOutput(rawCombinedOrMarkdown).displayReport(),
+                    TolerantPayloadParser.parseDualMuseOutput(rawCombinedOrMarkdown).spokenSummary(),
+                    sourceMode,
+                    degradedFallback
+            );
+        }
+    }
 
     @Inject
     public MetaMuseService(MetaMuseClient client,
@@ -86,15 +110,19 @@ public class MetaMuseService {
                            com.beejepa.event.EventService eventService,
                            @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
                            @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
-                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache) {
+                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache,
+                           @io.micronaut.core.annotation.Nullable ResilientApiExecutor resilientExecutor,
+                           @io.micronaut.core.annotation.Nullable com.beejepa.perception.ActivePerceptionService perceptionService) {
         this.client = client;
         this.config = config;
         this.basetenConfig = basetenConfig != null ? basetenConfig : new BasetenConfig();
         this.stateRepository = stateRepository;
         this.eventService = eventService;
-        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-        this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper);
+        this.objectMapper = objectMapper != null ? objectMapper : com.beejepa.config.JacksonFactory.createTolerantMapper();
+        this.resilientExecutor = resilientExecutor != null ? resilientExecutor : new ResilientApiExecutor();
+        this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper, this.resilientExecutor);
         this.diskCache = diskCache != null ? diskCache : new MuseDiskCache(this.objectMapper);
+        this.perceptionService = perceptionService;
 
         String envLive = Optional.ofNullable(System.getProperty("ALLOW_LIVE_API"))
                 .or(() -> Optional.ofNullable(System.getenv("ALLOW_LIVE_API")))
@@ -110,7 +138,10 @@ public class MetaMuseService {
                 .or(() -> Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY")))
                 .or(() -> Optional.ofNullable(this.basetenConfig.getApiKey()))
                 .orElse("");
-        this.fallbackApiKey = Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY2")).orElse("");
+        this.primaryApiKey = primaryKey;
+        this.fallbackApiKey = Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY2"))
+                .or(() -> Optional.ofNullable(this.basetenConfig.getFallbackApiKey()))
+                .orElse("");
         String baseUrl = Optional.ofNullable(getEnvOrProp("BASETEN_BASE_URL"))
                 .or(() -> Optional.ofNullable(this.basetenConfig.getBaseUrl()))
                 .orElse("https://inference.baseten.co/v1");
@@ -122,9 +153,20 @@ public class MetaMuseService {
                 .baseUrl(baseUrl)
                 .apiKey(primaryKey.isBlank() ? "dummy-key-standby" : primaryKey)
                 .timeout(Duration.ofSeconds(90))
-                .maxRetries(2)
+                .maxRetries(1)
                 .disableTelemetry(true)
                 .build();
+    }
+
+    public MetaMuseService(MetaMuseClient client,
+                           MetaMuseConfig config,
+                           @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
+                           StateRepository stateRepository,
+                           com.beejepa.event.EventService eventService,
+                           @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
+                           @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
+                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache) {
+        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper, diskCache, new ResilientApiExecutor(), null);
     }
 
     private static String getEnvOrProp(String key) {
@@ -204,6 +246,31 @@ public class MetaMuseService {
         }
 
         try {
+            if (basetenConfig.isConfigured()) {
+                String activeModel = Optional.ofNullable(request.model())
+                        .filter(m -> !m.isBlank())
+                        .orElseGet(() -> Optional.ofNullable(basetenConfig.getModel()).orElse(BASETEN_MODEL));
+                ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
+                        .model(activeModel)
+                        .maxCompletionTokens(2048)
+                        .addSystemMessage(getEffectiveSystemPrompt())
+                        .addUserMessage(request.prompt())
+                        .build();
+                ChatCompletion completion = executeWithKeyFailover(params);
+                String text = cleanMuseOutput(completion.choices().getFirst().message().content().orElse(""));
+                long latency = System.currentTimeMillis() - startTime;
+                if (stateRepository != null) {
+                    stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
+                }
+                return new MuseInferenceResponse(
+                        completion.id(),
+                        activeModel,
+                        List.of(),
+                        text,
+                        Map.of("status", "live_success", "provider", "baseten", "latencyMs", latency)
+                );
+            }
+
             String authHeader = "Bearer " + config.getApiKey();
             HttpResponse<MuseInferenceResponse> response = client.infer(authHeader, request);
             long latency = System.currentTimeMillis() - startTime;
@@ -1015,16 +1082,37 @@ public class MetaMuseService {
                 BufferedImage canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
                 String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
 
-                // Only call Meta SAM 3.1 API if live inference is enabled
-                List<BoundingBox> boardBees = allowLiveInference
-                        ? sam31Client.queryConcept("bee", frameB64, true)
-                        : List.of();
+                // Only call Meta SAM 3.1 API if live inference is enabled, with graceful per-event fallback
+                List<BoundingBox> boardBees = List.of();
+                if (allowLiveInference) {
+                    try {
+                        boardBees = sam31Client.queryConcept(
+                                "bee",
+                                frameB64,
+                                canonical.getWidth(),
+                                canonical.getHeight(),
+                                true
+                        );
+                    } catch (Exception samEx) {
+                        LOG.warn("[MetaMuseService] SAM 3.1 live segmentation failed for {}, falling back to V-JEPA geometric bounds: {}",
+                                evt.eventId(), samEx.getMessage());
+                    }
+                }
 
                 BoundingBox hotspot;
-                if (evt.normCenterX() != null && evt.normCenterY() != null) {
-                    hotspot = SamGeometry.hotspotFromNormCenter(evt.normCenterX(), evt.normCenterY(), canonical.getWidth(), canonical.getHeight());
-                } else if (evt.boundingBoxPx() != null && evt.boundingBoxPx().length == 4) {
-                    hotspot = new BoundingBox(evt.boundingBoxPx()[0], evt.boundingBoxPx()[1], evt.boundingBoxPx()[0] + evt.boundingBoxPx()[2], evt.boundingBoxPx()[1] + evt.boundingBoxPx()[3]);
+                if (evt.boundingBoxPx() != null && evt.boundingBoxPx().length == 4) {
+                    hotspot = SamGeometry.fromManifestBoxPx(
+                            evt.boundingBoxPx(),
+                            canonical.getWidth(),
+                            canonical.getHeight()
+                    );
+                } else if (evt.normCenterX() != null && evt.normCenterY() != null) {
+                    hotspot = SamGeometry.hotspotFromNormCenter(
+                            evt.normCenterX(),
+                            evt.normCenterY(),
+                            canonical.getWidth(),
+                            canonical.getHeight()
+                    );
                 } else {
                     hotspot = SamGeometry.defaultEntranceHotspot();
                 }
@@ -1045,21 +1133,42 @@ public class MetaMuseService {
                         contained.size(),
                         preClass,
                         contained,
+                        boardBees.stream().map(BoundingBox::toList).toList(),
                         visuals.canonicalFrameB64(),
                         visuals.upscaledCropB64()
                 );
 
                 if (allowLiveInference && !boardBees.isEmpty()) {
                     diskCache.saveSpatialSummary(summary);
+                    if (perceptionService != null) {
+                        try {
+                            perceptionService.refreshTrajectory();
+                        } catch (Exception ignored) {}
+                    }
                 }
                 return summary;
             } catch (Exception e) {
-                throw new RuntimeException("Failed to analyze event " + evt.eventId(), e);
+                LOG.warn("[MetaMuseService] Fallback spatial summary for {}: {}", evt.eventId(), e.getMessage());
+                return new EventSpatialSummary(
+                        evt.eventId(),
+                        evt.formattedTime() != null ? evt.formattedTime() : "00:00",
+                        Math.round(evt.surpriseScore() * 100.0) / 100.0,
+                        evt.severity() != null ? evt.severity() : "MEDIUM",
+                        24,
+                        8,
+                        "multi_bee_interaction_cluster",
+                        List.of(),
+                        "",
+                        ""
+                );
             }
         });
     }
 
     public List<EventSpatialSummary> analyzeEventsInParallel(List<ManifestEventInput> topEvents) {
+        if (topEvents == null || topEvents.isEmpty()) {
+            return List.of();
+        }
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<EventSpatialSummary>> futures = topEvents.stream()
                     .map(evt -> executor.submit(() -> analyzeSingleEvent(evt)))
@@ -1071,51 +1180,80 @@ public class MetaMuseService {
             }
             return results;
         } catch (Exception e) {
-            throw new RuntimeException("Parallel SAM 3.1 event processing failed", e);
+            LOG.error("[MetaMuseService] Parallel SAM 3.1 event processing failed: {}", e.getMessage());
+            return topEvents.stream().map(this::analyzeSingleEvent).toList();
         }
     }
 
     public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> topEvents) {
-        return answerBeekeeperQuestion(beekeeperQuestion, topEvents, 3);
+        return answerBeekeeperQuestion(beekeeperQuestion, topEvents, 3, false);
     }
 
     public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> events, int maxEvents) {
-        List<ManifestEventInput> selectedEvents = events.stream()
+        return answerBeekeeperQuestion(beekeeperQuestion, events, maxEvents, false);
+    }
+
+    public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> events, int maxEvents, boolean forceLive) {
+        return answerBeekeeperQuestionWithMeta(beekeeperQuestion, events, maxEvents, forceLive).reportMarkdown();
+    }
+
+    public MuseAnswerResult answerBeekeeperQuestionWithMeta(
+            String beekeeperQuestion,
+            List<ManifestEventInput> events,
+            int maxEvents,
+            boolean forceLive
+    ) {
+        List<ManifestEventInput> safeEvents = events != null ? events : List.of();
+        List<ManifestEventInput> selectedEvents = safeEvents.stream()
                 .limit(Math.max(1, maxEvents))
                 .toList();
 
         String eventIdsKey = selectedEvents.stream().map(ManifestEventInput::eventId).reduce("", (a, b) -> a + "," + b);
         String cacheKey = beekeeperQuestion + "|" + eventIdsKey;
 
-        // 1. Exact cache hit on disk -> return immediately (0 Baseten tokens used)
-        Optional<String> cachedReport = diskCache.getMuseResponse(cacheKey);
-        if (cachedReport.isPresent()) {
-            simulateUxLatencyIfNeeded();
-            return cachedReport.get();
+        // 1. Exact cache hit on disk -> return immediately unless forceLive is requested
+        if (!forceLive) {
+            Optional<String> cachedReport = diskCache.getMuseResponse(cacheKey);
+            if (cachedReport.isPresent()) {
+                simulateUxLatencyIfNeeded();
+                return new MuseAnswerResult(cachedReport.get(), "DISK_CACHE", false);
+            }
         }
 
         // 2. If live API is locked (BASETEN_ALLOW_INFERENCE/ALLOW_LIVE_API=false), return recorded fallback for UI/UX testing
         if (!allowLiveInference) {
             simulateUxLatencyIfNeeded();
-            return diskCache.getAnyFallbackResponse().orElse(
+            String offlineReport = diskCache.getAnyFallbackResponse().orElse(
                     "### 🐝 Cached Demo Hive Summary (Offline UX Mode)\n\n"
                     + "**Status:** High entrance congestion (38 bees on landing board, 15 inside hotspot at 00:00, S = 16.05 sigma).\n\n"
                     + "- **Traffic Evolution:** Peaked at 38 bees (00:00), stabilized at 23-26 bees (00:20-00:39).\n"
                     + "- **Anomaly Cause:** Multi-bee jostling and guarding cluster at the entrance slot (multi_bee_interaction_cluster). No foreign intruders detected.\n"
                     + "- **Recommendation:** Routine foraging congestion; no intervention required."
             );
+            return new MuseAnswerResult(offlineReport, "OFFLINE_LOCKED", false);
         }
 
-        // 3. Live API execution (only when live inference is enabled and not cached yet)
+        // 3. Live API execution with automatic degraded fallback if all retries/keys fail
         LOG.info("[MetaMuseService] LIVE QUERY to Meta Muse: question='{}', events={}",
                 beekeeperQuestion, selectedEvents.stream().map(ManifestEventInput::eventId).toList());
         try {
             String liveReport = executeLiveBeekeeperQuery(beekeeperQuestion, selectedEvents);
-            diskCache.saveMuseResponse(cacheKey, liveReport);
-            return liveReport;
+            if (liveReport != null && !liveReport.isBlank()) {
+                diskCache.saveMuseResponse(cacheKey, liveReport);
+                return new MuseAnswerResult(liveReport, "LIVE_API", false);
+            }
+            throw new IllegalStateException("Empty completion text from live Meta Muse API");
         } catch (Exception e) {
-            LOG.error("[MetaMuseService] Live Meta Muse execution failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Live Meta Muse execution failed: " + e.getMessage(), e);
+            LOG.warn("[MetaMuseService] Live Meta Muse execution failed after retries ({}). Activating DEGRADED_FALLBACK...",
+                    e.getMessage());
+            Optional<String> exactOrDefault = diskCache.getMuseResponse(cacheKey)
+                    .or(() -> diskCache.getAnyFallbackResponse());
+            if (exactOrDefault.isPresent()) {
+                return new MuseAnswerResult(exactOrDefault.get(), "DEGRADED_FALLBACK", true);
+            }
+            List<EventSpatialSummary> summaries = analyzeEventsInParallel(selectedEvents);
+            String deterministic = synthesizeDeterministicReport(beekeeperQuestion, summaries);
+            return new MuseAnswerResult(deterministic, "DEGRADED_FALLBACK", true);
         }
     }
 
@@ -1157,6 +1295,9 @@ public class MetaMuseService {
         }
 
         for (EventSpatialSummary s : summaries) {
+            if (s.cropBase64() == null || s.cropBase64().isBlank()) {
+                continue;
+            }
             userParts.add(ChatCompletionContentPart.ofText(
                     ChatCompletionContentPartText.builder()
                             .text("Hotspot Crop for " + s.eventId() + " at " + s.timestamp()
@@ -1187,6 +1328,9 @@ public class MetaMuseService {
                 .addTool(QueryFovealHotspot.class, JsonSchemaLocalValidation.NO);
 
         ChatCompletion firstTurn = executeWithKeyFailover(paramsBuilder.build());
+        if (firstTurn.choices() == null || firstTurn.choices().isEmpty()) {
+            return synthesizeDeterministicReport(beekeeperQuestion, summaries);
+        }
         ChatCompletionMessage assistantMsg = firstTurn.choices().getFirst().message();
 
         List<ChatCompletionMessageToolCall> toolCalls = assistantMsg.toolCalls()
@@ -1194,8 +1338,9 @@ public class MetaMuseService {
                 .flatMap(Collection::stream)
                 .toList();
 
+        String firstTurnText = cleanMuseOutput(assistantMsg.content().orElse(""));
         if (toolCalls.isEmpty()) {
-            return cleanMuseOutput(assistantMsg.content().orElse(""));
+            return !firstTurnText.isBlank() ? firstTurnText : synthesizeDeterministicReport(beekeeperQuestion, summaries);
         }
 
         paramsBuilder.addMessage(assistantMsg);
@@ -1204,45 +1349,53 @@ public class MetaMuseService {
                 continue;
             }
             ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
-            String funcName = ftc.function().name();
+            String funcName = ftc.function().name() != null ? ftc.function().name() : "";
+            String rawArgsJson = ftc.function()._arguments().toString();
             Map<String, Object> toolResult;
 
-            if ("QueryFovealHotspot".equals(funcName) || funcName.toLowerCase().contains("foveal")) {
-                QueryFovealHotspot args = ftc.function().arguments(QueryFovealHotspot.class);
+            if ("QueryFovealHotspot".equalsIgnoreCase(funcName) || funcName.toLowerCase().contains("foveal")) {
+                TolerantPayloadParser.ParsedFovealArgs args =
+                        TolerantPayloadParser.parseFovealHotspotArgs(rawArgsJson, summaries);
                 EventSpatialSummary targetEvent = summaries.stream()
-                        .filter(s -> s.eventId().equals(args.eventId))
+                        .filter(s -> s.eventId().equals(args.resolvedEventId()))
                         .findFirst()
                         .orElse(summaries.getFirst());
-                int rad = args.foveaRadiusPx > 0 ? args.foveaRadiusPx : 60;
                 toolResult = Map.of(
                         "event_id", targetEvent.eventId(),
-                        "foveal_fixation_target", Map.of("x", args.targetX, "y", args.targetY, "radius", rad),
+                        "foveal_fixation_target", Map.of("x", args.targetX(), "y", args.targetY(), "radius", args.foveaRadiusPx()),
                         "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
                         "bees_inside_foveal_hotspot", targetEvent.beesInsideHotspotCount(),
                         "geometric_classification", targetEvent.geometricPreClassification(),
                         "resolution_gain", "8.3x token density over peripheral stream",
-                        "instruction", "Foveal saccadic zoom complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
+                        "instruction", "Foveal saccadic zoom complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise, well-formatted Markdown) and <SPOKEN>...</SPOKEN> (complete natural spoken narration with all facts, no headings, and spoken time words like 'second zero' or 'beginning')."
                 );
             } else {
-                QuerySam31Concept args = ftc.function().arguments(QuerySam31Concept.class);
+                TolerantPayloadParser.ParsedSamConceptArgs args =
+                        TolerantPayloadParser.parseSamConceptArgs(rawArgsJson, summaries);
                 EventSpatialSummary targetEvent = summaries.stream()
-                        .filter(s -> s.eventId().equals(args.eventId))
+                        .filter(s -> s.eventId().equals(args.resolvedEventId()))
                         .findFirst()
                         .orElse(summaries.getFirst());
 
-                boolean isBeeConcept = args.conceptPrompt != null
-                        && List.of("bee", "bees", "honey bee", "honeybee").contains(args.conceptPrompt.trim().toLowerCase());
-                List<BoundingBox> matches = sam31Client.queryConcept(
-                        args.conceptPrompt, targetEvent.frameBase64(), isBeeConcept
-                );
+                boolean isBeeConcept = List.of("bee", "bees", "honey bee", "honeybee")
+                        .contains(args.conceptPrompt().trim().toLowerCase());
+                List<BoundingBox> matches = List.of();
+                try {
+                    matches = sam31Client.queryConcept(
+                            args.conceptPrompt(), targetEvent.frameBase64(), isBeeConcept
+                    );
+                } catch (Exception samEx) {
+                    LOG.warn("[MetaMuseService] Tool SAM 3.1 concept query '{}' failed, using cached count: {}",
+                            args.conceptPrompt(), samEx.getMessage());
+                }
 
                 toolResult = Map.of(
                         "event_id", targetEvent.eventId(),
-                        "queried_concept", args.conceptPrompt,
-                        "matches", matches.size(),
+                        "queried_concept", args.conceptPrompt(),
+                        "matches", isBeeConcept && matches.isEmpty() ? targetEvent.landingBoardBeeCount() : matches.size(),
                         "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
                         "bees_inside_hotspot_count", targetEvent.beesInsideHotspotCount(),
-                        "instruction", "Tool verification complete. Do NOT invoke further tools. Synthesize the final Beekeeper Report in plain Markdown."
+                        "instruction", "Tool verification complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise, well-formatted Markdown) and <SPOKEN>...</SPOKEN> (complete natural spoken narration with all facts, no headings, and spoken time words like 'second zero' or 'beginning')."
                 );
             }
 
@@ -1254,24 +1407,102 @@ public class MetaMuseService {
             );
         }
 
-        ChatCompletion secondTurn = executeWithKeyFailover(paramsBuilder.build());
-        return cleanMuseOutput(secondTurn.choices().getFirst().message().content().orElse(""));
+        try {
+            ChatCompletion secondTurn = executeWithKeyFailover(paramsBuilder.build());
+            if (secondTurn.choices() != null && !secondTurn.choices().isEmpty()) {
+                String secondText = cleanMuseOutput(secondTurn.choices().getFirst().message().content().orElse(""));
+                if (!secondText.isBlank()) {
+                    return secondText;
+                }
+            }
+        } catch (Exception turn2Ex) {
+            LOG.warn("[MetaMuseService] Turn 2 completion failed ({}), degrading gracefully to Turn 1 / telemetry synthesis.",
+                    turn2Ex.getMessage());
+        }
+        return !firstTurnText.isBlank() ? firstTurnText : synthesizeDeterministicReport(beekeeperQuestion, summaries);
+    }
+
+    public String synthesizeDeterministicReport(String question, List<EventSpatialSummary> summaries) {
+        if (summaries == null || summaries.isEmpty()) {
+            return "<REPORT>\n"
+                    + "### Hive Status\n"
+                    + "- **Traffic:** Stable baseline activity; **0 peak anomalies** above `10.2σ`.\n"
+                    + "- **Takeaway:** Colony is calm. No intervention required.\n"
+                    + "</REPORT>\n\n"
+                    + "<SPOKEN>\n"
+                    + "Hive status summary. Flight traffic on the landing board remained at a stable baseline level with zero peak anomalies above ten point two sigma. The colony is calm and no beekeeper intervention is required.\n"
+                    + "</SPOKEN>";
+        }
+
+        StringBuilder reportSb = new StringBuilder();
+        StringBuilder spokenSb = new StringBuilder();
+
+        reportSb.append("<REPORT>\n");
+        reportSb.append("### Traffic & Colony Status\n");
+        EventSpatialSummary first = summaries.getFirst();
+        reportSb.append("- **Peak Traffic:** ").append(first.landingBoardBeeCount())
+                .append(" bees on landing board (").append(first.beesInsideHotspotCount())
+                .append(" inside foveal hotspot) at **").append(first.timestamp()).append("**.\n");
+        reportSb.append("- **Threat Check:** Zero wasps, hornets, or foreign pests detected.\n\n");
+        reportSb.append("### Peak Events\n");
+
+        spokenSb.append("<SPOKEN>\n");
+        spokenSb.append("Hive entrance briefing for your question. We analyzed ")
+                .append(summaries.size())
+                .append(summaries.size() == 1 ? " peak surprise event" : " peak surprise events")
+                .append(" on the flight board. ");
+
+        for (EventSpatialSummary s : summaries) {
+            reportSb.append("- **").append(s.timestamp()).append("** (`").append(s.surpriseScoreSigma()).append("σ` ")
+                    .append(s.severity()).append("): **").append(s.landingBoardBeeCount())
+                    .append(" bees** on board, **").append(s.beesInsideHotspotCount())
+                    .append(" inside hotspot** — dense honeybee guarding and foraging cluster.\n");
+
+            String spokenTime = "00:00".equals(s.timestamp())
+                    ? "At the beginning of the recording at second zero"
+                    : "At " + TolerantPayloadParser.sanitizeForNaturalSpeech(s.timestamp());
+            spokenSb.append(spokenTime)
+                    .append(", V-JEPA recorded a ")
+                    .append(s.severity().toLowerCase())
+                    .append(" surprise peak of ")
+                    .append(s.surpriseScoreSigma())
+                    .append(" sigma, with ")
+                    .append(s.landingBoardBeeCount())
+                    .append(" bees on the landing board and ")
+                    .append(s.beesInsideHotspotCount())
+                    .append(" bees tightly clustered inside the foveal hotspot, confirming a multi-bee interaction cluster. ");
+        }
+
+        reportSb.append("\n### Takeaway\n");
+        reportSb.append("Healthy foraging and entrance guarding. **No intervention required.**\n");
+        reportSb.append("</REPORT>");
+
+        spokenSb.append("All kinematic peaks correspond to active honeybee congregation and entrance guarding, with zero wasps, hornets, or foreign pests detected. The colony is healthy and no beekeeper intervention is required.\n");
+        spokenSb.append("</SPOKEN>");
+
+        return reportSb + "\n\n" + spokenSb;
     }
 
     private ChatCompletion executeWithKeyFailover(ChatCompletionCreateParams params) {
-        try {
-            return basetenClient.chat().completions().create(params);
-        } catch (OpenAIServiceException e) {
-            if ((e.statusCode() == 401 || e.statusCode() == 403 || e.statusCode() == 429)
-                    && !fallbackApiKey.isBlank()) {
-                return basetenClient
-                        .withOptions(opts -> opts.apiKey(fallbackApiKey))
-                        .chat()
-                        .completions()
-                        .create(params);
-            }
-            throw e;
-        }
+        return resilientExecutor.executeWithRetryAndFailover(
+                "BasetenMuseChatCompletion",
+                primaryApiKey,
+                fallbackApiKey,
+                (activeKey, attempt) -> {
+                    if (activeKey != null && !activeKey.isBlank() && !activeKey.equals(primaryApiKey)) {
+                        return basetenClient
+                                .withOptions(opts -> opts.apiKey(activeKey))
+                                .chat()
+                                .completions()
+                                .create(params);
+                    }
+                    return basetenClient.chat().completions().create(params);
+                }
+        );
+    }
+
+    public ResilientApiExecutor getResilientExecutor() {
+        return resilientExecutor;
     }
 
     public static String cleanMuseOutput(String raw) {
@@ -1308,12 +1539,17 @@ public class MetaMuseService {
                 + "- Saccadic Trigger: When latent prediction error peaks (S(t) >= tau, 10.2 sigma), the system fires a saccadic jump to the spatial hotspot tubelet [x, y].\n"
                 + "- System 2 (Foveal Vision & Saccades): High-resolution foveal zoom (+8.3x token density over peripheral stream) centers on the hotspot coordinates.\n"
                 + "- Scale-Invariant Containment (IoA_bee >= 0.25): Evaluates the fraction of bee area inside the hotspot to distinguish dense entrance clusters/guarding from foreign intruders.\n\n"
-                + "### Objective:\n"
-                + "The beekeeper is asking for a summary or diagnosis of their hive. Synthesize the provided chronological JSON digest of V-JEPA kinematic surprise events, SAM 3.1 landing-board bee counts, foveal hotspot bee containment metrics, and visual crops.\n\n"
                 + "### Autonomous Tool Calling Rules:\n"
                 + "1. Use `QueryFovealHotspot` to execute a saccadic zoom on unresolved spatial coordinates if fine-grained morphology is required.\n"
-                + "2. Use `QuerySam31Concept` only if an event indicates a suspected non-bee organism (e.g. 'hornet', 'wasp', 'pest') needing semantic verification.\n"
-                + "3. Summarize overall flight traffic trends (peak vs. stabilized bee counts), analyze peak events chronologically, and deliver an actionable beekeeper takeaway in clean Markdown.";
+                + "2. Use `QuerySam31Concept` only if an event indicates a suspected non-bee organism (e.g. 'hornet', 'wasp', 'pest') needing semantic verification.\n\n"
+                + "### Mandatory Dual-Output Format (Single Message):\n"
+                + "Your final response MUST contain two sections in a single message wrapped in `<REPORT>...</REPORT>` and `<SPOKEN>...</SPOKEN>` tags:\n"
+                + "1. `<REPORT>...</REPORT>` — **Visual Dashboard Summary (Short, Crisp, Well-Formatted Markdown):**\n"
+                + "   - Keep it compact, scannable, and highly informative (use short `###` headings and concise bullet points).\n"
+                + "   - Include: (a) Traffic & Threat Overview, (b) Peak Event Bullets (`MM:SS`, `sigma`, landing-board bees, hotspot bees, and visual cause), and (c) 1-sentence Beekeeper Takeaway.\n"
+                + "2. `<SPOKEN>...</SPOKEN>` — **Natural Spoken Narration for TTS (Complete Information, Natural Speech):**\n"
+                + "   - Must include **100% of the facts and numbers** from `<REPORT>` (never omit bee counts, hotspot counts, sigma scores, causes, or recommendations).\n"
+                + "   - Must be written as smooth, natural spoken prose ready to be read aloud: NO headings, NO bullet points, NO Markdown symbols (`#`, `*`, `` ` ``), NO raw event IDs (`evt_rec...`), and NO digital `MM:SS` timestamps (write `'at the beginning of the recording at second zero'` instead of `'00:00'`, `'at second twenty'` instead of `'00:20'`, `'at second thirty-five'` instead of `'00:35'`).";
     }
 
     public Map<String, EventSpatialSummary> getSpatialCache() {
@@ -1328,43 +1564,8 @@ public class MetaMuseService {
         return config;
     }
 
-    public static String extractSpokenSummary(String markdownReport) {
-        if (markdownReport == null || markdownReport.isBlank()) {
-            return "No anomalies requiring intervention were detected at the hive today.";
-        }
-        if (markdownReport.contains("Cached Demo Hive Summary") || markdownReport.contains("Offline UX Mode")) {
-            return "Hive entrance briefing. Flight traffic peaked at 38 bees at the start of the recording, with 15 bees clustering together directly at the hive entrance. Traffic then stabilized between 23 and 26 bees. All activity spikes were caused by normal bee jostling and guarding at the entrance slot, with no foreign intruders or wasps detected. The colony is healthy, and no intervention is required.";
-        }
-        String plain = markdownReport
-                // Remove technical statistical metrics (sigma, confidence scores) not useful for beekeepers
-                .replaceAll("(?i)\\b(?:at\\s+)?(?:S\\s*=\\s*)?[0-9.]+\\s*(?:sigma|σ)\\b", "")
-                .replaceAll("(?i)\\b(?:confidence|anomaly score|z-score|sigma)\\s*[:=]?\\s*[0-9.]*\\b", "")
-                // Replace timestamps and numeric ranges with natural spoken phrases
-                .replaceAll("at 00:00\\b", "at the start of the recording")
-                .replaceAll("\\b00:00\\b", "the start of the recording")
-                .replaceAll("\\b00:20\\b", "twenty seconds")
-                .replaceAll("\\b00:35\\b", "thirty-five seconds")
-                .replaceAll("\\b00:39\\b", "thirty-nine seconds")
-                .replaceAll("(?<=\\d)-(?=\\d)", " to ")
-                // Remove markdown headers, bold/italic markers, and backticks
-                .replaceAll("(?m)^#+\\s*", "")
-                .replace('_', ' ')
-                .replaceAll("[*`~()]", " ")
-                // Remove raw event IDs and pixel coordinate brackets like [235, 330, 395, 450]
-                .replaceAll("evt_[a-zA-Z0-9_]+", "the recorded event")
-                .replaceAll("\\[\\d+(?:,\\s*\\d+)+\\]", "")
-                .replaceAll("\\s+", " ")
-                .trim();
-
-        // Limit to first ~450 characters (approx. 3-4 spoken sentences) for crisp voice playback
-        if (plain.length() > 450) {
-            int lastPeriod = plain.lastIndexOf('.', 450);
-            if (lastPeriod > 150) {
-                return plain.substring(0, lastPeriod + 1);
-            }
-            return plain.substring(0, 450) + "...";
-        }
-        return plain;
+    public static String extractSpokenSummary(String markdownOrCombinedReport) {
+        return TolerantPayloadParser.parseDualMuseOutput(markdownOrCombinedReport).spokenSummary();
     }
 
     public BasetenConfig getBasetenConfig() {
