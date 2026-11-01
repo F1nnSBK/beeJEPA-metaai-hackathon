@@ -1079,7 +1079,15 @@ public class MetaMuseService {
             }
 
             try {
-                BufferedImage canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
+                BufferedImage canonical;
+                Optional<byte[]> offHeapBytes = perceptionService != null
+                        ? perceptionService.getBufferedFrameBytes(evt.eventId())
+                        : Optional.empty();
+                if (offHeapBytes.isPresent()) {
+                    canonical = VisualCropRenderer.loadCanonicalView(offHeapBytes.get());
+                } else {
+                    canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
+                }
                 String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
 
                 // Only call Meta SAM 3.1 API if live inference is enabled, with graceful per-event fallback

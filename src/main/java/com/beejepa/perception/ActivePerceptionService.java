@@ -38,7 +38,10 @@ public class ActivePerceptionService {
     private final MuseDiskCache museDiskCache;
 
     private final Map<String, SaccadicTarget> targetsCache = new ConcurrentHashMap<>();
+    private final Map<String, Long> eventBufferSequences = new ConcurrentHashMap<>();
+    private final Map<String, Float> eventSimdCosine = new ConcurrentHashMap<>();
     private final List<SaccadicTarget> trajectory = new ArrayList<>();
+    private volatile float[] previousLatentVector = null;
 
     public ActivePerceptionService(
             OffHeapFrameRingBuffer ringBuffer,
@@ -161,12 +164,61 @@ public class ActivePerceptionService {
             try {
                 byte[] bytes = Files.readAllBytes(frameFile.get().toPath());
                 long timestampNs = (long) (timestampSec * 1_000_000_000L);
-                ringBuffer.appendFrame(timestampNs, frameIndex, surpriseSigma, focusX, focusY, bytes);
+                long seq = ringBuffer.appendFrame(timestampNs, frameIndex, surpriseSigma, focusX, focusY, bytes);
+                eventBufferSequences.put(eventId, seq);
+
+                // Evaluate latent transition with Java 25 SIMD Vector API (FloatVector.SPECIES_PREFERRED)
+                if (simdEvaluator != null && bytes.length >= 128) {
+                    float[] currentLatent = extractCompactLatentSignature(bytes, focusX, focusY, surpriseSigma);
+                    float[] prev = previousLatentVector;
+                    if (prev != null && prev.length == currentLatent.length) {
+                        float simdCos = simdEvaluator.cosineSimilarity(prev, currentLatent);
+                        eventSimdCosine.put(eventId, simdCos);
+                    } else {
+                        eventSimdCosine.put(eventId, 1.0f);
+                    }
+                    previousLatentVector = currentLatent;
+                }
             } catch (IOException e) {
                 LOG.warn("Failed to ingest keyframe into off-heap ring buffer for event {}: {}", eventId,
                         e.getMessage());
             }
         }
+    }
+
+    private float[] extractCompactLatentSignature(byte[] frameBytes, float focusX, float focusY, float surpriseSigma) {
+        float[] vec = new float[64];
+        vec[0] = focusX / 540.0f;
+        vec[1] = focusY / 960.0f;
+        vec[2] = surpriseSigma / 20.0f;
+        int step = Math.max(1, frameBytes.length / 61);
+        for (int i = 3; i < 64; i++) {
+            int idx = Math.min(frameBytes.length - 1, (i - 3) * step);
+            vec[i] = ((frameBytes[idx] & 0xFF) - 128.0f) / 128.0f;
+        }
+        return vec;
+    }
+
+    /**
+     * Retrospectively retrieves the raw frame bytes for an event directly from the
+     * FFM Off-Heap Ring Buffer (MemorySegment), avoiding redundant disk reads.
+     */
+    public Optional<byte[]> getBufferedFrameBytes(String eventId) {
+        if (eventId == null) {
+            return Optional.empty();
+        }
+        Long seq = eventBufferSequences.get(eventId);
+        if (seq != null) {
+            Optional<OffHeapFrameRingBuffer.FrameEntry> entry = ringBuffer.getBySequence(seq);
+            if (entry.isPresent() && entry.get().payload() != null && entry.get().payload().length > 0) {
+                return Optional.of(entry.get().payload());
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<Float> getEventSimdCosine(String eventId) {
+        return Optional.ofNullable(eventSimdCosine.get(eventId));
     }
 
     public List<SaccadicTarget> getSaccadicTrajectory() {

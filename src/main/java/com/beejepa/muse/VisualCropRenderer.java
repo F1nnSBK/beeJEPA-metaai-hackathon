@@ -35,6 +35,18 @@ public final class VisualCropRenderer {
 
     public static BufferedImage loadCanonicalView(Path imagePath) throws IOException {
         BufferedImage raw = ImageIO.read(imagePath.toFile());
+        return toCanonicalSubimage(raw);
+    }
+
+    public static BufferedImage loadCanonicalView(byte[] imageBytes) throws IOException {
+        BufferedImage raw = ImageIO.read(new java.io.ByteArrayInputStream(imageBytes));
+        return toCanonicalSubimage(raw);
+    }
+
+    private static BufferedImage toCanonicalSubimage(BufferedImage raw) throws IOException {
+        if (raw == null) {
+            throw new IOException("Could not decode image payload");
+        }
         int w = Math.min(SamGeometry.FRAME_SIZE, raw.getWidth());
         int h = Math.min(SamGeometry.FRAME_SIZE, raw.getHeight());
         BufferedImage copy = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);

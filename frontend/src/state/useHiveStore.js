@@ -303,9 +303,14 @@ async function loadSystemAndData() {
   checkMetaHealth()
   fetchPerceptionTelemetry()
   fetchSaccadicTargets()
+
+  if (!museDiagnosis.value) {
+    askMuse('What happened at my hive today?', { silentAutoLoad: true })
+  }
 }
 
-async function askMuse(question = null) {
+async function askMuse(question = null, options = {}) {
+  const silentAutoLoad = Boolean(options?.silentAutoLoad)
   const q = (question || museQuestionInput.value || 'What happened at my hive today?').trim()
   isAskingMuse.value = true
   try {
@@ -326,11 +331,13 @@ async function askMuse(question = null) {
       museDiagnosis.value = normalized
       fetchSaccadicTargets()
 
-      if (beeModeActive.value) {
-        const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
-        playBeeBuzz(textToBuzz)
-      } else if (autoReadAloud.value && normalized.spokenSummary) {
-        readAloud(normalized.spokenSummary)
+      if (!silentAutoLoad) {
+        if (beeModeActive.value) {
+          const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
+          playBeeBuzz(textToBuzz)
+        } else if (autoReadAloud.value && normalized.spokenSummary) {
+          readAloud(normalized.spokenSummary)
+        }
       }
     }
   } finally {
