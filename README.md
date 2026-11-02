@@ -15,6 +15,10 @@ Autonomous hive entrance monitoring and active perception edge system combining 
 
 ## Overview & Hackathon Scope
 
+![Figure 1: Biological-to-Computational Paradigm in beeJEPA](figures/figure1_head_concept.svg)
+
+*Figure 1: Biological-to-computational active perception loop in beeJEPA — mapping honeybee ommatidia optic flow, retinal-slip saccades, frontal acute-zone inspection, and waggle-dance signaling (top) to V-JEPA 2.1 peripheral prediction, latent surprise gating (`S(t) >= 10.2σ`, `-93.6%` frames), SAM 3.1 + `IoA >= 0.25` foveal grounding (`+8.3x` token density), and Muse Spark Open dual `<REPORT>` + `<SPOKEN>` synthesis (bottom).*
+
 Continuous 60 fps video monitoring of a honeybee (*Apis mellifera*) flight board generates high-volume footage where manual inspection or uniform cloud VLM polling is computationally prohibitive. **beeJEPA** pairs a pre-existing self-supervised sensory pipeline (**System 1**) with an active perception, spatial grounding, and multimodal reasoning engine built during the **Meta Global AI Developer Hackathon 2026** (**System 2**):
 
 - **Pre-Existing Foundation (System 1 — Peripheral Sensor Stream):**
@@ -76,6 +80,19 @@ Across consecutive kinematic peaks in recording `rec2125`, the pipeline tracks e
 | **SAM 3.1 Grounding** | Channel 1 (`"bee"`) only — 38 unlocalized boxes | **Channel 1 PCS + Channel 2 PVS Hotspot + IoA** |
 | **Visual Tokens on Anomaly** | **88 patches** (160x120 px in full frame) | **729 patches** (384x384 foveal crop, **+8.3x**) |
 | **Muse Spark Diagnosis** | Unlocalized baseline assessment; misses localized entrance bottleneck | Identifies the 15-bee guard bottleneck, tracks dispersion across keyframes, and rules out predators |
+
+### 4. Five-Tier Ablation Pyramid & Empirical Baseline Evaluation (V-JEPA 2.1 to SAM 3.1 to Muse Spark Open)
+![Five-Tier Ablation Pyramid and Role Analysis](figures/ablation_pyramid_roles.svg)
+
+Each layer in the pipeline acts simultaneously as an information funnel (compressing temporal and spatial search volume) and a semantic amplifier (elevating raw pixels to verified causal reasoning). To prevent confounded attribution, the ablation study separates **spatial cropping (`88` native patches, `1x` MHSA FLOPs)** from **bicubic foveal upsampling (`729` patches, `+8.3x` tokens, `68.6x` quadratic MHSA attention FLOPs)** and evaluates active saccadic targeting against non-trivial spatial and temporal baselines across all `N = 20` validation anomaly events in `rec2125` (`184` total events across the `48`-minute cohort):
+
+| Pyramid Tier | Model / Subsystem | Functional Role | Empirical Output (`rec2125` Peak `00:00`) | What Breaks If Ablated |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 4 (Apex)** | `Meta Muse Spark Open` (`<REPORT>` + `<SPOKEN>`) | Multi-event causal synthesis & natural speech | 3-keyframe digest (`00:00 -> 00:20 -> 00:35`) + lossless TTS audio | Stops at raw per-frame JSON numbers; no temporal narrative or voice briefing |
+| **Tier 3** | `SamGeometry` (`IoA_bee >= 0.25` + `< 22%` Void Guard) | Cross-channel geometric & bee-balling attribution | `15 / 38` bees in hotspot (`63.5%` box coverage -> `multi_bee_interaction_cluster`) | Cannot separate multi-bee crowding (`63.5%` coverage) from defensive bee-balling around an unsegmented predator (`< 22%` coverage) or solitary intruder |
+| **Tier 2** | `Meta SAM 3.1` (Ch.1 PCS + Ch.2 PVS) | Physical instance segmentation | `38` landing-board bees segmented + class-agnostic hotspot mask | V-JEPA 2.1 has `0` object labels; Muse Spark without SAM (`C11`) suffers `2.8` bee count MAE |
+| **Tier 1** | `V-JEPA 2.1` + Java 25 SIMD & FFM Buffer | Dynamic temporal-spatial saccadic trigger | `20` peak clips (`-93.6%` frames), `S(t) = 16.05σ` at `[4,2]`, `100%` pointing hit rate | Static entrance crop (`B1/C10` at `cx=315, cy=426`) misses `70.0%` of laterally drifting anomalies (`30.0%` hit rate, `159.3 px` mean center error, `0.1402` IoU); Random gaze (`B3`, `K=5` seeds) hits only `21.0%` (`177.9 px` error) |
+| **Tier 0 (Base)** | Raw 60 fps Stream + Pixel-Diff (`B0/C01`) | Optical sensor capture | `18,000` frames / 5 min (`|ΔI| = 0.0566`) | Triggered by cloud luminance dips and moving grass blades (`y > 440`); `0.0` spatial IoU |
 
 ---
 
@@ -175,6 +192,7 @@ Open `http://localhost:8080` in your browser. For frontend hot-reload during dev
 | `GET` | `/api/v1/muse/health` | Upstream API connectivity and circuit breaker status |
 | `GET` | `/api/v1/perception/ring-buffer` | Java 25 FFM off-heap circular frame buffer telemetry |
 | `GET` | `/api/v1/perception/saccades` | Saccadic trajectory targets with SIMD latent similarity metrics |
+| `GET` | `/api/v1/perception/ablation-pyramid` | Live 5-tier ablation pyramid funnel metrics and counterfactual role analysis |
 | `POST` | `/api/v1/perception/simd-eval` | Direct hardware SIMD (`FloatVector`) latent distance & cosine evaluation |
 | `GET` | `/api/v1/telemetry/stats` | Request latency percentiles (`p50`, `p95`, `p99`) and `/prometheus` metrics |
 

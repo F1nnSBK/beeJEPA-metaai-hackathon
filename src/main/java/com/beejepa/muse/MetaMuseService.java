@@ -1126,7 +1126,7 @@ public class MetaMuseService {
                 }
 
                 List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
-                String preClass = SamGeometry.classifyHotspot(contained);
+                String preClass = SamGeometry.classifyHotspot(contained, hotspot, evt.surpriseScore());
 
                 RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(
                         canonical, hotspot, boardBees, contained, 35

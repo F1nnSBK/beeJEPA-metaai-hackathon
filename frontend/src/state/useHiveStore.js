@@ -89,6 +89,9 @@ const activeView = ref(initialPrefs.activeView || 'comparison')
 const isAnalyzing = ref(false)
 const saccadicTargets = ref([])
 const activeSaccade = ref(null)
+const ablationPyramid = ref(null)
+const selectedPyramidTier = ref('TIER_1_VJEPA_WORLD_MODEL')
+const selectedCounterfactual = ref('FULL_PYRAMID')
 
 // Muse Diagnosis & Staging state
 const stagedMuseModalOpen = ref(false)
@@ -130,6 +133,13 @@ watch([selectedEvent, currentTimelineSec, museQuestionInput], ([ev, sec, q]) => 
     currentTimelineSec: sec,
     museQuestionInput: q
   })
+})
+
+watch(selectedEvent, (ev, prevEv) => {
+  updateActiveSaccade()
+  if (ev?.eventId && ev.eventId !== prevEv?.eventId) {
+    fetchAblationPyramid(ev.eventId)
+  }
 })
 
 function stopAllAudio() {
@@ -223,6 +233,19 @@ function updateActiveSaccade() {
   activeSaccade.value = saccadicTargets.value.find(s => s.eventId === id) || null
 }
 
+async function fetchAblationPyramid(eventId = null) {
+  const targetId = eventId || selectedEvent.value?.eventId || ''
+  const query = targetId ? `?eventId=${encodeURIComponent(targetId)}` : ''
+  const res = await apiFetch(`/api/v1/perception/ablation-pyramid${query}`, {
+    cancelKey: 'ablationPyramid',
+    retries: 1,
+    timeoutMs: 6000
+  })
+  if (res.ok && res.data) {
+    ablationPyramid.value = res.data
+  }
+}
+
 async function checkMetaHealth() {
   const [healthRes, statusRes] = await Promise.all([
     apiFetch('/api/v1/muse/health', { cancelKey: 'metaHealth', retries: 1, timeoutMs: 8000 }),
@@ -303,6 +326,7 @@ async function loadSystemAndData() {
   checkMetaHealth()
   fetchPerceptionTelemetry()
   fetchSaccadicTargets()
+  fetchAblationPyramid(selectedEvent.value?.eventId)
 
   if (!museDiagnosis.value) {
     askMuse('What happened at my hive today?', { silentAutoLoad: true })
@@ -460,7 +484,11 @@ export function useHiveStore() {
     isAnalyzing,
     saccadicTargets,
     activeSaccade,
+    ablationPyramid,
+    selectedPyramidTier,
+    selectedCounterfactual,
     fetchSaccadicTargets,
+    fetchAblationPyramid,
     updateActiveSaccade,
     runMetaAnalysis,
 

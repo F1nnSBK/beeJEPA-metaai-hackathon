@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="1274.4pt" height="316.8pt" viewBox="0 0 1274.4 316.8" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-02T12:41:13.811430</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 316.8 
+L 1274.4 316.8 
+L 1274.4 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 192.171016 281.599336 
+L 411.32759 281.599336 
+L 411.32759 24.418516 
+L 192.171016 24.418516 
+L 192.171016 281.599336 
+z
+" style="fill: none"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 202.132678 269.909299 
+L 401.365927 269.909299 
+L 401.365927 238.533441 
+L 202.132678 238.533441 
+z
+" clip-path="url(#p17bf2ef926)" style="fill: #8c929c; opacity: 0.82"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 230.025333 219.303077 
+L 373.473272 219.303077 
+L 373.473272 187.927219 
+L 230.025333 187.927219 
+z
+" clip-path="url(#p17bf2ef926)" style="fill: #d97706; opacity: 0.82"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 251.94099 168.696855 
+L 351.557615 168.696855 
+L 351.557615 137.320997 
+L 251.94099 137.320997 
+z
+" clip-path="url(#p17bf2ef926)" style="fill: #2b8a3e; opacity: 0.82"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 269.871983 118.090633 
+L 333.626622 118.090633 
+L 333.626622 86.714775 
+L 269.871983 86.714775 
+z
+" clip-path="url(#p17bf2ef926)" style="fill: #1971c2; opacity: 0.82"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 285.810643 67.484411 
+L 317.687963 67.484411 
+L 317.687963 36.108553 
+L 285.810643 36.108553 
+z
+" clip-path="url(#p17bf2ef926)" style="fill: #c92a2a; opacity: 0.82"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="m1f084e41be" d="M 0 0 
+L 0 3.5 
+" style="stroke: #2c2e33; stroke-width: 0.65"/>
+      </defs>
+      <g>
+       <use xlink:href="#m1f084e41be" x="202.132678" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="202.132678" y="295.057344" transform="rotate(-0 202.132678 295.057344)">1.0</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#m1f084e41be" x="251.94099" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="251.94099" y="295.057344" transform="rotate(-0 251.94099 295.057344)">0.5</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_3">
+      <g>
+       <use xlink:href="#m1f084e41be" x="301.749303" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="301.749303" y="295.057344" transform="rotate(-0 301.749303 295.057344)">0.0</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#m1f084e41be" x="351.557615" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="351.557615" y="295.057344" transform="rotate(-0 351.557615 295.057344)">0.5</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_5">
+      <g>
+       <use xlink:href="#m1f084e41be" x="401.365927" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="401.365927" y="295.057344" transform="rotate(-0 401.365927 295.057344)">1.0</text>
+     </g>
+    </g>
+    <g id="text_6">
+     <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="301.749303" y="307.558008" transform="rotate(-0 301.749303 307.558008)">Relative Search Funnel Width (Base to Apex)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_6"/>
+     <g id="text_7">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="188.671016" y="257.450706" transform="rotate(-0 188.671016 257.450706)">Tier 0: Raw 60 fps Stream (18,000 frames)</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_7"/>
+     <g id="text_8">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="188.671016" y="206.844484" transform="rotate(-0 188.671016 206.844484)">Tier 1: V-JEPA 2.1 Saccade (20 peak clips)</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_8"/>
+     <g id="text_9">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="188.671016" y="156.238262" transform="rotate(-0 188.671016 156.238262)">Tier 2: SAM 3.1 Board ROI (38 bee masks)</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_9"/>
+     <g id="text_10">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="188.671016" y="105.63204" transform="rotate(-0 188.671016 105.63204)">Tier 3: IoA ≥ 0.25 + Void Guard (15 bees)</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_10"/>
+     <g id="text_11">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="188.671016" y="55.025818" transform="rotate(-0 188.671016 55.025818)">Tier 4: Muse Spark Digest (3 keyframes)</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_8">
+    <path d="M 192.171016 281.599336 
+L 411.32759 281.599336 
+" style="fill: none; stroke: #4a4d52; stroke-width: 0.75; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 9.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #1a1b1e" x="301.749303" y="14.418516" transform="rotate(-0 301.749303 14.418516)">A. Five-Tier Information Funnel (Base to Apex)</text>
+   </g>
+  </g>
+  <g id="axes_2">
+   <g id="patch_9">
+    <path d="M 646.34923 281.599336 
+L 829.578497 281.599336 
+L 829.578497 24.418516 
+L 646.34923 24.418516 
+L 646.34923 281.599336 
+z
+" style="fill: none"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 646.34923 269.909299 
+L 666.50445 269.909299 
+L 666.50445 235.370552 
+L 646.34923 235.370552 
+z
+" clip-path="url(#p7f877f9df8)" style="fill: #8c929c; opacity: 0.82"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 646.34923 203.488632 
+L 664.901193 203.488632 
+L 664.901193 168.949886 
+L 646.34923 168.949886 
+z
+" clip-path="url(#p7f877f9df8)" style="fill: #d97706; opacity: 0.82"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 646.34923 137.067966 
+L 691.240401 137.067966 
+L 691.240401 102.529219 
+L 646.34923 102.529219 
+z
+" clip-path="url(#p7f877f9df8)" style="fill: #2b8a3e; opacity: 0.82"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 646.34923 70.647299 
+L 813.316899 70.647299 
+L 813.316899 36.108553 
+L 646.34923 36.108553 
+z
+" clip-path="url(#p7f877f9df8)" style="fill: #c92a2a; opacity: 0.82"/>
+   </g>
+   <g id="matplotlib.axis_3">
+    <g id="xtick_6">
+     <g id="line2d_11">
+      <g>
+       <use xlink:href="#m1f084e41be" x="646.34923" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_13">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="646.34923" y="295.057344" transform="rotate(-0 646.34923 295.057344)">0</text>
+     </g>
+    </g>
+    <g id="xtick_7">
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#m1f084e41be" x="666.50445" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_14">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="666.50445" y="295.057344" transform="rotate(-0 666.50445 295.057344)">88</text>
+     </g>
+    </g>
+    <g id="xtick_8">
+     <g id="line2d_13">
+      <g>
+       <use xlink:href="#m1f084e41be" x="692.156547" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_15">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="692.156547" y="295.057344" transform="rotate(-0 692.156547 295.057344)">200</text>
+     </g>
+    </g>
+    <g id="xtick_9">
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m1f084e41be" x="737.963864" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_16">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="737.963864" y="295.057344" transform="rotate(-0 737.963864 295.057344)">400</text>
+     </g>
+    </g>
+    <g id="xtick_10">
+     <g id="line2d_15">
+      <g>
+       <use xlink:href="#m1f084e41be" x="783.77118" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_17">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="783.77118" y="295.057344" transform="rotate(-0 783.77118 295.057344)">600</text>
+     </g>
+    </g>
+    <g id="xtick_11">
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m1f084e41be" x="813.316899" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_18">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="813.316899" y="295.057344" transform="rotate(-0 813.316899 295.057344)">729</text>
+     </g>
+    </g>
+    <g id="text_19">
+     <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="737.963864" y="307.558008" transform="rotate(-0 737.963864 307.558008)">ViT-14 Visual Tokens on Anomaly (Deconfounded)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_4">
+    <g id="ytick_6">
+     <g id="line2d_17">
+      <defs>
+       <path id="mf6a8b87588" d="M 0 0 
+L -3.5 0 
+" style="stroke: #2c2e33; stroke-width: 0.65"/>
+      </defs>
+      <g>
+       <use xlink:href="#mf6a8b87588" x="646.34923" y="252.639925" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_20">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="639.34923" y="255.869261" transform="rotate(-0 639.34923 255.869261)">B5: Full Frame No Crop (1× FLOPs)</text>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_18">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="646.34923" y="186.219259" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_21">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="639.34923" y="189.448595" transform="rotate(-0 639.34923 189.448595)">V-JEPA Latent 9×9 Grid (81 tokens)</text>
+     </g>
+    </g>
+    <g id="ytick_8">
+     <g id="line2d_19">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="646.34923" y="119.798593" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_22">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="639.34923" y="123.027929" transform="rotate(-0 639.34923 123.027929)">Native Saccade Crop (160×120, 1× FLOPs)</text>
+     </g>
+    </g>
+    <g id="ytick_9">
+     <g id="line2d_20">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="646.34923" y="53.377926" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_23">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="639.34923" y="56.607262" transform="rotate(-0 639.34923 56.607262)">Bicubic Foveal Crop (384×384, 68.6× FLOPs)</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_14">
+    <path d="M 646.34923 281.599336 
+L 646.34923 24.418516 
+" style="fill: none; stroke: #4a4d52; stroke-width: 0.75; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 646.34923 281.599336 
+L 829.578497 281.599336 
+" style="fill: none; stroke: #4a4d52; stroke-width: 0.75; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 9.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #1a1b1e" x="737.963864" y="14.418516" transform="rotate(-0 737.963864 14.418516)">B. Deconfounded Crop vs. Upsampling Tokens</text>
+   </g>
+  </g>
+  <g id="axes_3">
+   <g id="patch_16">
+    <path d="M 1055.228888 281.599336 
+L 1267.2 281.599336 
+L 1267.2 24.418516 
+L 1055.228888 24.418516 
+L 1055.228888 281.599336 
+z
+" style="fill: none"/>
+   </g>
+   <g id="matplotlib.axis_5">
+    <g id="xtick_12">
+     <g id="line2d_21">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1055.228888" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_25">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1055.228888" y="295.057344" transform="rotate(-0 1055.228888 295.057344)">0%</text>
+     </g>
+    </g>
+    <g id="xtick_13">
+     <g id="line2d_22">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1094.482797" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_26">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1094.482797" y="295.057344" transform="rotate(-0 1094.482797 295.057344)">20%</text>
+     </g>
+    </g>
+    <g id="xtick_14">
+     <g id="line2d_23">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1133.736707" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_27">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1133.736707" y="295.057344" transform="rotate(-0 1133.736707 295.057344)">40%</text>
+     </g>
+    </g>
+    <g id="xtick_15">
+     <g id="line2d_24">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1172.990617" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_28">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1172.990617" y="295.057344" transform="rotate(-0 1172.990617 295.057344)">60%</text>
+     </g>
+    </g>
+    <g id="xtick_16">
+     <g id="line2d_25">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1212.244526" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_29">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1212.244526" y="295.057344" transform="rotate(-0 1212.244526 295.057344)">80%</text>
+     </g>
+    </g>
+    <g id="xtick_17">
+     <g id="line2d_26">
+      <g>
+       <use xlink:href="#m1f084e41be" x="1251.498436" y="281.599336" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_30">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1251.498436" y="295.057344" transform="rotate(-0 1251.498436 295.057344)">100%</text>
+     </g>
+    </g>
+    <g id="text_31">
+     <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #2c2e33" x="1161.214444" y="307.558008" transform="rotate(-0 1161.214444 307.558008)">Empirical Anomaly Hit &amp; Attribution Rate (N=20)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_6">
+    <g id="ytick_10">
+     <g id="line2d_27">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="269.909299" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_32">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="273.138635" transform="rotate(-0 1048.228888 273.138635)">1. B0 / C01: Scalar Pixel-Diff (Tier 0)</text>
+     </g>
+    </g>
+    <g id="ytick_11">
+     <g id="line2d_28">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="223.14915" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_33">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="226.378485" transform="rotate(-0 1048.228888 226.378485)">2. B3: Random Gaze Control (K=5 Seeds)</text>
+     </g>
+    </g>
+    <g id="ytick_12">
+     <g id="line2d_29">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="176.389" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_34">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="179.618336" transform="rotate(-0 1048.228888 179.618336)">3. B5 / C02: Full-Frame SAM + Muse</text>
+     </g>
+    </g>
+    <g id="ytick_13">
+     <g id="line2d_30">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="129.628851" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_35">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="132.858187" transform="rotate(-0 1048.228888 132.858187)">4. B1 / C10: Static Entrance Crop (cx=315)</text>
+     </g>
+    </g>
+    <g id="ytick_14">
+     <g id="line2d_31">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="82.868702" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_36">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="86.098038" transform="rotate(-0 1048.228888 86.098038)">5. C11: V-JEPA Saccade + Muse (MAE 2.8)</text>
+     </g>
+    </g>
+    <g id="ytick_15">
+     <g id="line2d_32">
+      <g>
+       <use xlink:href="#mf6a8b87588" x="1055.228888" y="36.108553" style="fill: #2c2e33; stroke: #2c2e33; stroke-width: 0.65"/>
+      </g>
+     </g>
+     <g id="text_37">
+      <text style="font-size: 8.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: end; fill: #2c2e33" x="1048.228888" y="39.337889" transform="rotate(-0 1048.228888 39.337889)">6. C12: Full BeeJEPA Pyramid (MAE 0.0)</text>
+     </g>
+    </g>
+   </g>
+   <g id="LineCollection_1">
+    <path d="M 1055.228888 269.909299 
+L 1074.855842 269.909299 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #adb5bd; stroke-opacity: 0.85; stroke-width: 1.8"/>
+    <path d="M 1055.228888 223.14915 
+L 1096.445493 223.14915 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #748ffc; stroke-opacity: 0.85; stroke-width: 1.8"/>
+    <path d="M 1055.228888 176.389 
+L 1104.296275 176.389 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #4dabf7; stroke-opacity: 0.85; stroke-width: 1.8"/>
+    <path d="M 1055.228888 129.628851 
+L 1114.109752 129.628851 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #e67700; stroke-opacity: 0.85; stroke-width: 1.8"/>
+    <path d="M 1055.228888 82.868702 
+L 1222.058004 82.868702 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #2b8a3e; stroke-opacity: 0.85; stroke-width: 1.8"/>
+    <path d="M 1055.228888 36.108553 
+L 1251.498436 36.108553 
+" clip-path="url(#p59bc9d482a)" style="fill: none; stroke: #c92a2a; stroke-opacity: 0.85; stroke-width: 1.8"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 1055.228888 281.599336 
+L 1055.228888 24.418516 
+" style="fill: none; stroke: #4a4d52; stroke-width: 0.75; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 1055.228888 281.599336 
+L 1267.2 281.599336 
+" style="fill: none; stroke: #4a4d52; stroke-width: 0.75; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="PathCollection_1">
+    <defs>
+     <path id="C0_0_7a0966e65b" d="M 0 3.082207 
+C 0.817411 3.082207 1.601453 2.757446 2.179449 2.179449 
+C 2.757446 1.601453 3.082207 0.817411 3.082207 -0 
+C 3.082207 -0.817411 2.757446 -1.601453 2.179449 -2.179449 
+C 1.601453 -2.757446 0.817411 -3.082207 0 -3.082207 
+C -0.817411 -3.082207 -1.601453 -2.757446 -2.179449 -2.179449 
+C -2.757446 -1.601453 -3.082207 -0.817411 -3.082207 0 
+C -3.082207 0.817411 -2.757446 1.601453 -2.179449 2.179449 
+C -1.601453 2.757446 -0.817411 3.082207 0 3.082207 
+z
+"/>
+    </defs>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1074.855842" y="269.909299" style="fill: #adb5bd; stroke: #adb5bd"/>
+    </g>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1096.445493" y="223.14915" style="fill: #748ffc; stroke: #748ffc"/>
+    </g>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1104.296275" y="176.389" style="fill: #4dabf7; stroke: #4dabf7"/>
+    </g>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1114.109752" y="129.628851" style="fill: #e67700; stroke: #e67700"/>
+    </g>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1222.058004" y="82.868702" style="fill: #2b8a3e; stroke: #2b8a3e"/>
+    </g>
+    <g clip-path="url(#p59bc9d482a)">
+     <use xlink:href="#C0_0_7a0966e65b" x="1251.498436" y="36.108553" style="fill: #c92a2a; stroke: #c92a2a"/>
+    </g>
+   </g>
+   <g id="text_38">
+    <text style="font-size: 9.5px; font-family: 'Fira Sans', 'Fira Math', 'DejaVu Sans', 'Arial', 'Helvetica', sans-serif; text-anchor: middle; fill: #1a1b1e" x="1161.214444" y="14.418516" transform="rotate(-0 1161.214444 14.418516)">C. Empirical Factorial &amp; Baseline Accuracy</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p17bf2ef926">
+   <rect x="192.171016" y="24.418516" width="219.156574" height="257.18082"/>
+  </clipPath>
+  <clipPath id="p7f877f9df8">
+   <rect x="646.34923" y="24.418516" width="183.229267" height="257.18082"/>
+  </clipPath>
+  <clipPath id="p59bc9d482a">
+   <rect x="1055.228888" y="24.418516" width="211.971112" height="257.18082"/>
+  </clipPath>
+ </defs>
+</svg>

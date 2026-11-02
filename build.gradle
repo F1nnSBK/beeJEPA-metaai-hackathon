@@ -53,6 +53,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.withType(Test).configureEach {
+    systemProperties System.properties
     jvmArgs += [
         "--enable-preview",
         "--add-modules", "jdk.incubator.vector"

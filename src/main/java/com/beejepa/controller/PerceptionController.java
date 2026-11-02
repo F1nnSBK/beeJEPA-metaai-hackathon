@@ -47,6 +47,11 @@ public class PerceptionController {
                      .orElseGet(HttpResponse::notFound);
     }
 
+    @Get("/ablation-pyramid")
+    public HttpResponse<Map<String, Object>> getAblationPyramid(@QueryValue Optional<String> eventId) {
+        return HttpResponse.ok(perceptionService.buildAblationPyramid(eventId.orElse(null)));
+    }
+
     @Post(value = "/simd-eval", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> evaluateLatents(@Body Map<String, List<Number>> payload) {
         if (payload == null || !payload.containsKey("predicted") || !payload.containsKey("target")) {

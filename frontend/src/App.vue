@@ -29,7 +29,11 @@ const {
   isAnalyzing,
   saccadicTargets,
   activeSaccade,
+  ablationPyramid,
+  selectedPyramidTier,
+  selectedCounterfactual,
   fetchSaccadicTargets,
+  fetchAblationPyramid,
   updateActiveSaccade,
   runMetaAnalysis,
   stagedMuseModalOpen,
@@ -60,7 +64,36 @@ const {
 } = useHiveStore()
 
 const videoPlayer = ref(null)
+const showAblationMatrix = ref(false)
 let activeStopRecording = null
+
+const orderedPyramidTiersApexFirst = computed(() => {
+  const list = ablationPyramid.value?.tiers
+  if (!Array.isArray(list)) return []
+  return [...list].sort((a, b) => Number(b.tierIndex ?? 0) - Number(a.tierIndex ?? 0))
+})
+
+const activePyramidTierObj = computed(() => {
+  const list = ablationPyramid.value?.tiers
+  if (!Array.isArray(list) || !list.length) return null
+  return list.find(t => t.id === selectedPyramidTier.value) || list[1] || list[0]
+})
+
+const activeCounterfactualObj = computed(() => {
+  const list = ablationPyramid.value?.counterfactuals
+  if (!Array.isArray(list) || !list.length) return null
+  return list.find(c => c.id === selectedCounterfactual.value) || list[list.length - 1]
+})
+
+function pyramidTierWidthClass(tierIndex) {
+  switch (Number(tierIndex)) {
+    case 4: return 'w-[60%]'
+    case 3: return 'w-[70%]'
+    case 2: return 'w-[80%]'
+    case 1: return 'w-[90%]'
+    default: return 'w-full'
+  }
+}
 
 const isNearPeakAnomaly = computed(() => {
   if (activeView.value === 'sam') return true
@@ -1277,6 +1310,114 @@ async function handleLogout() {
               <p class="text-xs text-ink-200 leading-relaxed italic bg-ink-950 p-3 rounded border border-ink-800">
                 "{{ selectedEvent.agentResult.muse.diagnosis }}"
               </p>
+            </div>
+
+            <!-- 5-Tier Ablation Pyramid & Model Role Inspector -->
+            <div v-if="ablationPyramid" class="p-3.5 bg-ink-900/95 rounded-lg border border-ink-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-ink-800">
+                <div>
+                  <h3 class="text-[11px] font-semibold text-honey-400 uppercase tracking-wider">5-Tier Ablation Pyramid</h3>
+                  <p class="text-[10px] text-ink-400">Click any tier from Base (V-JEPA 2.1) to Apex (Muse Spark) to inspect its role</p>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-ink-800 text-ink-300 border border-ink-700">
+                  -{{ ablationPyramid.funnelMetrics?.compressionRatioPct || 93.6 }}% Frames · +{{ ablationPyramid.funnelMetrics?.tokenDensityBoost || 8.3 }}x ({{ ablationPyramid.funnelMetrics?.attentionFlopRatio || 68.6 }}x FLOPs)
+                </span>
+              </div>
+
+              <!-- Visual Centered Pyramid Stack (Apex Tier 4 -> Base Tier 0) -->
+              <div class="flex flex-col items-center gap-1.5 py-1">
+                <button
+                  v-for="tier in orderedPyramidTiersApexFirst"
+                  :key="tier.id"
+                  type="button"
+                  @click="selectedPyramidTier = tier.id"
+                  :class="[
+                    pyramidTierWidthClass(tier.tierIndex),
+                    selectedPyramidTier === tier.id
+                      ? 'bg-honey-500/20 border-honey-400 text-honey-200 shadow-sm shadow-honey-500/10'
+                      : 'bg-ink-950/90 border-ink-800 text-ink-300 hover:border-ink-700 hover:text-ink-100'
+                  ]"
+                  class="px-2.5 py-1.5 rounded border text-[10px] font-mono flex items-center justify-between transition-all cursor-pointer"
+                >
+                  <span class="font-semibold truncate">T{{ tier.tierIndex }} · {{ tier.shortTitle }}</span>
+                  <span class="text-[9px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.quantitativeMetric.split('·')[0] }}</span>
+                </button>
+              </div>
+
+              <!-- Selected Tier Role & Counterfactual Breakdown -->
+              <div v-if="activePyramidTierObj" class="p-2.5 bg-ink-950 rounded-lg border border-ink-800 space-y-1.5 text-[11px]">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-honey-300">{{ activePyramidTierObj.name }}</span>
+                  <span class="font-mono text-[10px] text-electric-300">{{ activePyramidTierObj.modelOrComponent }}</span>
+                </div>
+                <p class="text-ink-300 italic text-[11px]">"{{ activePyramidTierObj.roleQuestion }}"</p>
+                <div class="grid grid-cols-1 gap-1 pt-1 font-mono text-[10px]">
+                  <div class="bg-ink-900/70 px-2 py-1 rounded border border-ink-800/80">
+                    <span class="text-ink-400">Input: </span>
+                    <span class="text-ink-200">{{ activePyramidTierObj.inputSignal }}</span>
+                  </div>
+                  <div class="bg-ink-900/70 px-2 py-1 rounded border border-ink-800/80">
+                    <span class="text-ink-400">Output: </span>
+                    <span class="text-clover-300">{{ activePyramidTierObj.outputSignal }}</span>
+                  </div>
+                  <div class="bg-ember-500/10 px-2 py-1 rounded border border-ember-500/30">
+                    <span class="text-ember-300 font-semibold">Without this tier: </span>
+                    <span class="text-ink-200">{{ activePyramidTierObj.whatBreaksWithoutIt }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Counterfactual Ablation Matrix Toggle -->
+              <div class="pt-1 border-t border-ink-800 space-y-2">
+                <button
+                  type="button"
+                  @click="showAblationMatrix = !showAblationMatrix"
+                  class="w-full flex items-center justify-between text-[10px] font-mono text-ink-400 hover:text-honey-300 transition-colors"
+                >
+                  <span>{{ showAblationMatrix ? '▼ Hide' : '▶ Show' }} Empirical Factorial & Baseline Matrix (N=20)</span>
+                  <span class="text-honey-400">
+                    Hit {{ activeCounterfactualObj?.pointingHitRatePct ?? 100 }}% · IoU {{ activeCounterfactualObj?.meanHotspotIou ?? 1.0 }}
+                  </span>
+                </button>
+
+                <div v-if="showAblationMatrix" class="space-y-2.5 pt-1">
+                  <div class="grid grid-cols-1 gap-1">
+                    <button
+                      v-for="cf in ablationPyramid.counterfactuals"
+                      :key="cf.id"
+                      type="button"
+                      @click="selectedCounterfactual = cf.id"
+                      :class="selectedCounterfactual === cf.id ? 'bg-ink-800 border-honey-500/50 text-ink-100' : 'bg-ink-950 border-ink-800 text-ink-400 hover:text-ink-200'"
+                      class="px-2.5 py-1.5 rounded border text-left text-[10px] font-mono flex items-center justify-between transition-colors"
+                    >
+                      <span class="truncate">{{ cf.label }}</span>
+                      <span class="text-honey-400 shrink-0 ml-2">
+                        Hit {{ cf.pointingHitRatePct ?? (cf.capabilitiesScore * 20) }}% · MAE {{ cf.hotspotCountMae ?? '—' }}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div v-if="activeCounterfactualObj" class="p-2.5 bg-ink-950 rounded border border-ink-800 text-[10px] space-y-1 font-mono">
+                    <div class="flex items-center justify-between text-[9px] text-ink-400 pb-1 border-b border-ink-800/80">
+                      <span>Code: <strong class="text-honey-300">{{ activeCounterfactualObj.factorialCode || activeCounterfactualObj.id }}</strong></span>
+                      <span>Pointing Hit: <strong class="text-clover-300">{{ activeCounterfactualObj.pointingHitRatePct ?? 100 }}%</strong></span>
+                      <span>Mean IoU: <strong class="text-electric-300">{{ activeCounterfactualObj.meanHotspotIou ?? 1.0 }}</strong></span>
+                      <span>Count MAE: <strong class="text-ink-200">{{ activeCounterfactualObj.hotspotCountMae ?? 0.0 }}</strong></span>
+                    </div>
+                    <div><span class="text-ink-400">Active:</span> <span class="text-ink-200">{{ activeCounterfactualObj.activeComponents }}</span></div>
+                    <div><span class="text-ink-400">Ablated:</span> <span class="text-ember-300">{{ activeCounterfactualObj.missingComponent }}</span></div>
+                    <div class="text-ink-300 font-sans pt-0.5 leading-relaxed">{{ activeCounterfactualObj.observedOutcome }}</div>
+                  </div>
+
+                  <div class="p-2 bg-white rounded-lg border border-ink-700 overflow-x-auto">
+                    <img
+                      :src="ablationPyramid.figureSvgPath || '/landing/ablation_pyramid_roles.svg'"
+                      alt="BeeJEPA 5-Tier Ablation Pyramid Tufte SVG"
+                      class="w-full h-auto block"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

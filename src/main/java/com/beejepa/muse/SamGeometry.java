@@ -152,8 +152,69 @@ public final class SamGeometry {
         return contained;
     }
 
+    public static double computeIntersectionOverUnion(BoundingBox a, BoundingBox b) {
+        if (a == null || b == null) {
+            return 0.0;
+        }
+        int ix1 = Math.max(a.x1(), b.x1());
+        int iy1 = Math.max(a.y1(), b.y1());
+        int ix2 = Math.min(a.x2(), b.x2());
+        int iy2 = Math.min(a.y2(), b.y2());
+        int inter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+        int union = a.area() + b.area() - inter;
+        if (union <= 0) {
+            return 0.0;
+        }
+        return Math.round((inter / (double) union) * 10000.0) / 10000.0;
+    }
+
+    public static double computeCenterErrorPx(BoundingBox a, BoundingBox b) {
+        if (a == null || b == null) {
+            return 0.0;
+        }
+        double dist = Math.hypot(a.centerX() - b.centerX(), a.centerY() - b.centerY());
+        return Math.round(dist * 10.0) / 10.0;
+    }
+
+    /**
+     * Computes the fraction of the hotspot bounding box area explained by segmented
+     * honeybee instances. A low ratio (< 0.22) during a high-surprise event with >= 2
+     * guard bees indicates a large unsegmented mass (e.g., a hornet or foreign intruder
+     * being grappled in defensive bee-balling).
+     */
+    public static double computeHotspotBeeCoverageRatio(BoundingBox hotspot, List<ContainedBee> contained) {
+        if (hotspot == null || contained == null || contained.isEmpty()) {
+            return 0.0;
+        }
+        double beeIntersectionSum = 0.0;
+        for (ContainedBee cb : contained) {
+            List<Integer> b = cb.box();
+            if (b != null && b.size() >= 4) {
+                int bw = Math.max(1, b.get(2) - b.get(0));
+                int bh = Math.max(1, b.get(3) - b.get(1));
+                double ioaArea = bw * bh * Math.clamp(cb.containmentRatio(), 0.0, 1.0);
+                int ix1 = Math.max(hotspot.x1(), b.get(0));
+                int iy1 = Math.max(hotspot.y1(), b.get(1));
+                int ix2 = Math.min(hotspot.x2(), b.get(2));
+                int iy2 = Math.min(hotspot.y2(), b.get(3));
+                int coordInter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+                beeIntersectionSum += Math.max(coordInter, ioaArea);
+            }
+        }
+        double ratio = Math.min(1.0, beeIntersectionSum / (double) hotspot.area());
+        return Math.round(ratio * 10000.0) / 10000.0;
+    }
+
     public static String classifyHotspot(List<ContainedBee> contained) {
+        return classifyHotspot(contained, null, 0.0);
+    }
+
+    public static String classifyHotspot(List<ContainedBee> contained, BoundingBox hotspot, double surpriseSigma) {
         if (contained.size() >= 2) {
+            if (hotspot != null && surpriseSigma >= 12.5
+                    && computeHotspotBeeCoverageRatio(hotspot, contained) < 0.22) {
+                return "defensive_bee_balling_or_intruder_candidate";
+            }
             return "multi_bee_interaction_cluster";
         }
         double maxIoa = contained.stream().mapToDouble(ContainedBee::containmentRatio).max().orElse(0.0);

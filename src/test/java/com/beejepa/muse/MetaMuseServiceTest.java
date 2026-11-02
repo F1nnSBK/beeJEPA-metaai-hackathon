@@ -137,7 +137,22 @@ class MetaMuseServiceTest {
 
     @Test
     void testLiveBasetenHealthCheckIfKeyPresent() {
-        String key = System.getProperty("BASETEN_API_KEY", System.getenv("BASETEN_API_KEY"));
+        String sysProp = System.getProperty("BASETEN_API_KEY");
+        // If explicitly specified via system property (e.g. -DBASETEN_API_KEY="" or -DBASETEN_API_KEY="offline"),
+        // suppress fallback to reading .env and run completely offline
+        if (sysProp != null && (sysProp.isBlank() || "offline".equalsIgnoreCase(sysProp.trim()) || sysProp.contains("your_baseten"))) {
+            return;
+        }
+
+        String key = sysProp;
+        if (key == null || key.isBlank()) {
+            String envVar = System.getenv("BASETEN_API_KEY");
+            if (envVar != null && (envVar.isBlank() || "offline".equalsIgnoreCase(envVar.trim()) || envVar.contains("your_baseten"))) {
+                return;
+            }
+            key = envVar;
+        }
+
         if (key == null || key.isBlank()) {
             try {
                 java.nio.file.Path envFile = java.nio.file.Path.of(".env");
@@ -152,7 +167,7 @@ class MetaMuseServiceTest {
             } catch (Exception ignored) {}
         }
 
-        if (key != null && !key.isBlank() && !key.contains("your_baseten")) {
+        if (key != null && !key.isBlank() && !key.contains("your_baseten") && !"offline".equalsIgnoreCase(key)) {
             MetaMuseConfig metaConfig = new MetaMuseConfig();
             BasetenConfig basetenConfig = new BasetenConfig();
             basetenConfig.setApiKey(key);
