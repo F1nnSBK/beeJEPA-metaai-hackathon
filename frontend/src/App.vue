@@ -12,7 +12,6 @@ const {
   isAuthResolved,
   currentUser,
   fetchUserProfile,
-  hardware,
   storageStatus,
   metaHealth,
   resilienceTelemetry,
@@ -494,30 +493,50 @@ const activeMediaSource = computed(() => {
   return ''
 })
 
-// Hotspot Bounding Box style in percentage of the 1080x960 (9:8) frame
-const hotspotBoxStyle = computed(() => {
-  if (!selectedEvent.value?.hotspot) return {}
+// V-JEPA Hotspot rectangle in 1080x960 frame coordinates (left panel: 0..540)
+const vjepaHotspotRect = computed(() => {
+  if (!selectedEvent.value?.hotspot) {
+    return { x: 235, y: 372, width: 160, height: 108 }
+  }
   const hs = selectedEvent.value.hotspot
   const box = hs.boundingBoxPx || hs.boxPx
   if (Array.isArray(box) && box.length === 4) {
     const [y1, x1, y2, x2] = box.map(Number)
+    const cleanY1 = Math.max(35, y1)
     return {
-      left: `${((x1 / 1080) * 100).toFixed(2)}%`,
-      top: `${((Math.max(35, y1) / 960) * 100).toFixed(2)}%`,
-      width: `${(((x2 - x1) / 1080) * 100).toFixed(2)}%`,
-      height: `${(((y2 - Math.max(35, y1)) / 960) * 100).toFixed(2)}%`
+      x: x1,
+      y: cleanY1,
+      width: Math.max(10, x2 - x1),
+      height: Math.max(10, y2 - cleanY1)
     }
   }
-  const cx = Number(hs.normCenterX || 0.456) * 50
-  const cy = Number(hs.normCenterY || 0.436) * 100
-  const w = (160 / 1080) * 100
-  const h = (108 / 960) * 100
+  const cx = Math.round(Number(hs.normCenterX || 0.456) * 540)
+  const cy = Math.round(Number(hs.normCenterY || 0.436) * 960)
   return {
-    left: `${Math.max(0, Math.min(50 - w, cx - w / 2)).toFixed(2)}%`,
-    top: `${Math.max((35 / 960) * 100, Math.min(100 - h, cy - h / 2)).toFixed(2)}%`,
-    width: `${w.toFixed(2)}%`,
-    height: `${h.toFixed(2)}%`
+    x: Math.max(0, cx - 68),
+    y: Math.max(35, cy - 68),
+    width: 136,
+    height: 136
   }
+})
+
+// Real SAM 3.1 bounding boxes from data/hackathon_sample/cache/sam_spatial_*.json
+const samContainedBoxes = computed(() => {
+  const contained = selectedEvent.value?.samSpatial?.containedBees
+  if (!Array.isArray(contained)) return []
+  return contained
+    .map(c => (Array.isArray(c?.box) && c.box.length === 4 ? c.box.map(Number) : null))
+    .filter(Boolean)
+})
+
+const samBoardBoxes = computed(() => {
+  const board = selectedEvent.value?.samSpatial?.boardBees
+  if (!Array.isArray(board)) return []
+  const containedKeys = new Set(samContainedBoxes.value.map(b => b.join(',')))
+  return board
+    .filter(b => Array.isArray(b) && b.length === 4)
+    .map(b => b.map(Number))
+    .filter(b => !containedKeys.has(b.join(',')))
 })
 
 const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 300)
@@ -793,19 +812,16 @@ async function handleLogout() {
             <img :src="beeLogo" alt="beeJEPA" class="w-full h-full object-contain" />
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <h1 class="text-sm font-semibold text-ink-100 tracking-tight whitespace-nowrap">beeJEPA</h1>
-            <span class="hidden sm:inline-flex text-[11px] font-mono bg-ink-950 text-ink-300 px-2 py-0.5 rounded border border-ink-800 whitespace-nowrap tabular-nums">
-              Raspberry Pi 4 · 8 GB
-            </span>
+            <h1 class="text-sm font-semibold text-ink-100 tracking-tight whitespace-nowrap">BeeJEPA</h1>
           </div>
         </div>
 
         <!-- Right Telemetry & Operator Controls -->
         <div class="flex items-center gap-1 sm:gap-2 text-xs shrink-0">
-          <!-- SSD Storage Status -->
+          <!-- Storage Status -->
           <div class="hidden sm:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 tabular-nums">
             <span class="w-2 h-2 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
-            <span class="text-ink-400">SSD</span>
+            <span class="text-ink-400">Storage</span>
             <span class="font-mono text-ink-200 text-[11px]">
               {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted + ' free' : 'Offline' }}
             </span>
@@ -824,7 +840,7 @@ async function handleLogout() {
             ></span>
             <span class="text-ink-400">Baseten Muse</span>
             <span class="font-mono text-ink-200 text-[11px]">
-              {{ metaHealth.liveConnection ? 'Live (' + metaHealth.latencyMs + 'ms)' : (metaHealth.configured ? metaHealth.status : 'Cached (0 credits)') }}
+              {{ metaHealth.liveConnection ? 'Live (' + metaHealth.latencyMs + 'ms)' : (metaHealth.configured ? metaHealth.status : 'Cached') }}
             </span>
           </button>
 
@@ -833,12 +849,12 @@ async function handleLogout() {
             type="button"
             @click="fetchPerceptionTelemetry"
             class="hidden xl:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 hover:border-ink-700 transition-colors cursor-pointer tabular-nums"
-            title="Java 25 FFM API Zero-GC Off-Heap Ring Buffer"
+            title="Java 25 FFM Off-Heap Ring Buffer"
           >
             <span class="w-2 h-2 rounded-full bg-electric-400 shrink-0"></span>
             <span class="text-ink-400">FFM Buffer</span>
             <span class="font-mono text-electric-300 text-[11px]">
-              {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }} slots (0 GC)
+              {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }} slots
             </span>
           </button>
 
@@ -888,15 +904,15 @@ async function handleLogout() {
         </div>
       </header>
 
-      <!-- Mobile Compact Telemetry Bar (visible < sm so mobile users still see SSD, Muse & Pi 4 status) -->
+      <!-- Mobile Compact Telemetry Bar -->
       <div class="sm:hidden border-b border-ink-800 bg-ink-950 px-3 min-h-[38px] flex items-center justify-between gap-2 text-[11px] font-mono text-ink-400 tabular-nums shrink-0">
         <div class="flex items-center gap-1.5 truncate">
           <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
-          <span class="truncate">Pi 4 · SSD {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted : 'Offline' }}</span>
+          <span class="truncate">Storage {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted : 'Offline' }}</span>
         </div>
         <button type="button" @click="checkMetaHealth" class="min-h-[38px] px-1 flex items-center gap-1.5 text-ink-300 shrink-0 touch-manipulation">
           <span class="w-1.5 h-1.5 rounded-full" :class="metaHealth.liveConnection ? 'bg-clover-400' : 'bg-honey-400'"></span>
-          <span>Muse {{ metaHealth.liveConnection ? metaHealth.latencyMs + 'ms' : '0 cr' }}</span>
+          <span>Muse {{ metaHealth.liveConnection ? metaHealth.latencyMs + 'ms' : 'Cached' }}</span>
         </button>
         <button type="button" @click="fetchPerceptionTelemetry" class="min-h-[38px] px-1 flex items-center gap-1 text-electric-300 shrink-0 touch-manipulation">
           <span>FFM {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }}</span>
@@ -947,8 +963,8 @@ async function handleLogout() {
                   : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
                 class="px-1.5 sm:px-3 min-h-[44px] text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
               >
-                <span class="sm:hidden">SAM 3.1 Frame</span>
-                <span class="hidden sm:inline">SAM 3.1 Peak Frame</span>
+                <span class="sm:hidden">{{ selectedEvent?.hasSamSpatial ? 'SAM 3.1' : 'Peak Frame' }}</span>
+                <span class="hidden sm:inline">{{ selectedEvent?.hasSamSpatial ? 'SAM 3.1 Segmentation' : 'V-JEPA Peak Frame' }}</span>
               </button>
             </div>
 
@@ -961,7 +977,7 @@ async function handleLogout() {
             </div>
           </div>
 
-          <!-- Aspect-Locked 1080x960 (9:8) Video & SAM Stage (Height-tuned on mobile so Timeline + KPIs sit above the fold) -->
+          <!-- Aspect-Locked 1080x960 (9:8) Video & Peak Frame Stage -->
           <div class="relative w-full h-[210px] sm:h-auto sm:aspect-video lg:aspect-auto lg:flex-1 bg-ink-950 flex items-center justify-center overflow-hidden sm:min-h-[260px] lg:min-h-0">
             <div v-if="(activeView !== 'sam' && activeMediaSource) || (activeView === 'sam' && peakFrameUrl)" class="relative aspect-[9/8] max-h-full max-w-full flex items-center justify-center">
               <!-- Video Mode: Sequence Stream or Event Clip -->
@@ -981,19 +997,73 @@ async function handleLogout() {
                 class="w-full h-full block cursor-pointer"
               ></video>
 
-              <!-- SAM 3.1 Peak Frame Mode -->
+              <!-- Peak Frame & Real SAM 3.1 Segmentation Overlay Mode -->
               <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative w-full h-full flex items-center justify-center">
-                <img :src="peakFrameUrl" alt="SAM 3.1 Peak Frame" class="w-full h-full block" />
-                <div
-                  class="absolute border-2 border-honey-400 bg-honey-400/15 rounded-sm pointer-events-none"
-                  :style="hotspotBoxStyle"
-                >
-                  <div class="absolute -top-6 left-0 bg-honey-500 text-ink-950 font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-sm whitespace-nowrap">
-                    SAM 3.1 Box Prompt
-                  </div>
-                  <div class="absolute -bottom-6 left-0 bg-ink-950/95 border border-electric-500/50 rounded-sm text-[10px] font-mono text-electric-300 px-1.5 py-0.5 whitespace-nowrap tabular-nums">
-                    FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round((selectedEvent?.hotspot?.normCenterX ?? 0.456) * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round((selectedEvent?.hotspot?.normCenterY ?? 0.436) * 960) }}] · GRID [{{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }}]
-                  </div>
+                <img :src="peakFrameUrl" :alt="selectedEvent?.eventId || 'Peak Frame'" class="w-full h-full block" />
+                <svg viewBox="0 0 1080 960" class="absolute inset-0 w-full h-full pointer-events-none">
+                  <!-- Real SAM 3.1 Board Bees (only when sam_spatial_*.json exists for this event) -->
+                  <template v-if="selectedEvent?.hasSamSpatial">
+                    <rect
+                      v-for="(b, idx) in samBoardBoxes"
+                      :key="'board-' + idx"
+                      :x="b[0]"
+                      :y="b[1]"
+                      :width="Math.max(2, b[2] - b[0])"
+                      :height="Math.max(2, b[3] - b[1])"
+                      fill="none"
+                      stroke="#2EA043"
+                      stroke-width="2.5"
+                    />
+                    <rect
+                      v-for="(b, idx) in samContainedBoxes"
+                      :key="'contained-' + idx"
+                      :x="b[0]"
+                      :y="b[1]"
+                      :width="Math.max(2, b[2] - b[0])"
+                      :height="Math.max(2, b[3] - b[1])"
+                      fill="rgba(74, 222, 128, 0.14)"
+                      stroke="#4ADE80"
+                      stroke-width="3.2"
+                    />
+                  </template>
+                  <!-- V-JEPA 2.1 Hotspot Box (camera panel + heatmap panel) -->
+                  <rect
+                    :x="vjepaHotspotRect.x"
+                    :y="vjepaHotspotRect.y"
+                    :width="vjepaHotspotRect.width"
+                    :height="vjepaHotspotRect.height"
+                    fill="none"
+                    stroke="#F36C47"
+                    stroke-width="3"
+                    stroke-dasharray="7 5"
+                  />
+                  <rect
+                    :x="vjepaHotspotRect.x + 540"
+                    :y="vjepaHotspotRect.y"
+                    :width="vjepaHotspotRect.width"
+                    :height="vjepaHotspotRect.height"
+                    fill="none"
+                    stroke="#EAA23A"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 5"
+                  />
+                </svg>
+                <div class="absolute bottom-2 left-2 right-2 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
+                  <span
+                    v-if="selectedEvent?.hasSamSpatial && selectedEvent?.samSpatial"
+                    class="bg-ink-950/90 border border-clover-500/40 text-clover-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums"
+                  >
+                    SAM 3.1: {{ selectedEvent.samSpatial.landingBoardBeeCount }} board bees · {{ selectedEvent.samSpatial.beesInsideHotspotCount }} in V-JEPA hotspot
+                  </span>
+                  <span
+                    v-else
+                    class="bg-ink-950/90 border border-ink-700 text-ink-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums"
+                  >
+                    V-JEPA 2.1 Hotspot · No SAM 3.1 mask cached for this event
+                  </span>
+                  <span class="bg-ink-950/90 border border-electric-500/40 text-electric-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums">
+                    GRID [{{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }}]
+                  </span>
                 </div>
               </div>
 
@@ -1207,16 +1277,16 @@ async function handleLogout() {
           <div class="flex items-center justify-between pb-3 border-b border-ink-800 shrink-0">
             <h2 class="text-sm font-semibold text-ink-100">Meta AI Causal Analysis</h2>
             <span
-              v-if="selectedEvent?.agentResult"
+              v-if="selectedEvent?.hasSamSpatial"
               class="text-[11px] font-mono px-2 py-0.5 rounded bg-clover-500/10 text-clover-400 border border-clover-500/30 tabular-nums"
             >
-              SSD cached · 0 credits
+              SAM 3.1 + Muse cached
             </span>
             <span
               v-else
-              class="text-[11px] font-mono px-2 py-0.5 rounded bg-honey-500/10 text-honey-400 border border-honey-500/30"
+              class="text-[11px] font-mono px-2 py-0.5 rounded bg-ink-950 text-ink-300 border border-ink-800"
             >
-              Awaiting inference
+              V-JEPA 2.1 peak
             </span>
           </div>
 
@@ -1232,13 +1302,15 @@ async function handleLogout() {
                 <div class="text-[11px] text-ink-500 mt-1">Latent <span class="math">‖𝑧̂ − 𝑧‖<sub>2</sub></span></div>
               </div>
 
-              <!-- Sibling Metric 2: Pixel-Diff Baseline -->
+              <!-- Sibling Metric 2: Landing Board Bee Count (Real SAM 3.1 or V-JEPA Detector Count) -->
               <div class="p-3 bg-ink-950 flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">Pixel-Diff Baseline</div>
-                <div class="text-lg font-semibold font-mono text-ink-200 mt-1 tabular-nums leading-tight">
-                  {{ Number(selectedEvent.pixelDiffBaseline).toFixed(4) }}
+                <div class="text-[11px] text-ink-400">Landing Board</div>
+                <div class="text-lg font-semibold font-mono text-ink-100 mt-1 tabular-nums leading-tight">
+                  {{ selectedEvent.boardBees ?? '—' }} bees
                 </div>
-                <div class="text-[11px] text-ink-500 mt-1"><span class="math">|𝐼(𝑡 + Δ𝑡) − 𝐼(𝑡)|</span></div>
+                <div class="text-[11px] text-ink-500 mt-1 font-mono">
+                  {{ selectedEvent.hasSamSpatial ? 'SAM 3.1 count' : 'V-JEPA 2.1 count' }}
+                </div>
               </div>
 
               <!-- Sibling Metric 3: Tubelet Hotspot Grid -->
@@ -1252,14 +1324,16 @@ async function handleLogout() {
                 </div>
               </div>
 
-              <!-- Sibling Metric 4: Active Foveal Density / Bees -->
+              <!-- Sibling Metric 4: Hotspot Bees (when SAM-segmented) or Active V-JEPA Grid Cells -->
               <div class="p-3 bg-ink-950 flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">Foveal Saccade</div>
+                <div class="text-[11px] text-ink-400">
+                  {{ selectedEvent.hasSamSpatial ? 'Hotspot Cluster' : 'Active Grid Cells' }}
+                </div>
                 <div class="text-lg font-semibold font-mono text-electric-300 mt-1 tabular-nums leading-tight">
-                  {{ activeSaccade ? activeSaccade.hotspotBeesCount + ' bees' : '+8.3x fovea' }}
+                  {{ selectedEvent.hasSamSpatial ? (selectedEvent.hotspotBeesCount + ' bees') : ((selectedEvent.activeCells ?? '—') + ' cells') }}
                 </div>
                 <div class="text-[11px] text-ink-500 mt-1 font-mono tabular-nums">
-                  {{ activeSaccade ? 'Fixation [' + activeSaccade.focusCenterX + ', ' + activeSaccade.focusCenterY + ']' : 'Density +8.3x' }}
+                  {{ selectedEvent.hasSamSpatial ? 'IoA ≥ 0.25 · SAM 3.1' : '43×43 V-JEPA grid' }}
                 </div>
               </div>
             </div>
@@ -1504,7 +1578,7 @@ async function handleLogout() {
                 <div class="flex items-center justify-between">
                   <span class="text-xs font-semibold text-honey-400">Muse Spark Open Staged</span>
                   <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-honey-500/20 text-honey-300 border border-honey-500/40 tabular-nums">
-                    Staged · 0 credits
+                    Dry run
                   </span>
                 </div>
                 <p class="text-[11px] text-ink-300 tabular-nums">
@@ -1523,7 +1597,7 @@ async function handleLogout() {
               </div>
 
               <!-- SAM 3.1 Segmentation Isolation Card -->
-              <div v-if="selectedEvent.agentResult?.sam && selectedEvent.agentResult.sam.status === 'SUCCESS' && selectedEvent.agentResult.sam.segmentedObject" class="p-3 bg-ink-950 rounded-md border border-ink-800 space-y-1.5">
+              <div v-if="selectedEvent.hasSamSpatial && selectedEvent.agentResult?.sam && selectedEvent.agentResult.sam.status === 'SUCCESS' && selectedEvent.agentResult.sam.segmentedObject" class="p-3 bg-ink-950 rounded-md border border-ink-800 space-y-1.5">
                 <div class="flex items-center justify-between">
                   <span class="text-xs font-semibold text-honey-400">SAM 3.1 Instance Segmentation</span>
                   <span class="text-[10px] font-mono text-ink-400">{{ selectedEvent.agentResult.sam.model }}</span>
@@ -1532,15 +1606,15 @@ async function handleLogout() {
                   Isolated object: <span class="font-semibold text-ink-100">{{ selectedEvent.agentResult.sam.segmentedObject }}</span>
                 </p>
                 <p v-if="selectedEvent.agentResult.sam.instanceCount" class="text-[11px] text-ink-400 font-mono tabular-nums">
-                  Instances: {{ selectedEvent.agentResult.sam.instanceCount }} · Box prompt applied
+                  Board instances: {{ selectedEvent.agentResult.sam.instanceCount }} · Hotspot instances: {{ selectedEvent.agentResult.sam.hotspotBeesCount }}
                 </p>
               </div>
 
               <!-- Muse Spark Causal Scene Diagnosis Card -->
-              <div v-if="selectedEvent.agentResult?.muse && selectedEvent.agentResult.muse.status === 'SUCCESS' && selectedEvent.agentResult.muse.diagnosis" class="p-3 bg-ink-950 rounded-md border border-honey-500/30 space-y-2">
+              <div v-if="selectedEvent.hasSamSpatial && selectedEvent.agentResult?.muse && selectedEvent.agentResult.muse.status === 'SUCCESS' && selectedEvent.agentResult.muse.diagnosis" class="p-3 bg-ink-950 rounded-md border border-honey-500/30 space-y-2">
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-honey-400">Muse Spark Causal Diagnosis</span>
-                  <span v-if="selectedEvent.agentResult.muse.confidence" class="text-[10px] font-mono text-ink-400 tabular-nums">Confidence: {{ Math.round(selectedEvent.agentResult.muse.confidence * 100) }}%</span>
+                  <span class="text-xs font-semibold text-honey-400">Muse Spark Event Summary</span>
+                  <span class="text-[10px] font-mono text-ink-400">{{ selectedEvent.agentResult.muse.model }}</span>
                 </div>
                 <p class="text-xs text-ink-200 leading-relaxed italic bg-ink-900 p-2.5 rounded border border-ink-800">
                   "{{ selectedEvent.agentResult.muse.diagnosis }}"
@@ -1715,9 +1789,9 @@ async function handleLogout() {
               <span class="text-ink-200 font-semibold">{{ stagedMuseQuery?.eventId || stagedSamQuery?.eventId || selectedEvent?.eventId || 'Event Telemetry' }}</span>
             </div>
             <div class="flex items-center gap-2.5 text-ink-400">
-              <span class="math text-ember-400">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + '𝜎' : (selectedEvent?.surpriseScoreL2 ? Number(selectedEvent.surpriseScoreL2).toFixed(2) + '𝜎' : '4.82𝜎') }}</span>
+              <span class="math text-ember-400">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + '𝜎' : (selectedEvent?.surpriseScoreL2 ? Number(selectedEvent.surpriseScoreL2).toFixed(2) + '𝜎' : '—') }}</span>
               <span class="text-honey-400">Hotspot ({{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridX ?? 2 }}, {{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridY ?? 3 }})</span>
-              <span class="text-clover-400 text-[10px] px-1.5 py-0.5 rounded bg-clover-500/10 border border-clover-500/30">0 credits</span>
+              <span class="text-ink-300 text-[10px] px-1.5 py-0.5 rounded bg-ink-900 border border-ink-800">Dry run</span>
             </div>
           </div>
 

@@ -1162,9 +1162,9 @@ public class MetaMuseService {
                         evt.formattedTime() != null ? evt.formattedTime() : "00:00",
                         Math.round(evt.surpriseScore() * 100.0) / 100.0,
                         evt.severity() != null ? evt.severity() : "MEDIUM",
-                        24,
-                        8,
-                        "multi_bee_interaction_cluster",
+                        0,
+                        0,
+                        "vjepa_hotspot_only",
                         List.of(),
                         "",
                         ""

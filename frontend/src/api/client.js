@@ -173,6 +173,8 @@ export function normalizeEvent(raw) {
     pixelDiffBaseline: toFiniteNumber(raw.pixelDiffBaseline ?? raw.pixel_diff_baseline ?? 0, 0),
     severity: String(raw.severity ?? 'HIGH').toUpperCase(),
     hotspot: normalizeHotspot(raw.hotspot),
+    hasSamSpatial: Boolean(raw.hasSamSpatial ?? (raw.samSpatial != null)),
+    samSpatial: raw.samSpatial ?? null,
     agentResult: raw.agentResult ?? raw.agent_result ?? null,
     isCached: Boolean(raw.isCached ?? raw.is_cached ?? (raw.agentResult != null))
   }

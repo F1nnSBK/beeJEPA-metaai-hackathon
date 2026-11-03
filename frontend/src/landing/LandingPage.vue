@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.ENTER)" class="act act--enter" :class="{ 'is-seen': isSeen(ACT.ENTER) }">
         <div class="act__content">
           <div class="act__inner act__inner--centered">
-            <p class="eyebrow">Act V · Beekeeper console</p>
+            <p class="eyebrow">Beekeeper console</p>
             <h2 class="enter-title">Inside the hive</h2>
             <LoginCard @authenticated="emit('authenticated', $event)" />
           </div>

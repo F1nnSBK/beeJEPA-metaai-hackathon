@@ -139,14 +139,25 @@ public class EventService {
                 Path cachedResultFile = resultsDir.resolve(eventId + ".json");
                 boolean hasCached = Files.exists(cachedResultFile);
                 Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
+                item.put("vjepaBoardBees", ev.get("board_bees"));
                 if (spatialOpt.isPresent()) {
                     SamGeometry.EventSpatialSummary sp = spatialOpt.get();
                     item.put("isCached", true);
+                    item.put("hasSamSpatial", true);
                     item.put("boardBees", sp.landingBoardBeeCount());
                     item.put("hotspotBeesCount", sp.beesInsideHotspotCount());
+                    Map<String, Object> samSpatialMap = new LinkedHashMap<>();
+                    samSpatialMap.put("landingBoardBeeCount", sp.landingBoardBeeCount());
+                    samSpatialMap.put("beesInsideHotspotCount", sp.beesInsideHotspotCount());
+                    samSpatialMap.put("geometricPreClassification", sp.geometricPreClassification());
+                    samSpatialMap.put("boardBees", sp.boardBees() != null ? sp.boardBees() : List.of());
+                    samSpatialMap.put("containedBees", sp.containedBees() != null ? sp.containedBees() : List.of());
+                    samSpatialMap.put("cropBase64", sp.cropBase64() != null ? sp.cropBase64() : "");
+                    item.put("samSpatial", samSpatialMap);
                     item.put("agentResult", buildAgentResultFromSpatial(eventId, sp, item));
                 } else if (hasCached) {
                     item.put("isCached", true);
+                    item.put("hasSamSpatial", false);
                     try {
                         item.put("agentResult",
                                 objectMapper.readValue(Files.readAllBytes(cachedResultFile), Map.class));
@@ -154,6 +165,7 @@ public class EventService {
                     }
                 } else {
                     item.put("isCached", false);
+                    item.put("hasSamSpatial", false);
                 }
 
                 // Media presence
@@ -295,8 +307,8 @@ public class EventService {
             }
         }
 
-        // 2. Check lazy peak frame extraction
-        if ("peak_frame.jpg".equals(filename)) {
+        // 2. Check lazy peak frame / heatmap extraction
+        if ("peak_frame.jpg".equals(filename) || "vjepa_heatmap.jpg".equals(filename)) {
             Path framePath = getHackathonSampleDirectory().resolve("event_frames").resolve(eventId + ".jpg");
             if (Files.exists(framePath)) {
                 return Optional.of(framePath.toFile());
@@ -432,7 +444,6 @@ public class EventService {
         Map<String, Object> museResult = new LinkedHashMap<>();
         museResult.put("model", "meta-models/muse-spark-open");
         museResult.put("status", "SUCCESS");
-        museResult.put("confidence", 0.96);
         museResult.put("diagnosis", diagnosisText);
         result.put("muse", museResult);
         return result;
@@ -456,7 +467,7 @@ public class EventService {
         // 2. Check existing cached result file
         if (!forceRefresh && Files.exists(agentResultFile)) {
             try {
-                LOG.info("Returning cached agent result for event {} (0 API credits used)", eventId);
+                LOG.info("Returning cached agent result for event {}", eventId);
                 Map<String, Object> cached = objectMapper.readValue(Files.readAllBytes(agentResultFile), Map.class);
                 cached.put("cached", true);
                 return cached;
@@ -465,9 +476,7 @@ public class EventService {
             }
         }
 
-        // 3. Perform grounded V-JEPA + SAM 3.1 analysis
-        LOG.info("Triggering Virtual Threads for SAM 3.1 & Muse Spark on event {}", eventId);
-
+        // 3. No cached SAM 3.1 spatial segmentation exists for this event; return honest V-JEPA 2.1 telemetry only
         Map<String, Object> result = new HashMap<>();
         result.put("eventId", eventId);
         result.put("cached", false);
@@ -475,12 +484,9 @@ public class EventService {
 
         Map<String, Object> samResult = new HashMap<>();
         samResult.put("model", "meta/sam-3.1");
-        samResult.put("status", "SUCCESS");
+        samResult.put("status", "NOT_CACHED");
         samResult.put("targetFrame", "peak_frame.jpg");
 
-        // Attach real input parameters that went into SAM 3.1 from V-JEPA detection
-        final int[] boardBeesHolder = {24};
-        final double[] surpriseHolder = {11.0};
         getEvent(eventId).ifPresent(ev -> {
             Object rawEvent = ev.get("event");
             if (rawEvent instanceof AnomalyEvent ae) {
@@ -488,33 +494,9 @@ public class EventService {
                 samResult.put("frameIndex", ae.frameIndex());
                 samResult.put("timestampSec", ae.timestampSec());
                 samResult.put("surpriseScoreL2", ae.surpriseScoreL2());
-                surpriseHolder[0] = ae.surpriseScoreL2();
             }
         });
-        samResult.put("instanceCount", boardBeesHolder[0]);
-        samResult.put("segmentedObject", "multi_bee_interaction_cluster");
         result.put("sam", samResult);
-
-        Map<String, Object> museResult = new HashMap<>();
-        museResult.put("model", "meta-models/muse-spark-open");
-        museResult.put("status", "SUCCESS");
-        museResult.put("confidence", 0.94);
-        museResult.put("diagnosis", String.format(
-                java.util.Locale.US,
-                "V-JEPA latent surprise peak (%.2f sigma) localized to honeybee arrival and guarding congestion on the flight board. Zero non-bee predators detected.",
-                surpriseHolder[0]
-        ));
-        result.put("muse", museResult);
-
-        // 4. Cache to SSD to protect budget
-        try {
-            Files.createDirectories(resultsDir);
-            byte[] bytes = objectMapper.writeValueAsBytes(result);
-            Files.write(agentResultFile, bytes);
-            LOG.info("Successfully cached agent analysis to {}", agentResultFile);
-        } catch (IOException e) {
-            LOG.error("Failed to write agent result: {}", e.getMessage());
-        }
 
         return result;
     }

@@ -47,7 +47,7 @@ public class ActivePerceptionService {
             OffHeapFrameRingBuffer ringBuffer,
             SimdLatentEvaluator simdEvaluator,
             EventService eventService) {
-        this(ringBuffer, simdEvaluator, eventService, null);
+        this(ringBuffer, simdEvaluator, eventService, new MuseDiskCache());
     }
 
     @Inject
@@ -117,16 +117,16 @@ public class ActivePerceptionService {
             // Ingest real keyframe into FFM off-heap ring buffer if available
             ingestFrameIntoRingBuffer(eventId, frameIndex, timestampSec, (float) surprise, focusX, focusY);
 
-            // Use real SAM 3.1 cached spatial summary if available, otherwise real measured active V-JEPA cells
+            // Use real SAM 3.1 cached spatial summary if available
             Optional<SamGeometry.EventSpatialSummary> cachedSam = museDiskCache != null
                     ? museDiskCache.loadSpatialSummary(eventId)
                     : Optional.empty();
             int hotspotBees = cachedSam
                     .map(SamGeometry.EventSpatialSummary::beesInsideHotspotCount)
-                    .orElseGet(() -> ev.get("activeCells") instanceof Number n ? n.intValue() : 0);
+                    .orElse(0);
             String classification = cachedSam
                     .map(SamGeometry.EventSpatialSummary::geometricPreClassification)
-                    .orElseGet(() -> hotspotBees >= 2 ? "multi_bee_interaction_cluster" : "single_anomalous_honeybee");
+                    .orElse("vjepa_hotspot_only");
 
             SaccadicTarget target = new SaccadicTarget(
                     eventId,

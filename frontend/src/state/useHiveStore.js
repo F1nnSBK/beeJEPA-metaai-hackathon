@@ -51,8 +51,7 @@ const isAuthenticated = ref(false)
 const isAuthResolved = ref(false)
 const currentUser = ref(null)
 
-// Hardware & System Telemetry state
-const hardware = ref('Raspberry Pi 4 Model B')
+// System Telemetry state
 const storageStatus = ref({
   isMounted: false,
   freeSpaceFormatted: 'Not Connected',
@@ -465,7 +464,6 @@ export function useHiveStore() {
     fetchUserProfile,
 
     // System & Health
-    hardware,
     storageStatus,
     metaHealth,
     resilienceTelemetry,

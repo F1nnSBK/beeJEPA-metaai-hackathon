@@ -41,19 +41,11 @@ async function submit() {
 </script>
 
 <template>
-  <form class="login-card" @submit.prevent="submit" aria-label="Beekeeper console sign in">
-    <div class="login-card__header">
-      <div class="login-card__node">
-        <span class="login-card__dot" aria-hidden="true"></span>
-        <span>Colony #04 · Entrance node</span>
-      </div>
-      <span class="login-card__protocol">TLS · JWT</span>
-    </div>
-
+  <form class="login-card" @submit.prevent="submit" aria-label="Sign in">
     <p v-if="errorMessage" class="login-card__error" role="alert">{{ errorMessage }}</p>
 
     <div class="login-card__field">
-      <label for="login-username" class="login-card__label">Beekeeper ID</label>
+      <label for="login-username" class="login-card__label">Beekeeper</label>
       <input
         id="login-username"
         v-model="username"
@@ -71,10 +63,7 @@ async function submit() {
     </div>
 
     <div class="login-card__field">
-      <div class="login-card__label-row">
-        <label for="login-password" class="login-card__label">Access key</label>
-        <span class="login-card__meta">Session 12h</span>
-      </div>
+      <label for="login-password" class="login-card__label">Password</label>
       <div class="login-card__password-wrap">
         <input
           id="login-password"
@@ -88,7 +77,7 @@ async function submit() {
           autocorrect="off"
           spellcheck="false"
           enterkeyhint="done"
-          placeholder="Enter access key"
+          placeholder="Password"
         />
         <button
           type="button"
@@ -113,7 +102,7 @@ async function submit() {
 
     <button type="submit" class="login-card__submit" :disabled="isSubmitting">
       <span v-if="isSubmitting" class="login-card__spinner" aria-hidden="true"></span>
-      <span>{{ isSubmitting ? 'Authenticating...' : 'Enter the hive' }}</span>
+      <span>{{ isSubmitting ? 'Signing in...' : 'Enter the hive' }}</span>
       <svg v-if="!isSubmitting" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M5 12h14" />
         <path d="m12 5 7 7-7 7" />
@@ -126,7 +115,7 @@ async function submit() {
         <span class="login-card__creds"><code>beekeeper</code> / <code>beejepa2026</code></span>
       </div>
       <button type="button" class="login-card__fill" @click="fillDemoCredentials">
-        Fill demo key
+        Fill demo
       </button>
     </div>
   </form>
@@ -144,63 +133,15 @@ async function submit() {
   text-align: left;
 }
 
-.login-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #181a1c;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.72rem;
-  color: #939599;
-}
-
-.login-card__node {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: #eaebed;
-  white-space: nowrap;
-}
-
-.login-card__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #7ec59f;
-  flex-shrink: 0;
-}
-
-.login-card__protocol {
-  font-variant-numeric: tabular-nums;
-  color: #939599;
-  white-space: nowrap;
-}
-
 .login-card__field {
   display: grid;
   gap: 0.38rem;
-}
-
-.login-card__label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
 }
 
 .login-card__label {
   font-size: 0.78rem;
   font-weight: 500;
   color: #c2c4c6;
-}
-
-.login-card__meta {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.68rem;
-  font-variant-numeric: tabular-nums;
-  color: #939599;
 }
 
 .login-card__field input {
@@ -389,9 +330,6 @@ async function submit() {
 @media (max-width: 360px) {
   .login-card {
     padding: 1rem;
-  }
-  .login-card__header {
-    font-size: 0.65rem;
   }
   .login-card__fill {
     width: 100%;
