@@ -28,13 +28,53 @@
   line-height: 0;
 }
 
+:root {
+  color-scheme: dark;
+  --ground: #060709;
+  --surface: #111315;
+  --raised: #171a1d;
+  --border: #202224;
+  --rule: #181a1c;
+  --control: #333638;
+  --text: #eaebed;
+  --muted: #939599;
+  --honey: #eaa23a;
+  --honey-deep: #d28a09;
+  --electric: #77b7fe;
+  --ember: #f36c47;
+  --clover: #7ec59f;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::selection {
+  background-color: rgba(234, 162, 58, 0.26);
+  color: #f6f7f8;
+}
+
 html, body, #app {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #060709;
-  color: #EAEBED;
+  background-color: var(--ground);
+  color: var(--text);
+  caret-color: var(--honey);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: rgba(234, 162, 58, 0.15);
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #202224 #060709;
+}
+
+.num,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Custom Timeline Range Slider styling */
@@ -47,11 +87,15 @@ html, body, #app {
 .timeline-slider:focus {
   outline: none;
 }
+.timeline-slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid #eaa23a;
+  outline-offset: 2px;
+}
 .timeline-slider::-webkit-slider-runnable-track {
   height: 6px;
   background: #202224;
   border-radius: 9999px;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .timeline-slider:hover::-webkit-slider-runnable-track {
   background: #333638;
@@ -62,22 +106,21 @@ html, body, #app {
   height: 18px;
   width: 18px;
   border-radius: 50%;
-  background: #EAA23A;
+  background: #eaa23a;
   border: 2px solid #111315;
-  box-shadow: 0 0 10px rgba(234, 162, 58, 0.55);
   margin-top: -6px;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease;
 }
 .timeline-slider::-webkit-slider-thumb:hover,
 .timeline-slider:active::-webkit-slider-thumb {
-  transform: scale(1.25);
-  box-shadow: 0 0 16px rgba(234, 162, 58, 0.85);
+  transform: scale(1.18);
+  background: #f6bd73;
 }
 .timeline-slider::-moz-range-track {
   height: 6px;
   background: #202224;
   border-radius: 9999px;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .timeline-slider:hover::-moz-range-track {
   background: #333638;
@@ -86,14 +129,25 @@ html, body, #app {
   height: 18px;
   width: 18px;
   border-radius: 50%;
-  background: #EAA23A;
+  background: #eaa23a;
   border: 2px solid #111315;
-  box-shadow: 0 0 10px rgba(234, 162, 58, 0.55);
   cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition: transform 0.12s ease, background-color 0.12s ease;
 }
 .timeline-slider::-moz-range-thumb:hover,
 .timeline-slider:active::-moz-range-thumb {
-  transform: scale(1.25);
-  box-shadow: 0 0 16px rgba(234, 162, 58, 0.85);
+  transform: scale(1.18);
+  background: #f6bd73;
+}
+
+@media (pointer: coarse) {
+  .timeline-slider::-webkit-slider-thumb {
+    height: 22px;
+    width: 22px;
+    margin-top: -8px;
+  }
+  .timeline-slider::-moz-range-thumb {
+    height: 22px;
+    width: 22px;
+  }
 }

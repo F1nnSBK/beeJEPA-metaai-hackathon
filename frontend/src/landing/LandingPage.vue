@@ -80,6 +80,7 @@ function isSeen(act) {
 }
 
 function skipIntro() {
+  seenActs.value = new Set([...seenActs.value, ACT.ENTER])
   sectionRefs.value[ACT.ENTER]?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
 }
 
@@ -276,7 +277,7 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.ENTER)" class="act act--enter" :class="{ 'is-seen': isSeen(ACT.ENTER) }">
         <div class="act__content">
           <div class="act__inner act__inner--centered">
-            <p class="eyebrow">🐝 Beekeeper console</p>
+            <p class="eyebrow">Act V · Beekeeper console</p>
             <h2 class="enter-title">Inside the hive</h2>
             <LoginCard @authenticated="emit('authenticated', $event)" />
           </div>
@@ -473,6 +474,10 @@ onBeforeUnmount(() => {
 .is-seen .act__inner > :nth-child(4) { transition-delay: 1.05s; }
 .is-seen .act__inner > :nth-child(5) { transition-delay: 1.2s; }
 
+.act--enter.is-seen .act__inner > :nth-child(3) {
+  transition-delay: 0.16s;
+}
+
 .act--enter .act__content {
   position: relative;
   justify-content: center;
@@ -482,7 +487,14 @@ onBeforeUnmount(() => {
 .act__inner--centered {
   justify-items: center;
   text-align: center;
-  max-width: 24rem;
+  max-width: 25.5rem;
+}
+
+@media (max-width: 640px) {
+  .act--enter .act__content {
+    justify-content: flex-start;
+    padding-top: calc(env(safe-area-inset-top) + 4.75rem);
+  }
 }
 
 .act__inner--centered > * {
@@ -582,6 +594,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-family: var(--serif);
   font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
   line-height: 1.1;
   color: var(--honey);
 }
