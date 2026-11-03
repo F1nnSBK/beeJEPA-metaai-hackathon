@@ -161,6 +161,7 @@ async function submit() {
   align-items: center;
   gap: 0.45rem;
   color: #eaebed;
+  white-space: nowrap;
 }
 
 .login-card__dot {
@@ -168,11 +169,13 @@ async function submit() {
   height: 6px;
   border-radius: 50%;
   background: #7ec59f;
+  flex-shrink: 0;
 }
 
 .login-card__protocol {
   font-variant-numeric: tabular-nums;
   color: #939599;
+  white-space: nowrap;
 }
 
 .login-card__field {
@@ -377,9 +380,22 @@ async function submit() {
   outline-offset: 2px;
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 640px) {
   .login-card__fill {
     min-height: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .login-card {
+    padding: 1rem;
+  }
+  .login-card__header {
+    font-size: 0.65rem;
+  }
+  .login-card__fill {
+    width: 100%;
+    text-align: center;
   }
 }
 

@@ -786,14 +786,14 @@ async function handleLogout() {
     <!-- ================================================================= -->
     <div v-else class="flex-1 flex flex-col min-h-svh lg:h-dvh lg:overflow-hidden bg-ink-950">
       <!-- Top Command Bar (Sticky on Mobile) -->
-      <header class="sticky top-0 z-30 lg:static border-b border-ink-800 bg-ink-900 px-3 sm:px-5 pt-[calc(env(safe-area-inset-top)+0.4rem)] pb-1.5 sm:py-2 flex items-center justify-between gap-2 shrink-0">
+      <header class="sticky top-0 z-30 lg:static border-b border-ink-800 bg-ink-900 px-2.5 sm:px-5 pt-[calc(env(safe-area-inset-top)+0.4rem)] pb-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 shrink-0">
         <!-- Brand & Hardware Node -->
-        <div class="flex items-center gap-2 min-w-0">
+        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-md bg-ink-950 border border-ink-800 p-1 flex items-center justify-center shrink-0">
             <img :src="beeLogo" alt="beeJEPA" class="w-full h-full object-contain" />
           </div>
-          <div class="flex items-center gap-2 min-w-0">
-            <h1 class="text-sm font-semibold text-ink-100 tracking-tight truncate">beeJEPA</h1>
+          <div class="flex items-center gap-2 shrink-0">
+            <h1 class="text-sm font-semibold text-ink-100 tracking-tight whitespace-nowrap">beeJEPA</h1>
             <span class="hidden sm:inline-flex text-[11px] font-mono bg-ink-950 text-ink-300 px-2 py-0.5 rounded border border-ink-800 whitespace-nowrap tabular-nums">
               Raspberry Pi 4 · 8 GB
             </span>
@@ -801,7 +801,7 @@ async function handleLogout() {
         </div>
 
         <!-- Right Telemetry & Operator Controls -->
-        <div class="flex items-center gap-1.5 sm:gap-2 text-xs shrink-0">
+        <div class="flex items-center gap-1 sm:gap-2 text-xs shrink-0">
           <!-- SSD Storage Status -->
           <div class="hidden sm:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 tabular-nums">
             <span class="w-2 h-2 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
@@ -843,7 +843,7 @@ async function handleLogout() {
           </button>
 
           <!-- Calibration & Bioacoustic Mode Group -->
-          <div class="flex items-center gap-1 bg-ink-950 border border-ink-800 rounded-md p-0.5">
+          <div class="flex items-center gap-0.5 sm:gap-1 bg-ink-950 border border-ink-800 rounded-md p-0.5">
             <button
               type="button"
               @click="stagedMuseModalOpen = true"
@@ -862,25 +862,25 @@ async function handleLogout() {
               @click="toggleBeeMode"
               :title="beeModeActive ? 'Bee Mode: ON (Responses synthesized as bioacoustic bee buzzing)' : 'Bee Mode: OFF (Click to enable bioacoustic buzzing)'"
               :class="beeModeActive ? 'bg-honey-500/20 text-honey-300 border border-honey-500/40' : 'text-ink-400 hover:text-ink-200 hover:bg-ink-900 border border-transparent'"
-              class="min-h-[38px] sm:min-h-[32px] flex items-center gap-1.5 px-2.5 rounded text-xs transition-colors touch-manipulation"
+              class="min-h-[38px] sm:min-h-[32px] flex items-center gap-1.5 px-2 sm:px-2.5 rounded text-xs transition-colors touch-manipulation"
             >
               <svg class="w-3.5 h-3.5 shrink-0 text-honey-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h3l2-5 4 10 3-7 2 2h4" />
               </svg>
               <span class="font-mono text-[11px] font-medium whitespace-nowrap">
-                <span class="sm:hidden">{{ isBeeModePlaying ? 'Buzzing' : (beeModeActive ? 'Bee: ON' : 'Bee: OFF') }}</span>
+                <span class="sm:hidden">{{ isBeeModePlaying ? 'Buzz' : (beeModeActive ? 'Bee ON' : 'Bee OFF') }}</span>
                 <span class="hidden sm:inline">{{ isBeeModePlaying ? 'Buzzing...' : (beeModeActive ? 'Bee Mode: ON' : 'Bee Mode: OFF') }}</span>
               </span>
             </button>
           </div>
 
           <!-- Operator Session & Sign Out -->
-          <div class="flex items-center gap-2 pl-1.5 sm:pl-2 border-l border-ink-800">
+          <div class="flex items-center gap-1.5 sm:gap-2 pl-1 sm:pl-2 border-l border-ink-800">
             <span class="hidden sm:inline text-xs font-mono text-honey-400">{{ currentUser?.username || 'beekeeper' }}</span>
             <button
               type="button"
               @click="handleLogout"
-              class="min-h-[38px] sm:min-h-[34px] px-2.5 text-xs text-ink-300 hover:text-ink-100 bg-ink-950 hover:bg-ink-800 border border-ink-800 rounded-md transition-colors touch-manipulation"
+              class="min-h-[38px] sm:min-h-[34px] px-2 sm:px-2.5 text-xs text-ink-300 hover:text-ink-100 bg-ink-950 hover:bg-ink-800 border border-ink-800 rounded-md transition-colors touch-manipulation"
             >
               Logout
             </button>
@@ -889,16 +889,16 @@ async function handleLogout() {
       </header>
 
       <!-- Mobile Compact Telemetry Bar (visible < sm so mobile users still see SSD, Muse & Pi 4 status) -->
-      <div class="sm:hidden border-b border-ink-800 bg-ink-950 px-3 min-h-[34px] flex items-center justify-between gap-2 text-[11px] font-mono text-ink-400 tabular-nums shrink-0">
+      <div class="sm:hidden border-b border-ink-800 bg-ink-950 px-3 min-h-[38px] flex items-center justify-between gap-2 text-[11px] font-mono text-ink-400 tabular-nums shrink-0">
         <div class="flex items-center gap-1.5 truncate">
           <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
           <span class="truncate">Pi 4 · SSD {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted : 'Offline' }}</span>
         </div>
-        <button type="button" @click="checkMetaHealth" class="min-h-[34px] flex items-center gap-1.5 text-ink-300 shrink-0 touch-manipulation">
+        <button type="button" @click="checkMetaHealth" class="min-h-[38px] px-1 flex items-center gap-1.5 text-ink-300 shrink-0 touch-manipulation">
           <span class="w-1.5 h-1.5 rounded-full" :class="metaHealth.liveConnection ? 'bg-clover-400' : 'bg-honey-400'"></span>
           <span>Muse {{ metaHealth.liveConnection ? metaHealth.latencyMs + 'ms' : '0 cr' }}</span>
         </button>
-        <button type="button" @click="fetchPerceptionTelemetry" class="min-h-[34px] flex items-center gap-1 text-electric-300 shrink-0 touch-manipulation">
+        <button type="button" @click="fetchPerceptionTelemetry" class="min-h-[38px] px-1 flex items-center gap-1 text-electric-300 shrink-0 touch-manipulation">
           <span>FFM {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }}</span>
         </button>
       </div>
@@ -1325,10 +1325,10 @@ async function handleLogout() {
                       type="button"
                       @click="toggleVoiceInput"
                       :class="isRecording ? 'bg-ember-500/20 text-ember-300 border-ember-500/50' : 'bg-ink-900 text-ink-300 hover:text-ink-100 border-ink-800'"
-                      class="min-h-[32px] px-2.5 rounded text-[11px] font-mono border flex items-center gap-1.5 transition-colors"
+                      class="min-h-[38px] sm:min-h-[32px] px-3 sm:px-2.5 rounded text-[11px] font-mono border flex items-center gap-1.5 transition-colors touch-manipulation"
                       title="Record voice query and run production pipeline through Meta Muse"
                     >
-                      <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                      <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z" />
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v3m-4 0h8" />
                       </svg>
@@ -1344,7 +1344,7 @@ async function handleLogout() {
                     v-model="museQuestionInput"
                     rows="2"
                     class="w-full px-3 py-2 bg-ink-900 border border-ink-800 rounded-md text-ink-100 text-base sm:text-xs focus:outline-none focus:border-honey-400 resize-none font-sans leading-relaxed"
-                    placeholder="Enter query or use Voice Input (e.g., 'What foreign object is at the flight entrance?')..."
+                    placeholder="Ask about this anomaly or tap Voice Input..."
                   ></textarea>
                 </div>
 
@@ -1353,21 +1353,21 @@ async function handleLogout() {
                   <button
                     type="button"
                     @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
-                    class="min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors"
+                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
                   >
                     Collision cause
                   </button>
                   <button
                     type="button"
                     @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
-                    class="min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors"
+                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
                   >
                     Hornet threat
                   </button>
                   <button
                     type="button"
                     @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
-                    class="min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors"
+                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
                   >
                     SAM contour
                   </button>
@@ -1576,7 +1576,7 @@ async function handleLogout() {
                         ? 'bg-honey-500/20 border-honey-400 text-honey-200'
                         : 'bg-ink-900 border-ink-800 text-ink-300 hover:border-ink-700 hover:text-ink-100'
                     ]"
-                    class="min-h-[36px] px-2.5 py-1.5 rounded border text-[11px] font-mono flex items-center justify-between transition-colors cursor-pointer tabular-nums"
+                    class="min-h-[42px] sm:min-h-[36px] px-2.5 py-1.5 rounded border text-[11px] font-mono flex items-center justify-between transition-colors cursor-pointer tabular-nums touch-manipulation"
                   >
                     <span class="font-semibold truncate">T{{ tier.tierIndex }} · {{ tier.shortTitle }}</span>
                     <span class="text-[10px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.quantitativeMetric.split('·')[0] }}</span>
@@ -1611,10 +1611,10 @@ async function handleLogout() {
                   <button
                     type="button"
                     @click="showAblationMatrix = !showAblationMatrix"
-                    class="w-full min-h-[36px] flex items-center justify-between text-[11px] font-mono text-ink-300 hover:text-honey-300 transition-colors tabular-nums"
+                    class="w-full min-h-[42px] sm:min-h-[36px] flex items-center justify-between text-[11px] font-mono text-ink-300 hover:text-honey-300 transition-colors tabular-nums touch-manipulation"
                   >
                     <span>{{ showAblationMatrix ? 'Hide' : 'Show' }} Empirical Factorial &amp; Baseline Matrix (N=20)</span>
-                    <span class="text-honey-400">
+                    <span class="text-honey-400 shrink-0 ml-2">
                       Hit {{ activeCounterfactualObj?.pointingHitRatePct ?? 100 }}% · IoU {{ activeCounterfactualObj?.meanHotspotIou ?? 1.0 }}
                     </span>
                   </button>
@@ -1627,7 +1627,7 @@ async function handleLogout() {
                         type="button"
                         @click="selectedCounterfactual = cf.id"
                         :class="selectedCounterfactual === cf.id ? 'bg-ink-800 border-honey-500/50 text-ink-100' : 'bg-ink-900 border-ink-800 text-ink-400 hover:text-ink-200'"
-                        class="min-h-[36px] px-2.5 py-1.5 rounded border text-left text-[10px] font-mono flex items-center justify-between transition-colors tabular-nums"
+                        class="min-h-[42px] sm:min-h-[36px] px-2.5 py-1.5 rounded border text-left text-[10px] font-mono flex items-center justify-between transition-colors tabular-nums touch-manipulation"
                       >
                         <span class="truncate">{{ cf.label }}</span>
                         <span class="text-honey-400 shrink-0 ml-2">
@@ -1698,7 +1698,7 @@ async function handleLogout() {
             type="button"
             @click="stagedMuseModalOpen = false"
             aria-label="Close staging inspector"
-            class="min-h-[36px] min-w-[36px] flex items-center justify-center text-ink-400 hover:text-ink-100 rounded-md hover:bg-ink-800 transition-colors"
+            class="min-h-[42px] min-w-[42px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center text-ink-400 hover:text-ink-100 rounded-md hover:bg-ink-800 transition-colors touch-manipulation"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1738,21 +1738,21 @@ async function handleLogout() {
               <button
                 type="button"
                 @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
-                class="min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors"
+                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
               >
                 Collision cause
               </button>
               <button
                 type="button"
                 @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
-                class="min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors"
+                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
               >
                 Hornet threat
               </button>
               <button
                 type="button"
                 @click="setPresetQuestion('Analyze swarm preparation cues from cluster vibration and entrance traffic')"
-                class="min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors"
+                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
               >
                 Swarm dynamics
               </button>
@@ -1766,7 +1766,7 @@ async function handleLogout() {
                 type="button"
                 @click="stagedTab = 'prompt'"
                 :class="stagedTab === 'prompt' ? 'text-honey-400 border-b-2 border-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200 border-b-2 border-transparent'"
-                class="px-2 py-2 text-xs transition-colors shrink-0"
+                class="min-h-[40px] px-2 py-2 text-xs transition-colors shrink-0 touch-manipulation"
               >
                 Grounded Prompt
               </button>
@@ -1774,7 +1774,7 @@ async function handleLogout() {
                 type="button"
                 @click="stagedTab = 'payload'"
                 :class="stagedTab === 'payload' ? 'text-honey-400 border-b-2 border-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200 border-b-2 border-transparent'"
-                class="px-2 py-2 text-xs transition-colors shrink-0"
+                class="min-h-[40px] px-2 py-2 text-xs transition-colors shrink-0 touch-manipulation"
               >
                 Wire Payload &amp; cURL
               </button>
@@ -1801,7 +1801,7 @@ async function handleLogout() {
           <button
             type="button"
             @click="stagedMuseModalOpen = false"
-            class="min-h-[40px] px-3.5 bg-ink-950 hover:bg-ink-800 text-ink-300 border border-ink-800 rounded-md text-xs transition-colors"
+            class="min-h-[42px] px-4 bg-ink-950 hover:bg-ink-800 text-ink-300 border border-ink-800 rounded-md text-xs transition-colors touch-manipulation"
           >
             Close
           </button>
@@ -1809,7 +1809,7 @@ async function handleLogout() {
             type="button"
             @click="stagedMuseModalOpen = false; askMuse()"
             :disabled="isAskingMuse"
-            class="min-h-[40px] px-4 bg-honey-400 hover:bg-honey-300 text-ink-950 font-semibold rounded-md text-xs transition-colors flex items-center gap-1.5"
+            class="min-h-[42px] px-4 bg-honey-400 hover:bg-honey-300 text-ink-950 font-semibold rounded-md text-xs transition-colors flex items-center gap-1.5 touch-manipulation"
           >
             <span>Run on Muse Spark</span>
           </button>
