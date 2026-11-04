@@ -356,7 +356,10 @@ function setPresetQuestion(q) {
 
 function formatMarkdownReport(md) {
   if (!md) return ''
-  let text = md.trim()
+  let text = md
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/^\s*---+\s*$/gm, '')
+    .trim()
 
   text = text
     .replace(/&/g, '&amp;')
@@ -367,6 +370,7 @@ function formatMarkdownReport(md) {
   text = text.replace(/^##\s*(.*)$/gm, '<h3 class="text-xs font-semibold text-honey-300 mt-2.5 mb-1">$1</h3>')
   text = text.replace(/^#\s*(.*)$/gm, '<h2 class="text-sm font-semibold text-honey-300 mt-3 mb-1">$1</h2>')
 
+  text = text.replace(/`([^`]+)`/g, '<code class="font-mono text-[11px] text-honey-300 bg-ink-950 px-1 py-0.5 rounded">$1</code>')
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-ink-100">$1</strong>')
   text = text.replace(/\*(.*?)\*/g, '<em class="italic text-ink-300">$1</em>')
 
@@ -375,7 +379,11 @@ function formatMarkdownReport(md) {
   const result = []
 
   for (const line of lines) {
-    const listMatch = line.match(/^\s*[-*]\s+(.*)$/)
+    const trimmedLine = line.trim()
+    if (!trimmedLine || /^\|\s*[-:]+/.test(trimmedLine)) {
+      continue
+    }
+    const listMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/)
     if (listMatch) {
       if (!inList) {
         result.push('<ul class="list-disc pl-4 space-y-0.5 my-1 text-ink-300 text-xs">')
@@ -387,10 +395,10 @@ function formatMarkdownReport(md) {
         result.push('</ul>')
         inList = false
       }
-      if (line.trim().length > 0 && !line.startsWith('<h')) {
-        result.push(`<p class="my-1 text-ink-200 leading-relaxed text-xs">${line}</p>`)
-      } else if (line.trim().length > 0) {
-        result.push(line)
+      if (!trimmedLine.startsWith('<h')) {
+        result.push(`<p class="my-1 text-ink-200 leading-relaxed text-xs">${trimmedLine}</p>`)
+      } else {
+        result.push(trimmedLine)
       }
     }
   }
@@ -416,14 +424,23 @@ onUnmounted(() => {
   stopAllAudio()
 })
 
+function getMaxSequenceIndex() {
+  const count = timelineMeta.value?.sequences?.length || 10
+  return Math.max(0, count - 1)
+}
+
 function selectEvent(ev) {
   selectedEvent.value = ev
   updateActiveSaccade()
   if (ev && typeof ev.timestampSec === 'number') {
     const t = ev.timestampSec
     currentTimelineSec.value = t
-    const targetSeqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
-    const localSec = Math.max(0, t - (targetSeqIdx * 30.0))
+    const targetSeqIdx = typeof ev.sequenceIndex === 'number'
+      ? Math.min(getMaxSequenceIndex(), Math.max(0, ev.sequenceIndex))
+      : Math.min(getMaxSequenceIndex(), Math.max(0, Math.floor(t / 30.0)))
+    const localSec = typeof ev.timeSecLocal === 'number'
+      ? Math.max(0, ev.timeSecLocal)
+      : Math.max(0, t - (targetSeqIdx * 30.0))
 
     if (activeView.value === 'comparison' || activeView.value === 'sequence') {
       if (targetSeqIdx !== currentSequenceIndex.value) {
@@ -641,7 +658,7 @@ let isUserScrubbing = false
 
 function syncTimelineToVideo(seek = true) {
   const t = currentTimelineSec.value
-  const targetSeqIdx = Math.min(9, Math.max(0, Math.floor(t / 30.0)))
+  const targetSeqIdx = Math.min(getMaxSequenceIndex(), Math.max(0, Math.floor(t / 30.0)))
   const localSec = Math.max(0, t - (targetSeqIdx * 30.0))
 
   const closest = findClosestEvent(t)
@@ -712,7 +729,7 @@ function onVideoTimeUpdate() {
 
 function onVideoEnded() {
   if (activeView.value === 'comparison' || activeView.value === 'sequence') {
-    if (currentSequenceIndex.value < 9) {
+    if (currentSequenceIndex.value < getMaxSequenceIndex()) {
       currentSequenceIndex.value++
       pendingSeekSec = 0
       currentTimelineSec.value = currentSequenceIndex.value * 30.0

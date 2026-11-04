@@ -375,7 +375,10 @@ public final class TolerantPayloadParser {
             );
         }
 
-        String trimmed = rawOutput.trim();
+        String trimmed = rawOutput
+                .replaceAll("[\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE00}-\\x{FE0F}]", "")
+                .replaceAll("(?m)^\\s*---+\\s*$", "")
+                .trim();
 
         // 1. Check if the response is a JSON object {"report": "...", "spokenSummary": "..."}
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {

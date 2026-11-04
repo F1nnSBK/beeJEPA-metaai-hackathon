@@ -326,10 +326,6 @@ async function loadSystemAndData() {
   fetchPerceptionTelemetry()
   fetchSaccadicTargets()
   fetchAblationPyramid(selectedEvent.value?.eventId)
-
-  if (!museDiagnosis.value) {
-    askMuse('What happened at my hive today?', { silentAutoLoad: true })
-  }
 }
 
 async function askMuse(question = null, options = {}) {

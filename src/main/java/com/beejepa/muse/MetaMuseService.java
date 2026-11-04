@@ -1337,7 +1337,7 @@ public class MetaMuseService {
                         "bees_inside_foveal_hotspot", targetEvent.beesInsideHotspotCount(),
                         "geometric_classification", targetEvent.geometricPreClassification(),
                         "resolution_gain", "8.3x token density over peripheral stream",
-                        "instruction", "Foveal saccadic zoom complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise, well-formatted Markdown) and <SPOKEN>...</SPOKEN> (complete natural spoken narration with all facts, no headings, and spoken time words like 'second zero' or 'beginning')."
+                        "instruction", "Foveal saccadic zoom complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise 3-section Markdown: ### Assessment, ### Spatial Evidence, ### Action; NO emojis, NO Markdown tables, NO --- lines) and <SPOKEN>...</SPOKEN> (natural spoken narration with all numbers, no headings, and spoken time words)."
                 );
             } else {
                 TolerantPayloadParser.ParsedSamConceptArgs args =
@@ -1365,7 +1365,7 @@ public class MetaMuseService {
                         "matches", isBeeConcept && matches.isEmpty() ? targetEvent.landingBoardBeeCount() : matches.size(),
                         "landing_board_bee_count", targetEvent.landingBoardBeeCount(),
                         "bees_inside_hotspot_count", targetEvent.beesInsideHotspotCount(),
-                        "instruction", "Tool verification complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise, well-formatted Markdown) and <SPOKEN>...</SPOKEN> (complete natural spoken narration with all facts, no headings, and spoken time words like 'second zero' or 'beginning')."
+                        "instruction", "Tool verification complete. Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> (concise 3-section Markdown: ### Assessment, ### Spatial Evidence, ### Action; NO emojis, NO Markdown tables, NO --- lines) and <SPOKEN>...</SPOKEN> (natural spoken narration with all numbers, no headings, and spoken time words)."
                 );
             }
 
@@ -1408,16 +1408,17 @@ public class MetaMuseService {
         StringBuilder spokenSb = new StringBuilder();
 
         reportSb.append("<REPORT>\n");
-        reportSb.append("### Traffic & Colony Status\n");
+        reportSb.append("### Assessment\n");
         EventSpatialSummary first = summaries.getFirst();
-        reportSb.append("- **Peak Traffic:** ").append(first.landingBoardBeeCount())
-                .append(" bees on landing board (").append(first.beesInsideHotspotCount())
-                .append(" inside foveal hotspot) at **").append(first.timestamp()).append("**.\n");
-        reportSb.append("- **Threat Check:** Zero wasps, hornets, or foreign pests detected.\n\n");
-        reportSb.append("### Peak Events\n");
+        reportSb.append("Dense honeybee entrance guarding and foraging congestion detected across ")
+                .append(summaries.size())
+                .append(summaries.size() == 1 ? " peak anomaly" : " peak anomalies")
+                .append(", peaking at **").append(first.surpriseScoreSigma()).append("σ** with **")
+                .append(first.landingBoardBeeCount()).append(" bees** on the landing board. Zero wasps, hornets, or foreign intruders are present.\n\n");
+        reportSb.append("### Spatial Evidence\n");
 
         spokenSb.append("<SPOKEN>\n");
-        spokenSb.append("Hive entrance briefing for your question. We analyzed ")
+        spokenSb.append("Hive entrance briefing. We analyzed ")
                 .append(summaries.size())
                 .append(summaries.size() == 1 ? " peak surprise event" : " peak surprise events")
                 .append(" on the flight board. ");
@@ -1425,8 +1426,8 @@ public class MetaMuseService {
         for (EventSpatialSummary s : summaries) {
             reportSb.append("- **").append(s.timestamp()).append("** (`").append(s.surpriseScoreSigma()).append("σ` ")
                     .append(s.severity()).append("): **").append(s.landingBoardBeeCount())
-                    .append(" bees** on board, **").append(s.beesInsideHotspotCount())
-                    .append(" inside hotspot** — dense honeybee guarding and foraging cluster.\n");
+                    .append(" bees** on flight board, **").append(s.beesInsideHotspotCount())
+                    .append(" inside hotspot** — dense honeybee guarding and approach cluster.\n");
 
             String spokenTime = "00:00".equals(s.timestamp())
                     ? "At the beginning of the recording at second zero"
@@ -1443,8 +1444,8 @@ public class MetaMuseService {
                     .append(" bees tightly clustered inside the foveal hotspot, confirming a multi-bee interaction cluster. ");
         }
 
-        reportSb.append("\n### Takeaway\n");
-        reportSb.append("Healthy foraging and entrance guarding. **No intervention required.**\n");
+        reportSb.append("\n### Action\n");
+        reportSb.append("Normal afternoon entrance guarding and foraging traffic. **No beekeeper intervention required.**\n");
         reportSb.append("</REPORT>");
 
         spokenSb.append("All kinematic peaks correspond to active honeybee congregation and entrance guarding, with zero wasps, hornets, or foreign pests detected. The colony is healthy and no beekeeper intervention is required.\n");
