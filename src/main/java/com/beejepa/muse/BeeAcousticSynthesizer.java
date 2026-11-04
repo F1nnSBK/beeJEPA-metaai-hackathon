@@ -1,27 +1,18 @@
 package com.beejepa.muse;
 
 import jakarta.inject.Singleton;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Deterministic Bee Voice Acoustic Synthesizer.
- * Maps Muse text responses into authentic honeybee bioacoustic communication signals.
- *
- * Biological grounded design:
- * - Fundamental frequencies: 210 Hz to 460 Hz (normal hive hum to queen piping).
- * - Wingbeat amplitude modulation: ~26-30 Hz AM envelope.
- * - Harmonics: 1st through 5th harmonic overtone spectrum.
- * - Determinism: Every specific word always produces the exact same phonetic bee pitch & timbre!
+ * Synthesizes 22.05 kHz mono PCM WAV acoustic signals from text or spectral profiles.
  */
 @Singleton
 public class BeeAcousticSynthesizer {
 
-    public static final int SAMPLE_RATE = 22050; // High clarity, ultra-low memory for Raspberry Pi 4
+    public static final int SAMPLE_RATE = 22050;
 
     public byte[] synthesizeWav(String text) {
         if (text == null || text.isBlank()) {
@@ -52,13 +43,15 @@ public class BeeAcousticSynthesizer {
         int syllables = profile.estimatedSyllables();
         boolean isQuestion = profile.pitchTiltHz() > 25.0f;
 
-        // Map human vocal centroid (e.g. 150 - 1500 Hz) to biological honeybee range (210 - 450 Hz)
+        // Map human vocal centroid (e.g. 150 - 1500 Hz) to biological honeybee range
+        // (210 - 450 Hz)
         float baseF0 = 210.0f + Math.min(240.0f, Math.max(0.0f, (profile.meanCentroidHz() - 150.0f) * 0.25f));
 
         for (int i = 0; i < syllables; i++) {
             AudioSpectralAnalyzer.SyllableOnset onset = profile.onsets().get(Math.min(i, profile.onsets().size() - 1));
 
-            float syllableF = baseF0 + ((onset.centroidHz() % 35.0f) - 15.0f);
+            float centroidShift = Math.clamp((onset.centroidHz() - 300.0f) * 0.04f, -15.0f, 20.0f);
+            float syllableF = baseF0 + centroidShift;
             float startF = syllableF;
             float endF = syllableF;
 
@@ -86,48 +79,44 @@ public class BeeAcousticSynthesizer {
 
     private void synthesizeWord(String rawToken, boolean isLastWordInSentence, List<Float> samples) {
         String clean = rawToken.toLowerCase().replaceAll("[^a-z0-9]", "");
-        if (clean.isBlank()) return;
+        if (clean.isBlank())
+            return;
 
         boolean isQuestion = rawToken.contains("?");
         boolean isExclamation = rawToken.contains("!");
         boolean hasComma = rawToken.contains(",") || rawToken.contains(";");
         boolean hasPeriod = rawToken.contains(".") || isLastWordInSentence;
 
-        // 1. Deterministic Pitch and Timbre from Word Identity
-        int wordHash = Math.abs(clean.hashCode());
-        
-        // Base fundamental frequency: 220 Hz to 350 Hz
-        float baseF0 = 220.0f + (wordHash % 130);
+        float vowelBrightness = computeVowelBrightness(clean);
+        float baseF0 = 220.0f + vowelBrightness * 130.0f;
 
-        // Keyword semantic pitch biasing (scientific bioacoustic cues)
-        if (clean.contains("queen") || clean.contains("piping") || clean.contains("alert") || clean.contains("danger") || clean.contains("wasp")) {
-            baseF0 = 380.0f + (wordHash % 80); // Higher agitation / queen piping register
-        } else if (clean.contains("stable") || clean.contains("calm") || clean.contains("brood") || clean.contains("honey")) {
-            baseF0 = 210.0f + (wordHash % 50); // Deep, calm hive hum
+        if (clean.contains("queen") || clean.contains("piping") || clean.contains("alert") || clean.contains("danger")
+                || clean.contains("wasp")) {
+            baseF0 = 380.0f + vowelBrightness * 80.0f;
+        } else if (clean.contains("stable") || clean.contains("calm") || clean.contains("brood")
+                || clean.contains("honey")) {
+            baseF0 = 210.0f + vowelBrightness * 50.0f;
         }
 
-        // 2. Count syllables (vowel group heuristic)
         int syllables = countSyllables(clean);
         float totalWordDuration = Math.max(0.12f, Math.min(0.42f, 0.08f + syllables * 0.07f));
         float syllableDuration = totalWordDuration / syllables;
 
-        // 3. Synthesize each syllable of the word
         for (int s = 0; s < syllables; s++) {
             float startF = baseF0 + (s * 15.0f);
             float endF = baseF0 + (s * 15.0f);
 
-            // Sentence prosody / inflection
             if (isQuestion && s == syllables - 1) {
-                endF += 55.0f; // Rising interrogative inflection
+                endF += 55.0f;
             } else if (hasPeriod && s == syllables - 1) {
-                endF -= 35.0f; // Falling declarative cadence
+                endF -= 35.0f;
             } else if (isExclamation) {
                 startF += 40.0f;
                 endF += 20.0f;
             }
 
             float volume = isExclamation ? 0.90f : 0.75f;
-            float modFreq = 26.0f + (wordHash % 6); // 26 - 31 Hz wingbeat flutter
+            float modFreq = 26.0f + vowelBrightness * 5.0f;
 
             appendTone(samples, syllableDuration, startF, endF, volume, modFreq);
 
@@ -147,7 +136,8 @@ public class BeeAcousticSynthesizer {
         }
     }
 
-    private void appendTone(List<Float> samples, float durationS, float startF, float endF, float volume, float modFreq) {
+    private void appendTone(List<Float> samples, float durationS, float startF, float endF, float volume,
+            float modFreq) {
         int numSamples = (int) (durationS * SAMPLE_RATE);
         float phase = 0.0f;
         float modPhase = 0.0f;
@@ -207,8 +197,27 @@ public class BeeAcousticSynthesizer {
         }
     }
 
+    private float computeVowelBrightness(String clean) {
+        if (clean == null || clean.isEmpty()) {
+            return 0.5f;
+        }
+        float score = 0.0f;
+        for (int i = 0; i < clean.length(); i++) {
+            char c = clean.charAt(i);
+            if (c == 'i' || c == 'e' || c == 'y') {
+                score += 1.0f;
+            } else if (c == 'a' || c == 'o' || c == 'u') {
+                score += 0.35f;
+            } else {
+                score += (c - 'a') / 52.0f;
+            }
+        }
+        return Math.clamp(score / clean.length(), 0.0f, 1.0f);
+    }
+
     private int countSyllables(String word) {
-        if (word == null || word.length() <= 3) return 1;
+        if (word == null || word.length() <= 3)
+            return 1;
         String w = word.toLowerCase();
         int count = 0;
         boolean prevVowel = false;
@@ -257,7 +266,8 @@ public class BeeAcousticSynthesizer {
         float maxPeak = 0.001f;
         for (float s : samples) {
             float abs = Math.abs(s);
-            if (abs > maxPeak) maxPeak = abs;
+            if (abs > maxPeak)
+                maxPeak = abs;
         }
 
         // Write 16-bit PCM samples

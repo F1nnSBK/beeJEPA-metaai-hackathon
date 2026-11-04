@@ -3,7 +3,6 @@ package com.beejepa.controller;
 import com.beejepa.telemetry.LatencyStats;
 import com.beejepa.telemetry.TelemetryEntry;
 import com.beejepa.telemetry.TelemetryService;
-import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;

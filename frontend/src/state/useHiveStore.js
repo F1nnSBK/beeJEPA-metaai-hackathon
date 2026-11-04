@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import {
   apiFetch,
   normalizeEvent,
@@ -353,7 +353,7 @@ async function askMuse(question = null, options = {}) {
       body: JSON.stringify({
         question: q,
         eventId: targetEventId,
-        maxEvents: 3
+        maxEvents: targetEventId ? 1 : 3
       }),
       cancelKey: 'askMuse',
       retries: 1,

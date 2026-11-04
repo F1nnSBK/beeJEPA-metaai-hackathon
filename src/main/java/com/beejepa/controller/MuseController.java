@@ -20,7 +20,6 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -349,8 +348,14 @@ public class MuseController {
         if (question.isBlank()) {
             return HttpResponse.<Map<String, Object>>badRequest().body(Map.of("error", "question is required"));
         }
-        String requestedEventId = payload.get("eventId") != null ? String.valueOf(payload.get("eventId")) : null;
-        int maxEventsToTake = payload.get("maxEvents") instanceof Number n ? Math.max(1, Math.min(5, n.intValue())) : 3;
+        String requestedEventId = payload.get("eventId") != null ? String.valueOf(payload.get("eventId")).trim() : null;
+        if (requestedEventId != null && (requestedEventId.isBlank() || "null".equalsIgnoreCase(requestedEventId))) {
+            requestedEventId = null;
+        }
+        int defaultMaxEvents = requestedEventId != null ? 1 : 3;
+        int maxEventsToTake = payload.get("maxEvents") instanceof Number n
+                ? Math.max(1, Math.min(5, n.intValue()))
+                : defaultMaxEvents;
 
         List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(requestedEventId, maxEventsToTake);
 

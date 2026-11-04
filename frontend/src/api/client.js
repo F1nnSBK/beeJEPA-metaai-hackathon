@@ -100,6 +100,9 @@ export async function apiFetch(path, {
       }
 
       cleanup()
+      if (!response.ok) {
+        console.warn(`[apiFetch] ${method} ${path} -> HTTP ${response.status}`, data)
+      }
       return {
         ok: response.ok,
         status: response.status,

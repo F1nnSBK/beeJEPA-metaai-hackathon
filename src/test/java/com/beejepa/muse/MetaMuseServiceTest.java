@@ -176,6 +176,10 @@ class MetaMuseServiceTest {
         Assertions.assertTrue(cleaned.contains("Normal beekeeper report: Hive traffic is calm."));
         Assertions.assertFalse(cleaned.contains("assistant to="));
         Assertions.assertFalse(cleaned.contains("hidden thought"));
+
+        String finalTagOutput = "<|start|>assistant to=final<|message|><REPORT>### Assessment\nCalm entrance.</REPORT><|eot|>";
+        String cleanedFinal = MetaMuseService.cleanMuseOutput(finalTagOutput);
+        Assertions.assertTrue(cleanedFinal.contains("Calm entrance."));
     }
 
     @Test

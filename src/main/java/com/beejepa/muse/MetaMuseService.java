@@ -37,7 +37,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.core.JsonSchemaLocalValidation;
-import com.openai.errors.OpenAIServiceException;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionContentPart;
 import com.openai.models.chat.completions.ChatCompletionContentPartImage;
@@ -60,9 +59,15 @@ public class MetaMuseService {
     private static final Logger LOG = LoggerFactory.getLogger(MetaMuseService.class);
     private static final String BASETEN_MODEL = "meta-models/muse-spark-open-1026";
     private static final Pattern COMMENTARY_BLOCK = Pattern
-            .compile("<\\|start\\|>assistant to=commentary<\\|message\\|>(.*?)<\\|eom\\|>", Pattern.DOTALL);
+            .compile(
+                    "<\\|start\\|>assistant to=(?:commentary|final|user)[^<]*<\\|message\\|>(.*?)(?:<\\|eom\\|>|<\\|eot\\|>|$)",
+                    Pattern.DOTALL);
+    private static final Pattern INLINE_TOOL_BLOCK = Pattern
+            .compile(
+                    "<\\|start\\|>assistant to=[^<]*QuerySam31Concept[^<]*<\\|message\\|>\\s*(\\{.*?\\})\\s*(?:<\\|eom\\|>|<\\|eot\\|>|$)",
+                    Pattern.DOTALL);
     private static final Pattern INTERNAL_TAG_BLOCK = Pattern
-            .compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eot\\|>|$)", Pattern.DOTALL);
+            .compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eom\\|>|<\\|eot\\|>|$)", Pattern.DOTALL);
 
     private final MetaMuseClient client;
     private final MetaMuseConfig config;
@@ -1028,72 +1033,149 @@ public class MetaMuseService {
                 .flatMap(Collection::stream)
                 .toList();
 
-        String firstTurnText = cleanMuseOutput(assistantMsg.content().orElse(""));
+        String rawFirstContent = assistantMsg.content().orElse("");
+        String firstTurnText = cleanMuseOutput(rawFirstContent);
         if (toolCalls.isEmpty()) {
+            Matcher inlineToolMatcher = INLINE_TOOL_BLOCK.matcher(rawFirstContent);
+            if (inlineToolMatcher.find()) {
+                String inlineArgsJson = inlineToolMatcher.group(1);
+                Map<String, Object> toolResult = executeSamConceptTool(inlineArgsJson, summaries);
+                ChatCompletionCreateParams followUpParams = ChatCompletionCreateParams.builder()
+                        .model(activeModel)
+                        .maxCompletionTokens(4096)
+                        .addSystemMessage(systemPrompt)
+                        .addUserMessageOfArrayOfContentParts(userParts)
+                        .addUserMessage("SAM 3.1 tool verification result: "
+                                + writeToolJson(toolResult))
+                        .build();
+                ChatCompletion followUpTurn = executeWithKeyFailover(followUpParams);
+                String followUpText = extractChoiceText(followUpTurn);
+                if (!followUpText.isBlank()) {
+                    return followUpText;
+                }
+            }
+            if (firstTurnText.isBlank()) {
+                firstTurnText = extractChoiceText(firstTurn);
+            }
+            if (firstTurnText.isBlank()) {
+                LOG.warn(
+                        "[MetaMuseService] First turn with tools returned empty text (finishReason={}); retrying direct completion without tools.",
+                        firstTurn.choices().getFirst().finishReason());
+                ChatCompletionCreateParams directParams = ChatCompletionCreateParams.builder()
+                        .model(activeModel)
+                        .maxCompletionTokens(4096)
+                        .addSystemMessage(systemPrompt)
+                        .addUserMessageOfArrayOfContentParts(userParts)
+                        .build();
+                ChatCompletion directTurn = executeWithKeyFailover(directParams);
+                firstTurnText = extractChoiceText(directTurn);
+            }
             if (firstTurnText.isBlank()) {
                 throw new IllegalStateException("Muse returned an empty answer");
             }
             return firstTurnText;
         }
 
-        paramsBuilder.addMessage(assistantMsg);
+        ChatCompletionCreateParams.Builder secondTurnBuilder = ChatCompletionCreateParams.builder()
+                .model(activeModel)
+                .maxCompletionTokens(4096)
+                .addSystemMessage(systemPrompt)
+                .addUserMessageOfArrayOfContentParts(userParts)
+                .addMessage(assistantMsg);
+
         for (ChatCompletionMessageToolCall tc : toolCalls) {
             if (!tc.isFunction()) {
                 continue;
             }
             ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
             String rawArgsJson = ftc.function()._arguments().toString();
-            TolerantPayloadParser.ParsedSamConceptArgs args = TolerantPayloadParser.parseSamConceptArgs(rawArgsJson,
-                    summaries);
-            EventSpatialSummary targetEvent = summaries.stream()
-                    .filter(s -> s.eventId().equals(args.resolvedEventId()))
-                    .findFirst()
-                    .orElse(summaries.getFirst());
+            Map<String, Object> toolResult = executeSamConceptTool(rawArgsJson, summaries);
 
-            boolean isBeeConcept = List.of("bee", "bees", "honey bee", "honeybee")
-                    .contains(args.conceptPrompt().trim().toLowerCase());
-            Map<String, Object> toolResult = new LinkedHashMap<>();
-            toolResult.put("event_id", targetEvent.eventId());
-            toolResult.put("queried_concept", args.conceptPrompt());
-            try {
-                Optional<byte[]> peak = eventService != null
-                        ? eventService.getOrExtractEventFrameBytes(targetEvent.eventId())
-                        : Optional.empty();
-                if (peak.isEmpty()) {
-                    throw new IllegalStateException("peak frame unavailable");
-                }
-                BufferedImage clean = VisualCropRenderer.loadCanonicalView(peak.get());
-                List<BoundingBox> matches = sam31Client.queryConcept(
-                        args.conceptPrompt(), VisualCropRenderer.encodeJpegBase64(clean, 0.92f),
-                        clean.getWidth(), clean.getHeight(), isBeeConcept);
-                toolResult.put("sam_status", "SUCCESS");
-                toolResult.put("matches", matches.size());
-                toolResult.put("match_boxes_xyxy", matches.stream().map(BoundingBox::toList).toList());
-            } catch (Exception samEx) {
-                LOG.warn("[MetaMuseService] Tool SAM 3.1 concept query '{}' failed: {}", args.conceptPrompt(),
-                        samEx.getMessage());
-                toolResult.put("sam_status", "FAILED");
-                toolResult.put("error", "SAM 3.1 could not be executed; the number of matches is unknown.");
-            }
-            toolResult.put("instruction",
-                    "Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> and <SPOKEN>...</SPOKEN>. If sam_status is FAILED, state that the check could not be performed.");
-
-            paramsBuilder.addMessage(
+            secondTurnBuilder.addMessage(
                     ChatCompletionToolMessageParam.builder()
                             .toolCallId(ftc.id())
                             .contentAsJson(toolResult)
                             .build());
         }
 
-        ChatCompletion secondTurn = executeWithKeyFailover(paramsBuilder.build());
+        ChatCompletion secondTurn = executeWithKeyFailover(secondTurnBuilder.build());
         if (secondTurn.choices() == null || secondTurn.choices().isEmpty()) {
             throw new IllegalStateException("Muse returned no choices after tool call");
         }
-        String secondText = cleanMuseOutput(secondTurn.choices().getFirst().message().content().orElse(""));
+        String secondText = extractChoiceText(secondTurn);
         if (secondText.isBlank()) {
             throw new IllegalStateException("Muse returned an empty answer after tool call");
         }
         return secondText;
+    }
+
+    private Map<String, Object> executeSamConceptTool(String rawArgsJson, List<EventSpatialSummary> summaries) {
+        TolerantPayloadParser.ParsedSamConceptArgs args = TolerantPayloadParser.parseSamConceptArgs(rawArgsJson,
+                summaries);
+        EventSpatialSummary targetEvent = summaries.stream()
+                .filter(s -> s.eventId().equals(args.resolvedEventId()))
+                .findFirst()
+                .orElse(summaries.getFirst());
+
+        boolean isBeeConcept = List.of("bee", "bees", "honey bee", "honeybee")
+                .contains(args.conceptPrompt().trim().toLowerCase());
+        Map<String, Object> toolResult = new LinkedHashMap<>();
+        toolResult.put("event_id", targetEvent.eventId());
+        toolResult.put("queried_concept", args.conceptPrompt());
+        try {
+            Optional<byte[]> peak = eventService != null
+                    ? eventService.getOrExtractEventFrameBytes(targetEvent.eventId())
+                    : Optional.empty();
+            if (peak.isEmpty()) {
+                throw new IllegalStateException("peak frame unavailable");
+            }
+            BufferedImage clean = VisualCropRenderer.loadCanonicalView(peak.get());
+            List<BoundingBox> matches = sam31Client.queryConcept(
+                    args.conceptPrompt(), VisualCropRenderer.encodeJpegBase64(clean, 0.92f),
+                    clean.getWidth(), clean.getHeight(), isBeeConcept);
+            toolResult.put("sam_status", "SUCCESS");
+            toolResult.put("matches", matches.size());
+            toolResult.put("match_boxes_xyxy", matches.stream().map(BoundingBox::toList).toList());
+        } catch (Exception samEx) {
+            LOG.warn("[MetaMuseService] Tool SAM 3.1 concept query '{}' failed: {}", args.conceptPrompt(),
+                    samEx.getMessage());
+            toolResult.put("sam_status", "FAILED");
+            toolResult.put("error", "SAM 3.1 could not be executed; the number of matches is unknown.");
+        }
+        toolResult.put("instruction",
+                "Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> and <SPOKEN>...</SPOKEN>. If sam_status is FAILED, state that the check could not be performed.");
+        return toolResult;
+    }
+
+    private String writeToolJson(Map<String, Object> toolResult) {
+        try {
+            return objectMapper.writeValueAsString(toolResult);
+        } catch (Exception e) {
+            return toolResult.toString();
+        }
+    }
+
+    private static String extractChoiceText(ChatCompletion completion) {
+        if (completion == null || completion.choices() == null || completion.choices().isEmpty()) {
+            return "";
+        }
+        ChatCompletionMessage msg = completion.choices().getFirst().message();
+        String cleaned = cleanMuseOutput(msg.content().orElse(""));
+        if (!cleaned.isBlank()) {
+            return cleaned;
+        }
+        var rawReasoning = msg._allProperties().get("reasoning_content");
+        if (rawReasoning != null) {
+            String reasoningStr = rawReasoning.toString();
+            if (reasoningStr.contains("<REPORT>") || reasoningStr.contains("### Assessment")) {
+                int idx = reasoningStr.indexOf("<REPORT>");
+                if (idx < 0) {
+                    idx = reasoningStr.indexOf("### Assessment");
+                }
+                return cleanMuseOutput(reasoningStr.substring(idx));
+            }
+        }
+        return "";
     }
 
     private ChatCompletion executeWithKeyFailover(ChatCompletionCreateParams params) {
