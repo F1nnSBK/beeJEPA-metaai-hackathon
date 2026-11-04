@@ -95,7 +95,6 @@ Instead of evaluating single frames in isolation, `MetaMuseService` processes co
 | **Model Output** | Single-frame description | Multi-event Markdown report and spoken summary |
 
 ### 5. Five-Tier Pipeline Breakdown
-![Five-tier pipeline roles](figures/ablation_pyramid_roles.svg)
 
 | Tier | Component | Role in the Pipeline | Effect if Removed |
 | :--- | :--- | :--- | :--- |

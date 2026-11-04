@@ -298,7 +298,6 @@ public class ActivePerceptionService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("eventId", eventId);
-        result.put("figureSvgPath", "/landing/ablation_pyramid_roles.svg");
         result.put("measured", measured);
         result.put("tiers", tiers);
         return result;
