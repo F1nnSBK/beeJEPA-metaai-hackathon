@@ -105,7 +105,7 @@ public class Sam31Client {
             boolean filterLandingBoard
     ) {
         if (apiKey.isBlank() && fallbackApiKey.isBlank()) {
-            return List.of();
+            throw new IllegalStateException("SAM 3.1 unavailable: no META_MUSE_API_KEY configured");
         }
 
         String safePrompt = (conceptPrompt != null && !conceptPrompt.isBlank()) ? conceptPrompt.trim() : "bee";

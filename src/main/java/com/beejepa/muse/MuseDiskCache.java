@@ -29,12 +29,6 @@ public class MuseDiskCache {
     private static final Logger LOG = LoggerFactory.getLogger(MuseDiskCache.class);
     private static final long DEFAULT_TTL_SECONDS = 86_400L * 7; // 7 days default TTL
 
-    private static final Set<String> ENTRANCE_CLUSTER_EVENTS = Set.of(
-            "evt_rec2125_seq000_f0000",
-            "evt_rec2125_seq000_f1217",
-            "evt_rec2125_seq001_f0320"
-    );
-
     private final ObjectMapper objectMapper;
     private final StateRepository stateRepository;
     private final RedisCacheClient redisCacheClient;
@@ -158,6 +152,10 @@ public class MuseDiskCache {
         return cacheDir;
     }
 
+    public StateRepository getStateRepository() {
+        return stateRepository;
+    }
+
     public long getTtlSeconds() {
         return ttlSeconds;
     }
@@ -218,11 +216,6 @@ public class MuseDiskCache {
                 || summary.cropBase64() == null || summary.cropBase64().isBlank()) {
             return false;
         }
-        if (ENTRANCE_CLUSTER_EVENTS.contains(summary.eventId())
-                && summary.landingBoardBeeCount() > 15
-                && summary.beesInsideHotspotCount() == 0) {
-            return false;
-        }
         return true;
     }
 
@@ -270,20 +263,6 @@ public class MuseDiskCache {
             }
         }
         return Optional.empty();
-    }
-
-    public Optional<String> getAnyFallbackResponse() {
-        Optional<String> defaultHit = getMuseResponse("default");
-        if (defaultHit.isPresent()) {
-            return defaultHit;
-        }
-        if (stateRepository != null) {
-            Optional<String> latest = stateRepository.getLatestCachedMuseResponse();
-            if (latest.isPresent() && !latest.get().isBlank()) {
-                return latest;
-            }
-        }
-        return l0ResponseCache.values().stream().findFirst();
     }
 
     public synchronized void saveMuseResponse(String cacheKey, String markdownReport) {

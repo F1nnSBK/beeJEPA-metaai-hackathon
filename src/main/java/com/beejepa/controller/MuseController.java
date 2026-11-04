@@ -41,6 +41,7 @@ public class MuseController {
     private final ResponseLatencyModel latencyModel;
     private final EventService eventService;
     private final StateRepository stateRepository;
+    private final com.beejepa.muse.MetaVoiceTranscribeClient voiceClient;
 
     @jakarta.inject.Inject
     public MuseController(MetaMuseService museService,
@@ -48,20 +49,22 @@ public class MuseController {
                           AudioSpectralAnalyzer spectralAnalyzer,
                           ResponseLatencyModel latencyModel,
                           EventService eventService,
-                          StateRepository stateRepository) {
+                          StateRepository stateRepository,
+                          com.beejepa.muse.MetaVoiceTranscribeClient voiceClient) {
         this.museService = museService;
         this.acousticSynthesizer = acousticSynthesizer;
         this.spectralAnalyzer = spectralAnalyzer;
         this.latencyModel = latencyModel;
         this.eventService = eventService;
         this.stateRepository = stateRepository;
+        this.voiceClient = voiceClient;
     }
 
     public MuseController(MetaMuseService museService,
                           BeeAcousticSynthesizer acousticSynthesizer,
                           AudioSpectralAnalyzer spectralAnalyzer,
                           ResponseLatencyModel latencyModel) {
-        this(museService, acousticSynthesizer, spectralAnalyzer, latencyModel, null, null);
+        this(museService, acousticSynthesizer, spectralAnalyzer, latencyModel, null, null, null);
     }
 
     @Post(value = "/acoustic-mirror", consumes = {"audio/wav", "application/octet-stream", "audio/*"}, produces = "audio/wav")
@@ -264,7 +267,26 @@ public class MuseController {
 
     @Post(value = "/transcribe", consumes = {"audio/wav", "audio/*", "application/octet-stream"}, produces = "application/json")
     public HttpResponse<Map<String, Object>> transcribeVoice(@Body byte[] audioBytes) {
-        return HttpResponse.ok(museService.transcribeVoice(audioBytes));
+        if (voiceClient == null || !voiceClient.isConfigured()) {
+            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("status", "UNAVAILABLE", "error", "Meta voice transcription is not configured."));
+        }
+        try {
+            com.beejepa.muse.MetaVoiceTranscribeClient.Transcription t = voiceClient.transcribe(audioBytes);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("status", "SUCCESS");
+            body.put("model", com.beejepa.muse.MetaVoiceTranscribeClient.MODEL);
+            body.put("transcript", t.transcript());
+            body.put("audioDurationMs", t.audioDurationMs());
+            return HttpResponse.ok(body);
+        } catch (IllegalArgumentException badAudio) {
+            return HttpResponse.<Map<String, Object>>badRequest()
+                    .body(Map.of("status", "INVALID_AUDIO", "error", badAudio.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("Meta voice transcription failed: {}", e.getMessage());
+            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("status", "FAILED", "error", "Transcription failed: " + e.getMessage()));
+        }
     }
 
     @Post("/embeddings")

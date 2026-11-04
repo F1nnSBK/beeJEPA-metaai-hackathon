@@ -51,7 +51,7 @@ public class ActivePerceptionServiceTest {
 
         SaccadicTarget first = trajectory.getFirst();
         Assertions.assertEquals("evt_rec2125_seq000_f0000", first.eventId());
-        Assertions.assertTrue(first.surpriseScoreSigma() > 10.0, "First peak event surprise should exceed tau=10.2");
+        Assertions.assertTrue(first.tokenDeltaScore() > 10.0, "First peak event surprise should exceed tau=10.2");
         Assertions.assertNotNull(first.foveaCropBox());
         Assertions.assertEquals(4, first.foveaCropBox().size());
     }

@@ -240,24 +240,6 @@ public class StateRepository {
         return Optional.empty();
     }
 
-    public Optional<String> getLatestCachedMuseResponse() {
-        String sql = "SELECT cache_key, response_markdown, expires_at FROM muse_response_cache ORDER BY created_at DESC LIMIT 5";
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            Instant now = Instant.now();
-            while (rs.next()) {
-                Instant expiresAt = Instant.parse(rs.getString("expires_at"));
-                if (now.isBefore(expiresAt)) {
-                    return Optional.ofNullable(rs.getString("response_markdown"));
-                }
-            }
-        } catch (Exception e) {
-            LOG.warn("Error reading latest muse_response_cache: {}", e.getMessage());
-        }
-        return Optional.empty();
-    }
-
     public void saveCachedMuseResponse(String cacheKey, String responseMarkdown, long ttlSeconds) {
         if (cacheKey == null || cacheKey.isBlank() || responseMarkdown == null || responseMarkdown.isBlank()) {
             return;

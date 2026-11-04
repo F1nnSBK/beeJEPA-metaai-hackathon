@@ -986,20 +986,6 @@ public class MetaMuseService {
         return prepareSamQuery(new com.beejepa.muse.dto.PrepareSamQueryRequest(eventId, null, null, "image"));
     }
 
-    public Map<String, Object> transcribeVoice(byte[] audioBytes) {
-        if (audioBytes == null || audioBytes.length == 0) {
-            return Map.of("error", "Empty audio buffer", "transcript", "");
-        }
-
-        return Map.of(
-                "status", "SUCCESS",
-                "mode", "LIVE_AUDIO_INGEST",
-                "audioBytesReceived", audioBytes.length,
-                "transcript", "What happened at the hive entrance? Analyze the segmented anomaly.",
-                "note", "Voice input captured and bound dynamically as live prompt for SAM 3.1 & Muse Spark."
-        );
-    }
-
     @Serdeable
     public record ManifestEventInput(
             String eventId,
@@ -1044,116 +1030,97 @@ public class MetaMuseService {
         public int foveaRadiusPx;
     }
 
+    /** Classification used when SAM 3.1 could not be executed; counts are then reported as -1 (unknown). */
+    public static final String SAM_UNAVAILABLE = "sam_unavailable";
+    /** Classification used when the event has no measured V-JEPA hotspot (no in-hotspot count possible). */
+    public static final String NO_MEASURED_HOTSPOT = "no_measured_hotspot";
+
+    /**
+     * Runs real SAM 3.1 "bee" segmentation on the event's exact peak frame and intersects it with the
+     * measured V-JEPA hotspot. Only successful SAM results are cached. Failures yield counts of -1 and
+     * the classification {@link #SAM_UNAVAILABLE}; nothing is estimated or substituted.
+     */
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
-        return spatialCache.computeIfAbsent(evt.eventId(), id -> {
-            // 1. Check Redis/SQLite persistent cache first
-            Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(id);
-            if (cachedOnDisk.isPresent()) {
-                return cachedOnDisk.get();
+        EventSpatialSummary inMemory = spatialCache.get(evt.eventId());
+        if (inMemory != null) {
+            return inMemory;
+        }
+        Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(evt.eventId());
+        if (cachedOnDisk.isPresent()) {
+            spatialCache.put(evt.eventId(), cachedOnDisk.get());
+            return cachedOnDisk.get();
+        }
+
+        double score = Math.round(evt.surpriseScore() * 10000.0) / 10000.0;
+        BufferedImage canonical;
+        try {
+            Optional<byte[]> frameBytes = perceptionService != null
+                    ? perceptionService.getBufferedFrameBytes(evt.eventId())
+                    : Optional.empty();
+            if (frameBytes.isEmpty() && eventService != null) {
+                frameBytes = eventService.getOrExtractEventFrameBytes(evt.eventId());
             }
+            if (frameBytes.isEmpty() || frameBytes.get().length == 0) {
+                throw new IllegalStateException("no peak frame available for " + evt.eventId());
+            }
+            canonical = VisualCropRenderer.loadCanonicalView(frameBytes.get());
+        } catch (Exception e) {
+            LOG.warn("[MetaMuseService] Peak frame unavailable for {}: {}", evt.eventId(), e.getMessage());
+            return unavailableSummary(evt, score, "", "");
+        }
 
-            try {
-                BufferedImage canonical = null;
-                Optional<byte[]> frameBytes = perceptionService != null
-                        ? perceptionService.getBufferedFrameBytes(evt.eventId())
-                        : Optional.empty();
-                if (frameBytes.isEmpty() && diskCache != null) {
-                    frameBytes = diskCache.getFrameBytes(evt.eventId());
-                }
-                if (frameBytes.isEmpty() && eventService != null) {
-                    frameBytes = eventService.getOrExtractEventFrameBytes(evt.eventId());
-                }
-                if (frameBytes.isPresent() && frameBytes.get().length > 0) {
-                    canonical = VisualCropRenderer.loadCanonicalView(frameBytes.get());
-                } else if (evt.keyframePath() != null && java.nio.file.Files.exists(evt.keyframePath())) {
-                    canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
-                }
-                if (canonical == null) {
-                    throw new IllegalStateException("No frame available in RingBuffer/Redis/SQLite/MP4 for " + evt.eventId());
-                }
-                String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
+        String frameB64;
+        try {
+            frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
+        } catch (Exception e) {
+            return unavailableSummary(evt, score, "", "");
+        }
 
-                // Call live Meta SAM 3.1 API
-                List<BoundingBox> boardBees = List.of();
-                if (allowLiveInference) {
-                    try {
-                        boardBees = sam31Client.queryConcept(
-                                "bee",
-                                frameB64,
-                                canonical.getWidth(),
-                                canonical.getHeight(),
-                                true
-                        );
-                    } catch (Exception samEx) {
-                        LOG.warn("[MetaMuseService] SAM 3.1 live segmentation failed for {}, falling back to V-JEPA geometric bounds: {}",
-                                evt.eventId(), samEx.getMessage());
-                    }
-                }
+        if (!allowLiveInference) {
+            return unavailableSummary(evt, score, frameB64, "");
+        }
+        List<BoundingBox> boardBees;
+        try {
+            boardBees = sam31Client.queryConcept("bee", frameB64, canonical.getWidth(), canonical.getHeight(), true);
+        } catch (Exception samEx) {
+            LOG.warn("[MetaMuseService] SAM 3.1 segmentation failed for {}: {}", evt.eventId(), samEx.getMessage());
+            return unavailableSummary(evt, score, frameB64, "");
+        }
 
-                BoundingBox hotspot;
-                if (evt.boundingBoxPx() != null && evt.boundingBoxPx().length == 4) {
-                    hotspot = SamGeometry.fromManifestBoxPx(
-                            evt.boundingBoxPx(),
-                            canonical.getWidth(),
-                            canonical.getHeight()
-                    );
-                } else if (evt.normCenterX() != null && evt.normCenterY() != null) {
-                    hotspot = SamGeometry.hotspotFromNormCenter(
-                            evt.normCenterX(),
-                            evt.normCenterY(),
-                            canonical.getWidth(),
-                            canonical.getHeight()
-                    );
-                } else {
-                    hotspot = SamGeometry.defaultEntranceHotspot();
-                }
-
+        BoundingBox hotspot = SamGeometry.fromManifestBoxPx(evt.boundingBoxPx(), canonical.getWidth(), canonical.getHeight());
+        EventSpatialSummary summary;
+        try {
+            if (hotspot == null) {
+                summary = new EventSpatialSummary(evt.eventId(), evt.formattedTime(), score, evt.severity(),
+                        boardBees.size(), -1, NO_MEASURED_HOTSPOT, List.of(),
+                        boardBees.stream().map(BoundingBox::toList).toList(), frameB64, "");
+            } else {
                 List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
-                String preClass = SamGeometry.classifyHotspot(contained, hotspot, evt.surpriseScore());
-
-                RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(
-                        canonical, hotspot, boardBees, contained, 35
-                );
-
-                EventSpatialSummary summary = new EventSpatialSummary(
-                        evt.eventId(),
-                        evt.formattedTime(),
-                        Math.round(evt.surpriseScore() * 100.0) / 100.0,
-                        evt.severity(),
-                        boardBees.size(),
-                        contained.size(),
-                        preClass,
-                        contained,
+                RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(canonical, hotspot, boardBees, contained, 35);
+                summary = new EventSpatialSummary(evt.eventId(), evt.formattedTime(), score, evt.severity(),
+                        boardBees.size(), contained.size(), SamGeometry.classifyHotspot(contained), contained,
                         boardBees.stream().map(BoundingBox::toList).toList(),
-                        visuals.canonicalFrameB64(),
-                        visuals.upscaledCropB64()
-                );
-
-                if (allowLiveInference && !boardBees.isEmpty()) {
-                    diskCache.saveSpatialSummary(summary);
-                    if (perceptionService != null) {
-                        try {
-                            perceptionService.refreshTrajectory();
-                        } catch (Exception ignored) {}
-                    }
-                }
-                return summary;
-            } catch (Exception e) {
-                LOG.warn("[MetaMuseService] Fallback spatial summary for {}: {}", evt.eventId(), e.getMessage());
-                return new EventSpatialSummary(
-                        evt.eventId(),
-                        evt.formattedTime() != null ? evt.formattedTime() : "00:00",
-                        Math.round(evt.surpriseScore() * 100.0) / 100.0,
-                        evt.severity() != null ? evt.severity() : "MEDIUM",
-                        0,
-                        0,
-                        "vjepa_hotspot_only",
-                        List.of(),
-                        "",
-                        ""
-                );
+                        visuals.canonicalFrameB64(), visuals.upscaledCropB64());
             }
-        });
+        } catch (Exception renderEx) {
+            LOG.warn("[MetaMuseService] Rendering SAM overlay failed for {}: {}", evt.eventId(), renderEx.getMessage());
+            return unavailableSummary(evt, score, frameB64, "");
+        }
+
+        spatialCache.put(evt.eventId(), summary);
+        diskCache.saveSpatialSummary(summary); // persisted only if it carries frame + crop evidence
+        if (perceptionService != null) {
+            try {
+                perceptionService.refreshTrajectory();
+            } catch (Exception ignored) {
+            }
+        }
+        return summary;
+    }
+
+    private static EventSpatialSummary unavailableSummary(ManifestEventInput evt, double score, String frameB64, String cropB64) {
+        return new EventSpatialSummary(evt.eventId(), evt.formattedTime(), score, evt.severity(),
+                -1, -1, SAM_UNAVAILABLE, List.of(), List.of(), frameB64, cropB64);
     }
 
     public List<EventSpatialSummary> analyzeEventsInParallel(List<ManifestEventInput> topEvents) {
@@ -1244,7 +1211,7 @@ public class MetaMuseService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("event_id", s.eventId());
             m.put("recording_timestamp", s.timestamp() + " (daytime recording, 14:20 local afternoon time)");
-            m.put("surprise_score_sigma", s.surpriseScoreSigma());
+            m.put("surprise_score_sigma", s.tokenDeltaScore());
             m.put("severity", s.severity());
             m.put("landing_board_bee_count", s.landingBoardBeeCount());
             m.put("bees_inside_hotspot_count", s.beesInsideHotspotCount());
@@ -1271,7 +1238,7 @@ public class MetaMuseService {
             userParts.add(ChatCompletionContentPart.ofText(
                     ChatCompletionContentPartText.builder()
                             .text("Hotspot Crop for " + s.eventId() + " at " + s.timestamp()
-                                    + " into daytime recording (14:20 local afternoon, surprise: " + s.surpriseScoreSigma() + " sigma):")
+                                    + " into daytime recording (14:20 local afternoon, surprise: " + s.tokenDeltaScore() + " sigma):")
                             .build()
             ));
             userParts.add(ChatCompletionContentPart.ofImageUrl(
@@ -1413,7 +1380,7 @@ public class MetaMuseService {
         reportSb.append("Dense honeybee entrance guarding and foraging congestion detected across ")
                 .append(summaries.size())
                 .append(summaries.size() == 1 ? " peak anomaly" : " peak anomalies")
-                .append(", peaking at **").append(first.surpriseScoreSigma()).append("σ** with **")
+                .append(", peaking at **").append(first.tokenDeltaScore()).append("σ** with **")
                 .append(first.landingBoardBeeCount()).append(" bees** on the landing board. Zero wasps, hornets, or foreign intruders are present.\n\n");
         reportSb.append("### Spatial Evidence\n");
 
@@ -1424,7 +1391,7 @@ public class MetaMuseService {
                 .append(" on the flight board. ");
 
         for (EventSpatialSummary s : summaries) {
-            reportSb.append("- **").append(s.timestamp()).append("** (`").append(s.surpriseScoreSigma()).append("σ` ")
+            reportSb.append("- **").append(s.timestamp()).append("** (`").append(s.tokenDeltaScore()).append("σ` ")
                     .append(s.severity()).append("): **").append(s.landingBoardBeeCount())
                     .append(" bees** on flight board, **").append(s.beesInsideHotspotCount())
                     .append(" inside hotspot** — dense honeybee guarding and approach cluster.\n");
@@ -1436,7 +1403,7 @@ public class MetaMuseService {
                     .append(", V-JEPA recorded a ")
                     .append(s.severity().toLowerCase())
                     .append(" surprise peak of ")
-                    .append(s.surpriseScoreSigma())
+                    .append(s.tokenDeltaScore())
                     .append(" sigma, with ")
                     .append(s.landingBoardBeeCount())
                     .append(" bees on the landing board and ")

@@ -200,7 +200,7 @@ public class ActivePerceptionService {
                         target.eventId(),
                         target.frameIndex(),
                         target.timestampSec(),
-                        (float) target.surpriseScoreSigma(),
+                        (float) target.tokenDeltaScore(),
                         target.focusCenterX(),
                         target.focusCenterY()
                 );
@@ -236,7 +236,7 @@ public class ActivePerceptionService {
                         target.eventId(),
                         target.frameIndex(),
                         target.timestampSec(),
-                        (float) target.surpriseScoreSigma(),
+                        (float) target.tokenDeltaScore(),
                         target.focusCenterX(),
                         target.focusCenterY()
                 );
@@ -306,7 +306,7 @@ public class ActivePerceptionService {
 
         String eventId = target != null ? target.eventId() : "evt_rec2125_seq000_f0000";
         String formattedTime = target != null ? target.formattedTime() : "00:00";
-        double surpriseSigma = target != null ? target.surpriseScoreSigma() : 16.05;
+        double surpriseSigma = target != null ? target.tokenDeltaScore() : 16.05;
         int focusX = target != null ? target.focusCenterX() : 315;
         int focusY = target != null ? target.focusCenterY() : 390;
 
@@ -553,7 +553,7 @@ public class ActivePerceptionService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("eventId", eventId);
         result.put("timestamp", formattedTime);
-        result.put("surpriseScoreSigma", surpriseSigma);
+        result.put("tokenDeltaScore", surpriseSigma);
         result.put("figureSvgPath", "/landing/ablation_pyramid_roles.svg");
         result.put("funnelMetrics", funnelMetrics);
         result.put("tiers", tiers);

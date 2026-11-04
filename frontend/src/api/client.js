@@ -169,7 +169,7 @@ export function normalizeEvent(raw) {
     eventId,
     timestampSec: toFiniteNumber(raw.timestampSec ?? raw.timestamp_sec ?? raw.timeSec, 0),
     frameIndex: Math.round(toFiniteNumber(raw.frameIndex ?? raw.frame_index ?? raw.frame, 0)),
-    surpriseScoreL2: toFiniteNumber(raw.surpriseScoreL2 ?? raw.surprise_score_l2 ?? raw.surpriseScoreSigma ?? raw.score, 0),
+    surpriseScoreL2: toFiniteNumber(raw.surpriseScoreL2 ?? raw.surprise_score_l2 ?? raw.tokenDeltaScore ?? raw.score, 0),
     pixelDiffBaseline: toFiniteNumber(raw.pixelDiffBaseline ?? raw.pixel_diff_baseline ?? 0, 0),
     severity: String(raw.severity ?? 'HIGH').toUpperCase(),
     hotspot: normalizeHotspot(raw.hotspot),
@@ -237,7 +237,7 @@ export function normalizeMuseDiagnosis(raw) {
         ...e,
         eventId: String(e.eventId ?? e.event_id ?? ''),
         timestamp: String(e.timestamp ?? '00:00'),
-        surpriseScoreSigma: toFiniteNumber(e.surpriseScoreSigma ?? e.surprise_score_sigma ?? e.surpriseScoreL2, 0),
+        tokenDeltaScore: toFiniteNumber(e.tokenDeltaScore ?? e.surprise_score_sigma ?? e.surpriseScoreL2, 0),
         landingBoardBeeCount: Math.round(toFiniteNumber(e.landingBoardBeeCount ?? e.landing_board_bee_count, 0)),
         beesInsideHotspotCount: Math.round(toFiniteNumber(
           e.beesInsideHotspotCount ?? e.bees_inside_hotspot_count ?? e.landingBoardBeeCount,

@@ -2,7 +2,6 @@ package com.beejepa.event;
 
 import com.beejepa.muse.MuseDiskCache;
 import com.beejepa.muse.SamGeometry;
-import com.beejepa.muse.TolerantPayloadParser;
 import com.beejepa.storage.StorageService;
 import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Inject;
@@ -15,17 +14,44 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Loads the BeeJEPA event catalog strictly from measured dataset files.
+ *
+ * <p>Primary source (Raspberry Pi SSD): {@code metadata/sequence_runs.csv},
+ * {@code metadata/event_catalog.csv}, {@code metadata/timeline_points.csv},
+ * {@code stitched_sequences/*.mp4} and {@code events/peaks/*.mp4}.
+ * Fallback (CI / local sample): {@code hackathon_sample/manifest.json}, of which only the raw
+ * measurements (ids, times, frames, token-delta scores, board token peaks) are used.
+ *
+ * <p>Nothing in this class is invented: the score is the dataset's token-delta score, the decision
+ * threshold tau is the 99th percentile of all timeline windows, and hotspots are measured from the
+ * rendered V-JEPA overlay of the peak frame ({@link HeatmapHotspotExtractor}). Events whose hotspot
+ * has not been measured (yet) carry {@code hotspot = null}.
+ */
 @Singleton
 public class EventService {
 
     private static final Logger LOG = LoggerFactory.getLogger(EventService.class);
+    private static final double FPS = 59.94;
+    private static final double SEQUENCE_SECONDS = 30.0;
+    private static final String HOTSPOT_KEY_PREFIX = "hotspot.overlay.v1:";
+    private static final String HOTSPOT_NONE = "none";
+    private static final String FRAME_KEY_SUFFIX = "@peak.v2";
 
     private final StorageService storageService;
     private final ObjectMapper objectMapper;
     private final MuseDiskCache museDiskCache;
+
+    private volatile Catalog catalog;
+    private final Map<String, Optional<HeatmapHotspotExtractor.MeasuredHotspot>> measuredHotspots = new ConcurrentHashMap<>();
+    private final AtomicBoolean measurementStarted = new AtomicBoolean(false);
+    private final AtomicLong hotspotVersion = new AtomicLong(0);
+    private volatile Thread measurementThread;
 
     public EventService(StorageService storageService, ObjectMapper objectMapper) {
         this(storageService, objectMapper, new MuseDiskCache());
@@ -42,13 +68,483 @@ public class EventService {
         return museDiskCache;
     }
 
-    private Path getEventsDirectory() {
-        return storageService.getDataDirectory().resolve("events");
+    // ------------------------------------------------------------------ catalog model
+
+    record SequenceInfo(int index, String sequenceId, String recordingId, int sequenceIndexInRecording,
+                        String filename, double startSecAxis, double meanScore, double maxScore) {}
+
+    record EventInfo(String eventId, String recordingId, String sequenceId, int sequenceAxisIndex,
+                     String sequenceClip, double timeSecAxis, double timeSecLocal, double recordingTimeSec,
+                     int peakFrame, double score, int boardPeaks, Integer grassPeaks, String submanifoldState,
+                     Double pixelDiff, Integer clipStartFrame) {}
+
+    record TimelinePoint(String sequenceId, String recordingId, int sequenceAxisIndex, double timeSecAxis,
+                         double timeSecLocal, double score, int boardPeaks, String eventId) {}
+
+    record Catalog(String source, List<SequenceInfo> sequences, List<EventInfo> events,
+                   Map<String, EventInfo> eventsById, List<TimelinePoint> timeline,
+                   double tau, double minScore, double maxScore) {}
+
+    private Catalog getCatalog() {
+        Catalog c = catalog;
+        if (c != null) {
+            return c;
+        }
+        synchronized (this) {
+            if (catalog != null) {
+                return catalog;
+            }
+            Catalog loaded = loadFullSsdCatalog();
+            if (loaded == null) {
+                loaded = loadSampleManifestCatalog();
+            }
+            if (loaded == null) {
+                loaded = new Catalog("none", List.of(), List.of(), Map.of(), List.of(), Double.NaN, Double.NaN, Double.NaN);
+            }
+            catalog = loaded;
+            loadPersistedHotspots(loaded);
+            startHotspotMeasurement(loaded);
+            return loaded;
+        }
     }
 
-    private Path getTimelineFile() {
-        return storageService.getDataDirectory().resolve("timeline_rec2123.json");
+    private Catalog loadFullSsdCatalog() {
+        if (storageService == null || storageService.getDataDirectory() == null) {
+            return null;
+        }
+        Path root = storageService.getDataDirectory().toAbsolutePath().normalize();
+        Path metaDir = root.resolve("metadata");
+        Path seqCsv = metaDir.resolve("sequence_runs.csv");
+        Path evtCsv = metaDir.resolve("event_catalog.csv");
+        Path tlCsv = metaDir.resolve("timeline_points.csv");
+        if (!Files.isRegularFile(seqCsv) || !Files.isRegularFile(evtCsv) || !Files.isRegularFile(tlCsv)
+                || !Files.isDirectory(root.resolve("stitched_sequences"))) {
+            return null;
+        }
+        try {
+            CsvTable seqT = CsvTable.read(seqCsv);
+            CsvTable evtT = CsvTable.read(evtCsv);
+            CsvTable tlT = CsvTable.read(tlCsv);
+
+            // Sequences in chronological dataset order: recording id, then sequence index.
+            List<String[]> seqRows = new ArrayList<>(seqT.rows);
+            seqRows.sort(Comparator.comparing((String[] r) -> seqT.get(r, "recording_id"))
+                    .thenComparingInt(r -> Integer.parseInt(seqT.get(r, "sequence_index"))));
+            List<SequenceInfo> sequences = new ArrayList<>(seqRows.size());
+            Map<String, SequenceInfo> seqById = new HashMap<>();
+            for (String[] r : seqRows) {
+                int axisIdx = sequences.size();
+                String seqId = seqT.get(r, "sequence_id");
+                String filename = Path.of(seqT.get(r, "stitched_video_path")).getFileName().toString();
+                SequenceInfo s = new SequenceInfo(axisIdx, seqId, seqT.get(r, "recording_id"),
+                        Integer.parseInt(seqT.get(r, "sequence_index")), filename, axisIdx * SEQUENCE_SECONDS,
+                        Double.parseDouble(seqT.get(r, "mean_surprise")), Double.parseDouble(seqT.get(r, "max_surprise")));
+                sequences.add(s);
+                seqById.put(seqId, s);
+            }
+
+            // Timeline windows: always the token-delta score column (surprise_score_l2 mixes in predictor scores).
+            List<TimelinePoint> timeline = new ArrayList<>(tlT.rows.size());
+            Map<String, Double> eventWindowScore = new HashMap<>();
+            for (String[] r : tlT.rows) {
+                SequenceInfo s = seqById.get(tlT.get(r, "sequence_id"));
+                if (s == null) continue;
+                double local = Double.parseDouble(tlT.get(r, "timestamp_sec"));
+                double score = Double.parseDouble(tlT.get(r, "token_delta_score"));
+                String evId = tlT.get(r, "event_id");
+                timeline.add(new TimelinePoint(s.sequenceId(), s.recordingId(), s.index(), s.startSecAxis() + local,
+                        local, score, Integer.parseInt(tlT.get(r, "board_peaks_9x9")), evId.isBlank() ? null : evId));
+                if (!evId.isBlank()) {
+                    eventWindowScore.put(evId, score);
+                }
+            }
+            timeline.sort(Comparator.comparingDouble(TimelinePoint::timeSecAxis));
+
+            List<EventInfo> events = new ArrayList<>(evtT.rows.size());
+            for (String[] r : evtT.rows) {
+                String evId = evtT.get(r, "event_id");
+                SequenceInfo s = seqById.get(evtT.get(r, "sequence_id"));
+                if (s == null) continue;
+                int peak = Integer.parseInt(evtT.get(r, "peak_frame"));
+                double local = peak / FPS;
+                double score = eventWindowScore.getOrDefault(evId, Double.parseDouble(evtT.get(r, "surprise_score_l2")));
+                events.add(new EventInfo(evId, s.recordingId(), s.sequenceId(), s.index(), s.filename(),
+                        s.startSecAxis() + local, local, s.sequenceIndexInRecording() * SEQUENCE_SECONDS + local,
+                        peak, score, Integer.parseInt(evtT.get(r, "board_peaks_16x16")),
+                        Integer.parseInt(evtT.get(r, "grass_peaks")), evtT.get(r, "submanifold_state"),
+                        Double.parseDouble(evtT.get(r, "pixel_diff_baseline")),
+                        Integer.parseInt(evtT.get(r, "start_frame"))));
+            }
+            events.sort(Comparator.comparingDouble(EventInfo::timeSecAxis));
+            LOG.info("Loaded SSD dataset catalog: {} sequences, {} events, {} timeline windows",
+                    sequences.size(), events.size(), timeline.size());
+            return buildCatalog("ssd_metadata_csv", sequences, events, timeline);
+        } catch (Exception e) {
+            LOG.error("Failed to parse SSD metadata catalog in {}: {}", metaDir, e.toString());
+            return null;
+        }
     }
+
+    @SuppressWarnings("unchecked")
+    private Catalog loadSampleManifestCatalog() {
+        for (Path dir : getCandidateSampleDirectories()) {
+            Path manifestFile = dir.resolve("manifest.json");
+            if (!Files.isRegularFile(manifestFile)) continue;
+            try {
+                Map<String, Object> m = objectMapper.readValue(Files.readAllBytes(manifestFile), Map.class);
+                List<Map<String, Object>> rawSeqs = (List<Map<String, Object>>) m.getOrDefault("sequences", List.of());
+                List<Map<String, Object>> rawEvents = (List<Map<String, Object>>) m.getOrDefault("events", List.of());
+                List<Map<String, Object>> rawTimeline = (List<Map<String, Object>>) m.getOrDefault("timeline", List.of());
+
+                List<SequenceInfo> sequences = new ArrayList<>();
+                Map<String, SequenceInfo> seqById = new HashMap<>();
+                for (Map<String, Object> rs : rawSeqs) {
+                    String seqId = String.valueOf(rs.get("sequence_id"));
+                    int axisIdx = num(rs.get("index")).intValue();
+                    String rec = seqId.contains("_") ? seqId.substring(0, seqId.indexOf('_')) : seqId;
+                    int seqIdxInRec = Integer.parseInt(seqId.replaceAll(".*_seq", ""));
+                    SequenceInfo s = new SequenceInfo(axisIdx, seqId, rec, seqIdxInRec, String.valueOf(rs.get("filename")),
+                            num(rs.get("start_sec_global")).doubleValue(),
+                            num(rs.get("mean_surprise")).doubleValue(), num(rs.get("max_surprise")).doubleValue());
+                    sequences.add(s);
+                    seqById.put(seqId, s);
+                }
+                sequences.sort(Comparator.comparingInt(SequenceInfo::index));
+
+                List<TimelinePoint> timeline = new ArrayList<>();
+                for (Map<String, Object> p : rawTimeline) {
+                    double t = num(p.get("time_sec")).doubleValue();
+                    int axisIdx = (int) Math.floor(t / SEQUENCE_SECONDS);
+                    SequenceInfo s = axisIdx >= 0 && axisIdx < sequences.size() ? sequences.get(axisIdx) : null;
+                    Object ev = p.get("event_id");
+                    timeline.add(new TimelinePoint(s != null ? s.sequenceId() : null, s != null ? s.recordingId() : null,
+                            axisIdx, t, t - axisIdx * SEQUENCE_SECONDS, num(p.get("surprise_score")).doubleValue(),
+                            num(p.get("board_bees")).intValue(), ev == null || String.valueOf(ev).isBlank() ? null : String.valueOf(ev)));
+                }
+                timeline.sort(Comparator.comparingDouble(TimelinePoint::timeSecAxis));
+
+                List<EventInfo> events = new ArrayList<>();
+                for (Map<String, Object> e : rawEvents) {
+                    SequenceInfo s = seqById.get(String.valueOf(e.get("sequence_id")));
+                    if (s == null) continue;
+                    double local = num(e.get("time_sec_local")).doubleValue();
+                    events.add(new EventInfo(String.valueOf(e.get("event_id")), s.recordingId(), s.sequenceId(), s.index(),
+                            s.filename(), num(e.get("time_sec_global")).doubleValue(), local,
+                            s.sequenceIndexInRecording() * SEQUENCE_SECONDS + local,
+                            num(e.get("frame_approx")).intValue(), num(e.get("surprise_score")).doubleValue(),
+                            num(e.get("board_bees")).intValue(), null, null, null, null));
+                }
+                events.sort(Comparator.comparingDouble(EventInfo::timeSecAxis));
+                LOG.info("Loaded sample manifest catalog from {}: {} sequences, {} events", manifestFile, sequences.size(), events.size());
+                return buildCatalog("hackathon_sample_manifest", sequences, events, timeline);
+            } catch (Exception e) {
+                LOG.error("Failed to read sample manifest {}: {}", manifestFile, e.toString());
+            }
+        }
+        return null;
+    }
+
+    private static Catalog buildCatalog(String source, List<SequenceInfo> sequences, List<EventInfo> events,
+                                        List<TimelinePoint> timeline) {
+        double[] scores = timeline.stream().mapToDouble(TimelinePoint::score).sorted().toArray();
+        double tau = scores.length > 0 ? percentile(scores, 0.99) : Double.NaN;
+        double min = scores.length > 0 ? scores[0] : Double.NaN;
+        double max = scores.length > 0 ? scores[scores.length - 1] : Double.NaN;
+        for (EventInfo e : events) {
+            max = Double.isNaN(max) ? e.score() : Math.max(max, e.score());
+        }
+        Map<String, EventInfo> byId = new LinkedHashMap<>();
+        for (EventInfo e : events) {
+            byId.put(e.eventId(), e);
+        }
+        return new Catalog(source, List.copyOf(sequences), List.copyOf(events), Collections.unmodifiableMap(byId),
+                List.copyOf(timeline), round(tau, 4), round(min, 4), round(max, 4));
+    }
+
+    /** Linear-interpolated percentile on a sorted array. */
+    static double percentile(double[] sorted, double q) {
+        if (sorted.length == 1) return sorted[0];
+        double pos = q * (sorted.length - 1);
+        int lo = (int) Math.floor(pos);
+        int hi = Math.min(sorted.length - 1, lo + 1);
+        return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo]);
+    }
+
+    private static Number num(Object o) {
+        if (o instanceof Number n) return n;
+        if (o == null) return 0;
+        return Double.parseDouble(String.valueOf(o));
+    }
+
+    private static double round(double v, int digits) {
+        if (Double.isNaN(v)) return v;
+        double f = Math.pow(10, digits);
+        return Math.round(v * f) / f;
+    }
+
+    private static String formatMmSs(double totalSeconds) {
+        int totalSec = Math.max(0, (int) Math.floor(totalSeconds));
+        return String.format(Locale.US, "%02d:%02d", totalSec / 60, totalSec % 60);
+    }
+
+    /** Minimal header-aware CSV reader for the dataset files (no quoted fields in these files). */
+    static final class CsvTable {
+        final Map<String, Integer> header = new HashMap<>();
+        final List<String[]> rows = new ArrayList<>();
+
+        static CsvTable read(Path path) throws IOException {
+            CsvTable t = new CsvTable();
+            List<String> lines = Files.readAllLines(path);
+            if (lines.isEmpty()) return t;
+            String[] head = lines.getFirst().trim().split(",", -1);
+            for (int i = 0; i < head.length; i++) {
+                t.header.put(head[i].trim(), i);
+            }
+            for (int i = 1; i < lines.size(); i++) {
+                String line = lines.get(i).trim();
+                if (!line.isEmpty()) {
+                    t.rows.add(line.split(",", -1));
+                }
+            }
+            return t;
+        }
+
+        String get(String[] row, String column) {
+            Integer idx = header.get(column);
+            if (idx == null) {
+                throw new IllegalStateException("Missing CSV column: " + column);
+            }
+            return idx < row.length ? row[idx].trim() : "";
+        }
+    }
+
+    // ------------------------------------------------------------------ hotspot measurement
+
+    private void loadPersistedHotspots(Catalog c) {
+        if (museDiskCache.getStateRepository() == null) return;
+        for (EventInfo e : c.events()) {
+            try {
+                museDiskCache.getStateRepository().get(HOTSPOT_KEY_PREFIX + e.eventId()).ifPresent(s -> {
+                    if (HOTSPOT_NONE.equals(s.value())) {
+                        measuredHotspots.put(e.eventId(), Optional.empty());
+                    } else {
+                        HeatmapHotspotExtractor.MeasuredHotspot.deserialize(s.value())
+                                .ifPresent(h -> measuredHotspots.put(e.eventId(), Optional.of(h)));
+                    }
+                });
+            } catch (Exception ex) {
+                LOG.debug("Could not load persisted hotspot for {}: {}", e.eventId(), ex.getMessage());
+            }
+        }
+        if (!measuredHotspots.isEmpty()) {
+            hotspotVersion.incrementAndGet();
+        }
+    }
+
+    private void startHotspotMeasurement(Catalog c) {
+        if (c.events().isEmpty() || !measurementStarted.compareAndSet(false, true)) return;
+        measurementThread = Thread.ofVirtual().name("hotspot-measurement").start(() -> {
+            int measured = 0;
+            for (EventInfo e : c.events()) {
+                if (measuredHotspots.containsKey(e.eventId())) continue;
+                Optional<File> video = getSequenceFile(e.sequenceClip());
+                if (video.isEmpty()) {
+                    continue; // video not available: hotspot stays unmeasured (null), never guessed
+                }
+                Optional<HeatmapHotspotExtractor.MeasuredHotspot> h =
+                        HeatmapHotspotExtractor.measure(video.get().toPath(), e.timeSecLocal(), resolveFfmpegBinary());
+                measuredHotspots.put(e.eventId(), h);
+                persistHotspot(e.eventId(), h);
+                hotspotVersion.incrementAndGet();
+                measured++;
+            }
+            LOG.info("Hotspot measurement finished: {} newly measured, {} total known", measured, measuredHotspots.size());
+        });
+    }
+
+    private void persistHotspot(String eventId, Optional<HeatmapHotspotExtractor.MeasuredHotspot> h) {
+        if (museDiskCache.getStateRepository() == null) return;
+        try {
+            museDiskCache.getStateRepository().set(HOTSPOT_KEY_PREFIX + eventId,
+                    h.map(HeatmapHotspotExtractor.MeasuredHotspot::serialize).orElse(HOTSPOT_NONE));
+        } catch (Exception ex) {
+            LOG.warn("Failed to persist hotspot for {}: {}", eventId, ex.getMessage());
+        }
+    }
+
+    /** Monotonic counter that changes whenever a hotspot measurement becomes available. */
+    public long getHotspotVersion() {
+        getCatalog();
+        return hotspotVersion.get();
+    }
+
+    /** Blocks until the background hotspot measurement has finished (used by tests and warm-up). */
+    public boolean awaitHotspotMeasurement(long timeoutMs) throws InterruptedException {
+        getCatalog();
+        Thread t = measurementThread;
+        if (t == null) return true;
+        return t.join(java.time.Duration.ofMillis(timeoutMs));
+    }
+
+    private AnomalyEvent.Hotspot toHotspot(HeatmapHotspotExtractor.MeasuredHotspot h) {
+        return new AnomalyEvent.Hotspot(h.gridX(), h.gridY(), h.normCenterX(), h.normCenterY(), h.boxPx());
+    }
+
+    // ------------------------------------------------------------------ public catalog API
+
+    public double getDecisionThreshold() {
+        return getCatalog().tau();
+    }
+
+    public String getCatalogSource() {
+        return getCatalog().source();
+    }
+
+    public boolean isKnownManifestEvent(String eventId) {
+        return isSafePathSegment(eventId) && getCatalog().eventsById().containsKey(eventId);
+    }
+
+    public List<Map<String, Object>> listEvents() {
+        Catalog c = getCatalog();
+        List<Map<String, Object>> result = new ArrayList<>(c.events().size());
+        for (EventInfo e : c.events()) {
+            result.add(toItem(e, c));
+        }
+        return result;
+    }
+
+    private Map<String, Object> toItem(EventInfo e, Catalog c) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("eventId", e.eventId());
+        item.put("recordingId", e.recordingId());
+        item.put("sequenceId", e.sequenceId());
+        item.put("sequenceIndex", e.sequenceAxisIndex());
+        item.put("sequenceClip", e.sequenceClip());
+        item.put("timestampSec", round(e.timeSecAxis(), 3));
+        item.put("timeSecLocal", round(e.timeSecLocal(), 3));
+        item.put("recordingTimeSec", round(e.recordingTimeSec(), 3));
+        item.put("formattedTime", formatMmSs(e.recordingTimeSec()));
+        item.put("frameIndex", e.peakFrame());
+        item.put("tokenDeltaScore", e.score());
+        item.put("surpriseScoreL2", e.score()); // legacy key; value is the dataset token-delta score
+        item.put("decisionThreshold", c.tau());
+        item.put("aboveThreshold", !Double.isNaN(c.tau()) && e.score() >= c.tau());
+        item.put("severity", !Double.isNaN(c.tau()) && e.score() >= c.tau() ? "ABOVE_TAU" : "BELOW_TAU");
+        item.put("boardPeaks", e.boardPeaks());
+        if (e.grassPeaks() != null) item.put("grassPeaks", e.grassPeaks());
+        if (e.submanifoldState() != null) item.put("submanifoldState", e.submanifoldState());
+        if (e.pixelDiff() != null) item.put("pixelDiffBaseline", e.pixelDiff());
+        item.put("horizonDeltaFrames", 60);
+
+        Optional<HeatmapHotspotExtractor.MeasuredHotspot> measured = measuredHotspots.get(e.eventId());
+        if (measured == null) {
+            item.put("hotspot", null);
+            item.put("hotspotStatus", "PENDING");
+        } else if (measured.isEmpty()) {
+            item.put("hotspot", null);
+            item.put("hotspotStatus", "NO_BOARD_OVERLAY");
+        } else {
+            item.put("hotspot", toHotspot(measured.get()));
+            item.put("hotspotStatus", "MEASURED");
+            item.put("activeCells", measured.get().activeBoardCells());
+        }
+
+        Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(e.eventId());
+        if (spatialOpt.isPresent()) {
+            SamGeometry.EventSpatialSummary sp = spatialOpt.get();
+            item.put("isCached", true);
+            item.put("hasSamSpatial", true);
+            item.put("boardBees", sp.landingBoardBeeCount());
+            item.put("hotspotBeesCount", sp.beesInsideHotspotCount());
+            Map<String, Object> samSpatialMap = new LinkedHashMap<>();
+            samSpatialMap.put("landingBoardBeeCount", sp.landingBoardBeeCount());
+            samSpatialMap.put("beesInsideHotspotCount", sp.beesInsideHotspotCount());
+            samSpatialMap.put("geometricPreClassification", sp.geometricPreClassification());
+            samSpatialMap.put("boardBees", sp.boardBees() != null ? sp.boardBees() : List.of());
+            samSpatialMap.put("containedBees", sp.containedBees() != null ? sp.containedBees() : List.of());
+            samSpatialMap.put("cropBase64", sp.cropBase64() != null ? sp.cropBase64() : "");
+            item.put("samSpatial", samSpatialMap);
+        } else {
+            item.put("isCached", false);
+            item.put("hasSamSpatial", false);
+        }
+        item.put("hasRawClip", findEventClipPath(e.eventId()) != null);
+        item.put("hasComparisonClip", false);
+        item.put("hasPeakFrame", true);
+        return item;
+    }
+
+    public Optional<Map<String, Object>> getEvent(String eventId) {
+        if (!isSafePathSegment(eventId)) {
+            return Optional.empty();
+        }
+        Catalog c = getCatalog();
+        EventInfo e = c.eventsById().get(eventId);
+        if (e == null) {
+            return Optional.empty();
+        }
+        Map<String, Object> item = toItem(e, c);
+        Map<String, Object> map = new HashMap<>(item);
+        map.put("event", new AnomalyEvent(
+                e.eventId(), e.sequenceId(), e.timeSecAxis(), e.peakFrame(), e.score(),
+                e.pixelDiff() != null ? e.pixelDiff() : Double.NaN, 60,
+                (AnomalyEvent.Hotspot) item.get("hotspot")));
+        map.put("cached", item.get("isCached"));
+        return Optional.of(map);
+    }
+
+    public Map<String, Object> getTimeline() {
+        Catalog c = getCatalog();
+        List<Map<String, Object>> points = new ArrayList<>(c.timeline().size());
+        for (TimelinePoint p : c.timeline()) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("timestampSec", round(p.timeSecAxis(), 3));
+            m.put("timeSecLocal", round(p.timeSecLocal(), 3));
+            m.put("sequenceId", p.sequenceId());
+            m.put("recordingId", p.recordingId());
+            m.put("sequenceIndex", p.sequenceAxisIndex());
+            m.put("tokenDeltaScore", p.score());
+            m.put("surpriseScoreL2", p.score()); // legacy key; value is the dataset token-delta score
+            m.put("boardPeaks", p.boardPeaks());
+            m.put("eventId", p.eventId());
+            m.put("isEvent", p.eventId() != null);
+            points.add(m);
+        }
+        List<Map<String, Object>> seqs = new ArrayList<>(c.sequences().size());
+        for (SequenceInfo s : c.sequences()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("index", s.index());
+            m.put("sequence_id", s.sequenceId());
+            m.put("recording_id", s.recordingId());
+            m.put("filename", s.filename());
+            m.put("start_sec_global", s.startSecAxis());
+            m.put("end_sec_global", s.startSecAxis() + SEQUENCE_SECONDS);
+            m.put("recording_start_sec", s.sequenceIndexInRecording() * SEQUENCE_SECONDS);
+            m.put("mean_surprise", s.meanScore());
+            m.put("max_surprise", s.maxScore());
+            seqs.add(m);
+        }
+        double total = c.sequences().size() * SEQUENCE_SECONDS;
+        Map<String, Object> response = new HashMap<>();
+        response.put("source", c.source());
+        response.put("scoreName", "token_delta_score");
+        response.put("timeline", points);
+        response.put("sequences", seqs);
+        response.put("totalDurationSec", total);
+        response.put("formattedDuration", formatMmSs(total));
+        response.put("decisionThreshold", c.tau());
+        response.put("decisionThresholdMethod", "P99 of all timeline windows");
+        response.put("minSurprise", c.minScore());
+        response.put("maxSurprise", c.maxScore());
+        response.put("summary", Map.of(
+                "sequences_count", c.sequences().size(),
+                "events_count", c.events().size(),
+                "timeline_points_count", c.timeline().size(),
+                "events_above_tau", c.events().stream().filter(e -> e.score() >= c.tau()).count()));
+        return response;
+    }
+
+    // ------------------------------------------------------------------ media
 
     private static boolean isSafePathSegment(String segment) {
         if (segment == null || segment.isBlank()) {
@@ -63,7 +559,7 @@ public class EventService {
     private List<Path> getCandidateSampleDirectories() {
         List<Path> candidates = new ArrayList<>(2);
         if (storageService != null && storageService.getDataDirectory() != null) {
-            candidates.add(storageService.getDataDirectory().resolve("hackathon_sample"));
+            candidates.add(storageService.getDataDirectory().resolve("hackathon_sample").toAbsolutePath().normalize());
         }
         Path localData = Path.of("data", "hackathon_sample").toAbsolutePath().normalize();
         if (!candidates.contains(localData)) {
@@ -72,622 +568,63 @@ public class EventService {
         return candidates;
     }
 
-    private Path getHackathonSampleDirectory() {
-        for (Path dir : getCandidateSampleDirectories()) {
-            if (Files.exists(dir.resolve("manifest.json"))) {
-                return dir;
-            }
-        }
-        return storageService.getDataDirectory().resolve("hackathon_sample");
-    }
-
-    private Path getHackathonManifestFile() {
-        return getHackathonSampleDirectory().resolve("manifest.json");
-    }
-
-    private volatile Map<String, Object> cachedManifest = null;
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> getOrLoadManifest() {
-        if (cachedManifest != null) {
-            return cachedManifest;
-        }
-        synchronized (this) {
-            if (cachedManifest != null) {
-                return cachedManifest;
-            }
-            // 1. Prefer full SSD metadata catalog (96 sequences, 184 peak events, 2,688 timeline windows)
-            Map<String, Object> fullSsdManifest = tryLoadFullSsdCatalog();
-            if (fullSsdManifest != null && !fullSsdManifest.isEmpty()) {
-                cachedManifest = fullSsdManifest;
-                return cachedManifest;
-            }
-            // 2. Fallback to hackathon_sample/manifest.json (used in CI / local sample runs)
-            Path manifestFile = getHackathonManifestFile();
-            if (Files.exists(manifestFile)) {
-                try {
-                    LOG.info("Lazily loading hackathon sample manifest from {}", manifestFile);
-                    cachedManifest = objectMapper.readValue(Files.readAllBytes(manifestFile), Map.class);
-                    return cachedManifest;
-                } catch (IOException e) {
-                    LOG.error("Failed to read hackathon manifest: {}", e.getMessage());
-                }
-            }
-        }
-        return null;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> tryLoadFullSsdCatalog() {
-        if (storageService == null || storageService.getDataDirectory() == null) {
-            return null;
-        }
-        Path root = storageService.getDataDirectory().toAbsolutePath().normalize();
-        Path metaDir = root.resolve("metadata");
-        Path seqCsv = metaDir.resolve("sequence_runs.csv");
-        Path evtCsv = metaDir.resolve("event_catalog.csv");
-        Path tlCsv = metaDir.resolve("timeline_points.csv");
-        Path stitchedDir = root.resolve("stitched_sequences");
-        Path peaksDir = root.resolve("events").resolve("peaks");
-
-        if (!Files.exists(seqCsv) || !Files.exists(evtCsv) || !Files.exists(tlCsv)
-                || !Files.exists(stitchedDir) || !Files.exists(peaksDir)) {
-            return null;
-        }
-
-        try {
-            LOG.info("Loading full SSD apiculture catalog from {} (stitched_sequences + events/peaks)", metaDir);
-
-            // Load hotspot lookups from hackathon_sample/manifest.json if available for exact coordinates
-            Map<String, Map<String, Object>> sampleHotspots = new HashMap<>();
-            Path sampleManifest = root.resolve("hackathon_sample").resolve("manifest.json");
-            if (Files.exists(sampleManifest)) {
-                try {
-                    Map<String, Object> sm = objectMapper.readValue(Files.readAllBytes(sampleManifest), Map.class);
-                    if (sm != null && sm.get("events") instanceof List<?> sevList) {
-                        for (Object o : sevList) {
-                            if (o instanceof Map<?, ?> m && m.get("event_id") != null && m.get("hotspot") instanceof Map<?, ?> hs) {
-                                sampleHotspots.put(String.valueOf(m.get("event_id")), (Map<String, Object>) hs);
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-
-            // 1. Parse sequence_runs.csv (ordered: rec2125 first so default view starts at 16.05 sigma peak, then rec2123)
-            List<String> seqLines = Files.readAllLines(seqCsv);
-            List<Map<String, Object>> rec2125Seqs = new ArrayList<>();
-            List<Map<String, Object>> rec2123Seqs = new ArrayList<>();
-
-            for (int i = 1; i < seqLines.size(); i++) {
-                String line = seqLines.get(i).trim();
-                if (line.isEmpty()) continue;
-                String[] cols = line.split(",", -1);
-                if (cols.length < 13) continue;
-                String seqId = cols[1].trim();
-                String recId = cols[2].trim();
-                double meanSurprise = parseDoubleSafe(cols[6], 11.4);
-                double maxSurprise = parseDoubleSafe(cols[7], 13.0);
-                double meanBoardBees = parseDoubleSafe(cols[10], 23.0);
-                String rawVideoPath = cols[12].trim();
-                String filename = Path.of(rawVideoPath).getFileName().toString();
-
-                Map<String, Object> seqMap = new LinkedHashMap<>();
-                seqMap.put("sequence_id", seqId);
-                seqMap.put("recording_id", recId);
-                seqMap.put("filename", filename);
-                seqMap.put("path", "stitched_sequences/" + filename);
-                seqMap.put("duration_sec", 30.0);
-                seqMap.put("mean_surprise", meanSurprise);
-                seqMap.put("max_surprise", maxSurprise);
-                seqMap.put("mean_board_bees", meanBoardBees);
-
-                if ("rec2125".equals(recId)) {
-                    rec2125Seqs.add(seqMap);
-                } else {
-                    rec2123Seqs.add(seqMap);
-                }
-            }
-
-            List<Map<String, Object>> allSequences = new ArrayList<>(rec2125Seqs.size() + rec2123Seqs.size());
-            allSequences.addAll(rec2125Seqs);
-            allSequences.addAll(rec2123Seqs);
-
-            Map<String, Integer> seqGlobalIndex = new HashMap<>();
-            Map<String, String> seqFilenameMap = new HashMap<>();
-            for (int idx = 0; idx < allSequences.size(); idx++) {
-                Map<String, Object> seq = allSequences.get(idx);
-                String seqId = String.valueOf(seq.get("sequence_id"));
-                double startSec = idx * 30.0;
-                double endSec = startSec + 30.0;
-                seq.put("index", idx);
-                seq.put("start_sec_global", startSec);
-                seq.put("end_sec_global", endSec);
-                seq.put("formatted_range", formatMmSs(startSec) + " - " + formatMmSs(endSec));
-                seqGlobalIndex.put(seqId, idx);
-                seqFilenameMap.put(seqId, String.valueOf(seq.get("filename")));
-            }
-
-            // 2. Parse event_catalog.csv (all 184 peak events across rec2125 and rec2123)
-            List<String> evtLines = Files.readAllLines(evtCsv);
-            List<Map<String, Object>> allEvents = new ArrayList<>();
-            double maxSurpriseOverall = 16.052;
-
-            for (int i = 1; i < evtLines.size(); i++) {
-                String line = evtLines.get(i).trim();
-                if (line.isEmpty()) continue;
-                String[] cols = line.split(",", -1);
-                if (cols.length < 15) continue;
-
-                String eventId = cols[1].trim();
-                String recId = cols[2].trim();
-                String seqId = cols[3].trim();
-                int peakFrame = (int) Math.round(parseDoubleSafe(cols[5], 0));
-                String submanifoldState = cols[8].trim();
-                double surpriseScore = parseDoubleSafe(cols[9], 12.0);
-                double pixelDiff = parseDoubleSafe(cols[10], 0.032);
-                int boardBees = (int) Math.round(parseDoubleSafe(cols[11], 22));
-
-                Integer seqIdxObj = seqGlobalIndex.get(seqId);
-                if (seqIdxObj == null) continue;
-                int seqIdx = seqIdxObj;
-
-                double localSec = Math.min(29.95, Math.max(0.0, peakFrame / 59.94));
-                double globalSec = Math.round((seqIdx * 30.0 + localSec) * 100.0) / 100.0;
-                localSec = Math.round(localSec * 100.0) / 100.0;
-                if (surpriseScore > maxSurpriseOverall) {
-                    maxSurpriseOverall = surpriseScore;
-                }
-
-                String severity = surpriseScore >= 13.0 ? "CRITICAL" : (surpriseScore >= 11.8 ? "HIGH" : "MEDIUM");
-                String description = switch (submanifoldState) {
-                    case "M3_APPROACH" -> "Coordinated landing-board approach & dense entrance clustering (" + submanifoldState + ")";
-                    case "M2_ROUTINE" -> "High-density flight board congregation & guarding transition (" + submanifoldState + ")";
-                    default -> "Latent trajectory surprise peak at hive entrance (" + submanifoldState + ")";
-                };
-
-                Map<String, Object> hotspot = sampleHotspots.get(eventId);
-                if (hotspot == null) {
-                    int hash = Math.abs(eventId.hashCode());
-                    int gridX = 16 + (hash % 11); // 16..26 along landing board
-                    int gridY = 17 + ((hash / 11) % 4); // 17..20 along entrance slot
-                    double normCx = Math.round(((gridX + 0.5) / 43.0) * 10000.0) / 10000.0;
-                    double normCy = Math.round(((gridY + 0.5) / 43.0) * 10000.0) / 10000.0;
-                    int xPx = (int) Math.round(normCx * 540);
-                    int yPx = (int) Math.round(normCy * 960);
-                    int r = 68;
-                    List<Integer> boxPx = List.of(
-                            Math.max(35, yPx - r),
-                            Math.max(0, xPx - r),
-                            Math.min(960, yPx + r),
-                            Math.min(540, xPx + r)
-                    );
-                    int activeCells = Math.max(6, Math.min(24, (int) Math.round((surpriseScore - 9.5) * 3.2)));
-                    hotspot = new LinkedHashMap<>();
-                    hotspot.put("grid_x", gridX);
-                    hotspot.put("grid_y", gridY);
-                    hotspot.put("norm_center_x", normCx);
-                    hotspot.put("norm_center_y", normCy);
-                    hotspot.put("box_px", boxPx);
-                    hotspot.put("active_cells", activeCells);
-                }
-
-                Map<String, Object> evMap = new LinkedHashMap<>();
-                evMap.put("event_id", eventId);
-                evMap.put("recording_id", recId);
-                evMap.put("sequence_id", seqId);
-                evMap.put("sequence_index", seqIdx);
-                evMap.put("sequence_clip", seqFilenameMap.getOrDefault(seqId, "full_" + seqId + "_9x9_stitched_30s.mp4"));
-                evMap.put("time_sec_global", globalSec);
-                evMap.put("time_sec_local", localSec);
-                evMap.put("formatted_time", formatMmSs(globalSec));
-                evMap.put("frame_approx", peakFrame);
-                evMap.put("surprise_score", surpriseScore);
-                evMap.put("pixel_diff_baseline", pixelDiff);
-                evMap.put("submanifold_state", submanifoldState);
-                evMap.put("severity", severity);
-                evMap.put("board_bees", boardBees);
-                evMap.put("description", description);
-                evMap.put("clip_path", "events/peaks/" + eventId + ".mp4");
-                evMap.put("hotspot", hotspot);
-                allEvents.add(evMap);
-            }
-
-            allEvents.sort(Comparator.comparingDouble(e -> ((Number) e.get("time_sec_global")).doubleValue()));
-
-            // 3. Parse timeline_points.csv (all 2,688 continuous windows across all 96 sequences)
-            List<String> tlLines = Files.readAllLines(tlCsv);
-            List<Map<String, Object>> timelinePoints = new ArrayList<>(tlLines.size());
-            double minSurpriseOverall = 9.5;
-
-            for (int i = 1; i < tlLines.size(); i++) {
-                String line = tlLines.get(i).trim();
-                if (line.isEmpty()) continue;
-                String[] cols = line.split(",", -1);
-                if (cols.length < 10) continue;
-
-                String seqId = cols[0].trim();
-                String recId = cols[1].trim();
-                Integer seqIdxObj = seqGlobalIndex.get(seqId);
-                if (seqIdxObj == null) continue;
-
-                double localSec = parseDoubleSafe(cols[3], 0.0);
-                double globalSec = Math.round((seqIdxObj * 30.0 + localSec) * 100.0) / 100.0;
-                double surpriseScore = parseDoubleSafe(cols[5], 11.0);
-                int boardBees = (int) Math.round(parseDoubleSafe(cols[7], 22));
-                String eventId = cols[9].trim();
-                if (surpriseScore < minSurpriseOverall) {
-                    minSurpriseOverall = Math.floor(surpriseScore * 10.0) / 10.0;
-                }
-
-                Map<String, Object> pt = new LinkedHashMap<>();
-                pt.put("sequence_id", seqId);
-                pt.put("recording_id", recId);
-                pt.put("sequence_index", seqIdxObj);
-                pt.put("time_sec", globalSec);
-                pt.put("time_sec_local", localSec);
-                pt.put("surprise_score", surpriseScore);
-                pt.put("board_bees", boardBees);
-                pt.put("is_event", !eventId.isEmpty());
-                pt.put("event_id", eventId.isEmpty() ? null : eventId);
-                timelinePoints.add(pt);
-            }
-
-            timelinePoints.sort(Comparator.comparingDouble(p -> ((Number) p.get("time_sec")).doubleValue()));
-
-            double totalDurationSec = allSequences.size() * 30.0;
-            Map<String, Object> manifest = new LinkedHashMap<>();
-            manifest.put("project", "BeeJEPA");
-            manifest.put("sample_type", "Full SSD Dataset (96 Sequences · 184 Events · 48m 60fps)");
-            manifest.put("fps", 60);
-            manifest.put("total_duration_sec", totalDurationSec);
-            manifest.put("formatted_duration", formatMmSs(totalDurationSec));
-            manifest.put("decision_threshold_tau", 10.2);
-            manifest.put("max_surprise", Math.ceil(maxSurpriseOverall * 10.0) / 10.0);
-            manifest.put("min_surprise", minSurpriseOverall);
-            manifest.put("sequences", allSequences);
-            manifest.put("events", allEvents);
-            manifest.put("timeline", timelinePoints);
-            manifest.put("summary", Map.of(
-                    "sequences_count", allSequences.size(),
-                    "events_count", allEvents.size(),
-                    "timeline_points_count", timelinePoints.size(),
-                    "max_surprise_overall", maxSurpriseOverall
-            ));
-
-            LOG.info("Loaded full SSD dataset: {} sequences ({}s), {} peak events, {} timeline windows",
-                    allSequences.size(), totalDurationSec, allEvents.size(), timelinePoints.size());
-            return manifest;
-        } catch (Exception e) {
-            LOG.warn("Failed to load full SSD catalog from metadata CSVs, falling back to hackathon_sample: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private static double parseDoubleSafe(String raw, double fallback) {
-        if (raw == null || raw.isBlank()) return fallback;
-        try {
-            return Double.parseDouble(raw.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
-    private static String formatMmSs(double totalSeconds) {
-        int totalSec = Math.max(0, (int) Math.round(totalSeconds));
-        int mins = totalSec / 60;
-        int secs = totalSec % 60;
-        return String.format(java.util.Locale.US, "%02d:%02d", mins, secs);
-    }
-
-    @SuppressWarnings("unchecked")
-    public boolean isKnownManifestEvent(String eventId) {
-        if (!isSafePathSegment(eventId)) {
-            return false;
-        }
-        Map<String, Object> manifest = getOrLoadManifest();
-        if (manifest != null && manifest.get("events") instanceof List<?> rawEvents) {
-            for (Object obj : rawEvents) {
-                if (obj instanceof Map<?, ?> ev && eventId.equals(String.valueOf(ev.get("event_id")))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> listEvents() {
-        Map<String, Object> manifest = getOrLoadManifest();
-        if (manifest != null && manifest.containsKey("events")) {
-            List<Map<String, Object>> rawEvents = (List<Map<String, Object>>) manifest.get("events");
-            List<Map<String, Object>> result = new ArrayList<>();
-
-            for (Map<String, Object> ev : rawEvents) {
-                String eventId = String.valueOf(ev.get("event_id"));
-                Map<String, Object> item = new HashMap<>();
-                item.put("eventId", eventId);
-                item.put("recordingId", ev.get("recording_id"));
-                item.put("sequenceId", ev.get("sequence_id"));
-                item.put("sequenceIndex", ev.get("sequence_index"));
-                item.put("sequenceClip", ev.get("sequence_clip"));
-                item.put("submanifoldState", ev.get("submanifold_state"));
-                item.put("timestampSec", ev.get("time_sec_global"));
-                item.put("timeSecLocal", ev.get("time_sec_local"));
-                item.put("formattedTime", ev.get("formatted_time"));
-                item.put("frameIndex", ev.get("frame_approx"));
-                item.put("surpriseScoreL2", ev.get("surprise_score"));
-                item.put("severity", ev.get("severity"));
-                item.put("boardBees", ev.get("board_bees"));
-                item.put("description", ev.get("description"));
-                item.put("pixelDiffBaseline", ev.getOrDefault("pixel_diff_baseline", 0.0142));
-                item.put("horizonDeltaFrames", 60);
-
-                Map<String, Object> rawHotspot = ev.get("hotspot") instanceof Map<?, ?> m
-                        ? (Map<String, Object>) m
-                        : null;
-                int gridX = rawHotspot != null && rawHotspot.get("grid_x") instanceof Number n ? n.intValue() : 20;
-                int gridY = rawHotspot != null && rawHotspot.get("grid_y") instanceof Number n ? n.intValue() : 18;
-                double normCenterX = rawHotspot != null && rawHotspot.get("norm_center_x") instanceof Number n
-                        ? n.doubleValue()
-                        : 246.0 / 540.0;
-                double normCenterY = rawHotspot != null && rawHotspot.get("norm_center_y") instanceof Number n
-                        ? n.doubleValue()
-                        : 419.0 / 960.0;
-                int xPx = (int) Math.round(normCenterX * 540);
-                int yPx = (int) Math.round(normCenterY * 960);
-                int[] boxPx;
-                if (rawHotspot != null && rawHotspot.get("box_px") instanceof List<?> list && list.size() == 4) {
-                    boxPx = new int[] {
-                            ((Number) list.get(0)).intValue(),
-                            ((Number) list.get(1)).intValue(),
-                            ((Number) list.get(2)).intValue(),
-                            ((Number) list.get(3)).intValue()
-                    };
-                } else {
-                    int r = 68;
-                    boxPx = new int[] { Math.max(35, yPx - r), Math.max(0, xPx - r), Math.min(960, yPx + r), Math.min(540, xPx + r) };
-                }
-                item.put("hotspot", new AnomalyEvent.Hotspot(gridX, gridY, normCenterX, normCenterY, boxPx));
-                if (rawHotspot != null && rawHotspot.get("active_cells") instanceof Number n) {
-                    item.put("activeCells", n.intValue());
-                }
-
-                // Check real Redis/SQLite SAM 3.1 spatial summary cache
-                Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
-                item.put("vjepaBoardBees", ev.get("board_bees"));
-                if (spatialOpt.isPresent()) {
-                    SamGeometry.EventSpatialSummary sp = spatialOpt.get();
-                    item.put("isCached", true);
-                    item.put("hasSamSpatial", true);
-                    item.put("boardBees", sp.landingBoardBeeCount());
-                    item.put("hotspotBeesCount", sp.beesInsideHotspotCount());
-                    Map<String, Object> samSpatialMap = new LinkedHashMap<>();
-                    samSpatialMap.put("landingBoardBeeCount", sp.landingBoardBeeCount());
-                    samSpatialMap.put("beesInsideHotspotCount", sp.beesInsideHotspotCount());
-                    samSpatialMap.put("geometricPreClassification", sp.geometricPreClassification());
-                    samSpatialMap.put("boardBees", sp.boardBees() != null ? sp.boardBees() : List.of());
-                    samSpatialMap.put("containedBees", sp.containedBees() != null ? sp.containedBees() : List.of());
-                    samSpatialMap.put("cropBase64", sp.cropBase64() != null ? sp.cropBase64() : "");
-                    item.put("samSpatial", samSpatialMap);
-                    item.put("agentResult", buildAgentResultFromSpatial(eventId, sp, item));
-                } else {
-                    item.put("isCached", false);
-                    item.put("hasSamSpatial", false);
-                }
-
-                item.put("hasRawClip", true);
-                item.put("hasComparisonClip", false);
-                item.put("hasPeakFrame", true);
-
-                result.add(item);
-            }
-            return result;
-        }
-
-        // Fallback to legacy events directory if manifest not available
-        Path eventsDir = getEventsDirectory();
-        List<Map<String, Object>> result = new ArrayList<>();
-
-        if (!Files.exists(eventsDir)) {
-            LOG.debug("Events directory does not exist at {}", eventsDir);
-            return result;
-        }
-
-        try (Stream<Path> stream = Files.list(eventsDir)) {
-            stream.filter(Files::isDirectory)
-                    .sorted(Comparator.comparing(Path::getFileName))
-                    .forEach(eventFolder -> {
-                        Path metaFile = eventFolder.resolve("meta.json");
-                        if (Files.exists(metaFile)) {
-                            try {
-                                AnomalyEvent event = objectMapper.readValue(Files.readAllBytes(metaFile),
-                                        AnomalyEvent.class);
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("eventId", event.eventId());
-                                item.put("sequenceId", event.sequenceId());
-                                item.put("timestampSec", event.timestampSec());
-                                item.put("frameIndex", event.frameIndex());
-                                item.put("surpriseScoreL2", event.surpriseScoreL2());
-                                item.put("pixelDiffBaseline", event.pixelDiffBaseline());
-                                item.put("horizonDeltaFrames", event.horizonDeltaFrames());
-                                item.put("hotspot", event.hotspot());
-
-                                Path agentResultFile = eventFolder.resolve("agent_result.json");
-                                boolean hasCachedResult = Files.exists(agentResultFile);
-                                item.put("isCached", hasCachedResult);
-                                if (hasCachedResult) {
-                                    try {
-                                        Map<?, ?> agentResult = objectMapper
-                                                .readValue(Files.readAllBytes(agentResultFile), Map.class);
-                                        item.put("agentResult", agentResult);
-                                    } catch (Exception ignored) {
-                                    }
-                                }
-
-                                item.put("hasRawClip", Files.exists(eventFolder.resolve("clip_raw.mp4")));
-                                item.put("hasComparisonClip", Files.exists(eventFolder.resolve("clip_comparison.mp4")));
-                                item.put("hasPeakFrame", Files.exists(eventFolder.resolve("peak_frame.jpg")));
-
-                                result.add(item);
-                            } catch (IOException e) {
-                                LOG.error("Failed to read meta.json from {}: {}", metaFile, e.getMessage());
-                            }
-                        }
-                    });
-        } catch (IOException e) {
-            LOG.error("Failed to list events from {}: {}", eventsDir, e.getMessage());
-        }
-
-        return result;
-    }
-
-    public Optional<Map<String, Object>> getEvent(String eventId) {
-        if (!isSafePathSegment(eventId)) {
-            return Optional.empty();
-        }
-        List<Map<String, Object>> allEvents = listEvents();
-        for (Map<String, Object> ev : allEvents) {
-            if (eventId.equals(ev.get("eventId"))) {
-                Map<String, Object> map = new HashMap<>();
-                AnomalyEvent.Hotspot hotspot = (AnomalyEvent.Hotspot) ev.get("hotspot");
-                AnomalyEvent event = new AnomalyEvent(
-                        (String) ev.get("eventId"),
-                        (String) ev.get("sequenceId"),
-                        Double.parseDouble(String.valueOf(ev.get("timestampSec"))),
-                        Integer.parseInt(String.valueOf(ev.get("frameIndex"))),
-                        Double.parseDouble(String.valueOf(ev.get("surpriseScoreL2"))),
-                        Double.parseDouble(String.valueOf(ev.get("pixelDiffBaseline"))),
-                        Integer.parseInt(String.valueOf(ev.get("horizonDeltaFrames"))),
-                        hotspot);
-                map.put("event", event);
-                map.put("cached", ev.getOrDefault("isCached", false));
-                if (ev.containsKey("agentResult")) {
-                    map.put("agentResult", ev.get("agentResult"));
-                }
-                map.put("hasRawClip", true);
-                map.put("hasComparisonClip", false);
-                map.put("hasPeakFrame", true);
-                return Optional.of(map);
-            }
-        }
-
-        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
-        Path eventFolder = eventsDir.resolve(eventId).normalize();
-        if (!eventFolder.startsWith(eventsDir)) {
-            return Optional.empty();
-        }
-        Path metaFile = eventFolder.resolve("meta.json");
-
-        if (!Files.exists(metaFile)) {
-            return Optional.empty();
-        }
-
-        try {
-            AnomalyEvent event = objectMapper.readValue(Files.readAllBytes(metaFile), AnomalyEvent.class);
-            Map<String, Object> map = new HashMap<>();
-            map.put("event", event);
-
-            Path agentResultFile = eventFolder.resolve("agent_result.json");
-            if (Files.exists(agentResultFile)) {
-                map.put("agentResult", objectMapper.readValue(Files.readAllBytes(agentResultFile), Map.class));
-                map.put("cached", true);
-            } else {
-                map.put("cached", false);
-            }
-
-            map.put("hasRawClip", Files.exists(eventFolder.resolve("clip_raw.mp4")));
-            map.put("hasComparisonClip", Files.exists(eventFolder.resolve("clip_comparison.mp4")));
-            map.put("hasPeakFrame", Files.exists(eventFolder.resolve("peak_frame.jpg")));
-
-            return Optional.of(map);
-        } catch (IOException e) {
-            LOG.error("Failed to read event {}: {}", eventId, e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Checks only exact per-event keyframe files on disk (without fallback to another event's frame).
-     */
+    /** Kept for API compatibility: there are no pre-rendered keyframe files; frames come from the videos. */
     public Optional<File> findExactEventFrameFile(String eventId) {
-        if (!isSafePathSegment(eventId)) {
-            return Optional.empty();
-        }
-        for (Path sampleDir : getCandidateSampleDirectories()) {
-            Path framePath = sampleDir.resolve("event_frames").resolve(eventId + ".jpg").normalize();
-            if (framePath.startsWith(sampleDir.toAbsolutePath().normalize())
-                    && Files.exists(framePath) && Files.isRegularFile(framePath)) {
-                return Optional.of(framePath.toFile());
-            }
-        }
-        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
-        Path legacyFrame = eventsDir.resolve(eventId).resolve("peak_frame.jpg").normalize();
-        if (legacyFrame.startsWith(eventsDir) && Files.exists(legacyFrame) && Files.isRegularFile(legacyFrame)) {
-            return Optional.of(legacyFrame.toFile());
-        }
         return Optional.empty();
     }
 
     /**
-     * Retrieves or extracts the JPEG keyframe bytes for an event directly from the .mp4 video clip
-     * via ffmpeg pipe, caching the result in Redis + SQLite without writing static .jpg files to disk.
+     * Extracts the exact peak frame of an event from its stitched sequence (or, if absent, from the
+     * 4-second event clip at the peak offset) and caches the JPEG bytes in Redis + SQLite.
      */
     public synchronized Optional<byte[]> getOrExtractEventFrameBytes(String eventId) {
         if (!isSafePathSegment(eventId)) {
             return Optional.empty();
         }
-        Optional<byte[]> cached = museDiskCache.getFrameBytes(eventId);
+        String cacheKey = eventId + FRAME_KEY_SUFFIX;
+        Optional<byte[]> cached = museDiskCache.getFrameBytes(cacheKey);
         if (cached.isPresent() && cached.get().length > 0) {
             return cached;
         }
-        Optional<File> diskFrame = findExactEventFrameFile(eventId);
-        if (diskFrame.isPresent()) {
-            try {
-                byte[] bytes = Files.readAllBytes(diskFrame.get().toPath());
-                if (bytes.length > 0) {
-                    museDiskCache.saveFrameBytes(eventId, bytes);
-                    return Optional.of(bytes);
-                }
-            } catch (IOException ignored) {
-            }
-        }
-
-        Path clipPath = findEventClipPath(eventId);
-        if (clipPath == null) {
+        EventInfo e = getCatalog().eventsById().get(eventId);
+        if (e == null) {
             return Optional.empty();
         }
-
-        try {
-            if (clipPath.toFile().length() < 1024) {
-                return Optional.empty();
+        Path video = null;
+        double offset = 0.0;
+        Optional<File> seq = getSequenceFile(e.sequenceClip());
+        if (seq.isPresent()) {
+            video = seq.get().toPath();
+            offset = e.timeSecLocal();
+        } else {
+            Path clip = findEventClipPath(eventId);
+            if (clip != null && e.clipStartFrame() != null) {
+                video = clip;
+                offset = Math.max(0, e.peakFrame() - e.clipStartFrame()) / FPS;
             }
+        }
+        if (video == null) {
+            return Optional.empty();
+        }
+        try {
             ProcessBuilder pb = new ProcessBuilder(
-                    resolveFfmpegBinary(),
-                    "-nostdin",
-                    "-loglevel", "error",
-                    "-ss", "00:00:01.5",
-                    "-i", clipPath.toString(),
-                    "-vframes", "1",
-                    "-f", "image2pipe",
-                    "-vcodec", "mjpeg",
-                    "-q:v", "2",
-                    "-"
-            );
+                    resolveFfmpegBinary(), "-nostdin", "-loglevel", "error",
+                    "-ss", String.format(Locale.US, "%.3f", offset),
+                    "-i", video.toString(), "-vframes", "1",
+                    "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "2", "-");
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             Process process = pb.start();
             byte[] frameBytes = process.getInputStream().readAllBytes();
-            boolean finished = process.waitFor(4, TimeUnit.SECONDS);
-            if (!finished) {
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 return Optional.empty();
             }
             if (process.exitValue() == 0 && frameBytes.length > 512) {
-                museDiskCache.saveFrameBytes(eventId, frameBytes);
+                museDiskCache.saveFrameBytes(cacheKey, frameBytes);
                 return Optional.of(frameBytes);
             }
-        } catch (Exception e) {
-            LOG.warn("Failed to extract keyframe via ffmpeg pipe for {}: {}", eventId, e.getMessage());
+        } catch (Exception ex) {
+            LOG.warn("Failed to extract peak frame for {}: {}", eventId, ex.getMessage());
         }
         return Optional.empty();
     }
@@ -699,14 +636,13 @@ public class EventService {
         if (storageService != null && storageService.getDataDirectory() != null) {
             Path root = storageService.getDataDirectory().toAbsolutePath().normalize();
             Path ssdPeak = root.resolve("events").resolve("peaks").resolve(eventId + ".mp4").normalize();
-            if (ssdPeak.startsWith(root) && Files.exists(ssdPeak) && Files.isRegularFile(ssdPeak)) {
+            if (ssdPeak.startsWith(root) && Files.isRegularFile(ssdPeak)) {
                 return ssdPeak;
             }
         }
-        for (Path sampleDir : getCandidateSampleDirectories()) {
-            Path base = sampleDir.toAbsolutePath().normalize();
+        for (Path base : getCandidateSampleDirectories()) {
             Path sampleClip = base.resolve("event_clips").resolve(eventId + ".mp4").normalize();
-            if (sampleClip.startsWith(base) && Files.exists(sampleClip) && Files.isRegularFile(sampleClip)) {
+            if (sampleClip.startsWith(base) && Files.isRegularFile(sampleClip)) {
                 return sampleClip;
             }
         }
@@ -717,33 +653,9 @@ public class EventService {
         if (!isSafePathSegment(eventId) || !isSafePathSegment(filename)) {
             return Optional.empty();
         }
-        List<Path> sampleDirs = getCandidateSampleDirectories();
-
-        // 1. Check full SSD events/peaks and hackathon sample event clips
-        if ("clip_raw.mp4".equals(filename) || filename.endsWith(".mp4")) {
+        if ("clip_raw.mp4".equals(filename) || filename.equals(eventId + ".mp4")) {
             Path eventClip = findEventClipPath(eventId);
-            if (eventClip != null) {
-                return Optional.of(eventClip.toFile());
-            }
-            Optional<File> seqFile = getSequenceFile(filename);
-            if (seqFile.isPresent()) {
-                return seqFile;
-            }
-        }
-
-        // 2. Check exact frame file if present
-        if ("peak_frame.jpg".equals(filename) || "vjepa_heatmap.jpg".equals(filename)) {
-            Optional<File> exact = findExactEventFrameFile(eventId);
-            if (exact.isPresent()) {
-                return exact;
-            }
-        }
-
-        // 3. Fallback to standard events directory
-        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
-        Path filePath = eventsDir.resolve(eventId).resolve(filename).normalize();
-        if (filePath.startsWith(eventsDir) && Files.exists(filePath) && Files.isRegularFile(filePath)) {
-            return Optional.of(filePath.toFile());
+            return eventClip != null ? Optional.of(eventClip.toFile()) : Optional.empty();
         }
         return Optional.empty();
     }
@@ -756,29 +668,20 @@ public class EventService {
         if (storageService != null && storageService.getDataDirectory() != null) {
             Path root = storageService.getDataDirectory().toAbsolutePath().normalize();
             Path stitched = root.resolve("stitched_sequences").resolve(safeName).normalize();
-            if (stitched.startsWith(root) && Files.exists(stitched) && Files.isRegularFile(stitched)) {
+            if (stitched.startsWith(root) && Files.isRegularFile(stitched)) {
                 return Optional.of(stitched.toFile());
             }
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(rec\\d+_seq\\d+)").matcher(safeName);
-            if (m.find()) {
-                String canonicalStitched = "full_" + m.group(1) + "_9x9_stitched_30s.mp4";
-                Path altStitched = root.resolve("stitched_sequences").resolve(canonicalStitched).normalize();
-                if (altStitched.startsWith(root) && Files.exists(altStitched) && Files.isRegularFile(altStitched)) {
-                    return Optional.of(altStitched.toFile());
-                }
-            }
         }
-        for (Path sampleDir : getCandidateSampleDirectories()) {
-            Path base = sampleDir.toAbsolutePath().normalize();
+        for (Path base : getCandidateSampleDirectories()) {
             Path seqClip = base.resolve("sequences").resolve(safeName).normalize();
-            if (seqClip.startsWith(base) && Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
+            if (seqClip.startsWith(base) && Files.isRegularFile(seqClip)) {
                 return Optional.of(seqClip.toFile());
             }
         }
         return Optional.empty();
     }
 
-    private static String resolveFfmpegBinary() {
+    static String resolveFfmpegBinary() {
         String envBin = System.getenv("FFMPEG_BIN");
         if (envBin != null && !envBin.isBlank()) {
             return envBin.trim();
@@ -791,132 +694,30 @@ public class EventService {
         return "ffmpeg";
     }
 
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getTimeline() {
-        Map<String, Object> manifest = getOrLoadManifest();
-        if (manifest != null && manifest.containsKey("timeline")) {
-            List<Map<String, Object>> rawPoints = (List<Map<String, Object>>) manifest.get("timeline");
-            List<Map<String, Object>> mappedTimeline = new ArrayList<>(rawPoints.size());
-            for (Map<String, Object> pt : rawPoints) {
-                Map<String, Object> m = new HashMap<>(pt);
-                m.put("timestampSec", pt.get("time_sec"));
-                m.put("surpriseScoreL2", pt.get("surprise_score"));
-                m.put("isEvent", pt.get("is_event"));
-                m.put("eventId", pt.get("event_id"));
-                m.put("boardBees", pt.get("board_bees"));
-                mappedTimeline.add(m);
-            }
+    // ------------------------------------------------------------------ SAM status per event
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("timeline", mappedTimeline);
-            response.put("totalDurationSec", manifest.getOrDefault("total_duration_sec", 300.0));
-            response.put("formattedDuration", manifest.getOrDefault("formatted_duration", "05:00"));
-            response.put("decisionThreshold", manifest.getOrDefault("decision_threshold_tau", 10.2));
-            response.put("maxSurprise", 16.5);
-            response.put("minSurprise", 9.5);
-            response.put("sequences", manifest.get("sequences"));
-            response.put("summary", manifest.get("summary"));
-            return response;
-        }
-
-        Path timelinePath = getTimelineFile();
-        if (Files.exists(timelinePath)) {
-            try {
-                return objectMapper.readValue(Files.readAllBytes(timelinePath), Map.class);
-            } catch (IOException e) {
-                LOG.error("Failed to read timeline JSON: {}", e.getMessage());
-            }
-        }
-        return Map.of("timeline", List.of(), "error", "Timeline not found on storage");
-    }
-
-    private Map<String, Object> buildAgentResultFromSpatial(
-            String eventId,
-            SamGeometry.EventSpatialSummary sp,
-            Map<String, Object> eventItem
-    ) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("eventId", eventId);
-        result.put("cached", true);
-        result.put("analyzedAt", java.time.Instant.now().toString());
-
-        Map<String, Object> samResult = new LinkedHashMap<>();
-        samResult.put("model", "meta/sam-3.1");
-        samResult.put("status", "SUCCESS");
-        samResult.put("targetFrame", "peak_frame.jpg");
-        samResult.put("instanceCount", sp.landingBoardBeeCount());
-        samResult.put("hotspotBeesCount", sp.beesInsideHotspotCount());
-        samResult.put("segmentedObject", sp.geometricPreClassification() + " (" + sp.beesInsideHotspotCount() + " bees in hotspot)");
-        if (eventItem != null && eventItem.get("hotspot") != null) {
-            samResult.put("boxPrompt", eventItem.get("hotspot"));
-        }
-        result.put("sam", samResult);
-
-        String diagnosisText = museDiskCache.getMuseResponse("what happened at the hive entrance? analyze the segmented anomaly.|," + eventId)
-                .map(raw -> TolerantPayloadParser.parseDualMuseOutput(raw).spokenSummary())
-                .orElseGet(() -> String.format(
-                        java.util.Locale.US,
-                        "At %s (%s, %.2f sigma), SAM 3.1 isolated %d honeybees on the landing board with %d bees clustered inside the foveal hotspot (%s). Zero foreign predators detected; no intervention required.",
-                        sp.timestamp(), sp.severity(), sp.surpriseScoreSigma(),
-                        sp.landingBoardBeeCount(), sp.beesInsideHotspotCount(), sp.geometricPreClassification()
-                ));
-
-        Map<String, Object> museResult = new LinkedHashMap<>();
-        museResult.put("model", "meta-models/muse-spark-open");
-        museResult.put("status", "SUCCESS");
-        museResult.put("diagnosis", diagnosisText);
-        result.put("muse", museResult);
-        return result;
-    }
-
+    /** Returns the cached real SAM 3.1 segmentation of an event, or a NOT_CACHED status. Nothing else. */
     public Map<String, Object> analyzeEvent(String eventId, boolean forceRefresh) {
         if (!isSafePathSegment(eventId)) {
             return Map.of("error", "Invalid eventId", "cached", false);
         }
-
-        // 1. Check real Redis/SQLite SAM 3.1 spatial summary cache first
-        if (!forceRefresh) {
-            Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
-            if (spatialOpt.isPresent()) {
-                return buildAgentResultFromSpatial(eventId, spatialOpt.get(), null);
-            }
-        }
-
-        // 2. Check legacy events/<eventId>/agent_result.json if present
-        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
-        Path legacyAgentFile = eventsDir.resolve(eventId).resolve("agent_result.json").normalize();
-        if (!forceRefresh && legacyAgentFile.startsWith(eventsDir) && Files.exists(legacyAgentFile)) {
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> cached = objectMapper.readValue(Files.readAllBytes(legacyAgentFile), Map.class);
-                cached.put("cached", true);
-                return cached;
-            } catch (IOException ignored) {
-            }
-        }
-
-        // 3. No cached SAM 3.1 spatial segmentation exists yet; return V-JEPA 2.1 telemetry
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("eventId", eventId);
-        result.put("cached", false);
         result.put("analyzedAt", java.time.Instant.now().toString());
-
-        Map<String, Object> samResult = new HashMap<>();
+        Map<String, Object> samResult = new LinkedHashMap<>();
         samResult.put("model", "meta/sam-3.1");
-        samResult.put("status", "NOT_CACHED");
-        samResult.put("targetFrame", "peak_frame.jpg");
-
-        getEvent(eventId).ifPresent(ev -> {
-            Object rawEvent = ev.get("event");
-            if (rawEvent instanceof AnomalyEvent ae) {
-                samResult.put("boxPrompt", ae.hotspot());
-                samResult.put("frameIndex", ae.frameIndex());
-                samResult.put("timestampSec", ae.timestampSec());
-                samResult.put("surpriseScoreL2", ae.surpriseScoreL2());
-            }
-        });
+        Optional<SamGeometry.EventSpatialSummary> sp = forceRefresh ? Optional.empty() : museDiskCache.loadSpatialSummary(eventId);
+        if (sp.isPresent()) {
+            result.put("cached", true);
+            samResult.put("status", "SUCCESS");
+            samResult.put("instanceCount", sp.get().landingBoardBeeCount());
+            samResult.put("hotspotBeesCount", sp.get().beesInsideHotspotCount());
+            samResult.put("geometricPreClassification", sp.get().geometricPreClassification());
+        } else {
+            result.put("cached", false);
+            samResult.put("status", "NOT_CACHED");
+        }
         result.put("sam", samResult);
-
         return result;
     }
 }

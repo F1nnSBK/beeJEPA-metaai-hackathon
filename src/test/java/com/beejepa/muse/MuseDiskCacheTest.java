@@ -65,38 +65,39 @@ class MuseDiskCacheTest {
     }
 
     @Test
-    void testRejectsInvalidZeroHotspotEntranceSummary(@TempDir Path tempDir) {
+    void testRejectsSummaryWithoutEvidenceImages(@TempDir Path tempDir) {
         MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
 
-        EventSpatialSummary validF1217 = new EventSpatialSummary(
+        // A real SAM result with zero bees inside the hotspot is a valid measurement and must be kept
+        EventSpatialSummary zeroInHotspot = new EventSpatialSummary(
                 "evt_rec2125_seq000_f1217",
                 "00:20",
                 13.72,
-                "CRITICAL",
-                35,
-                12,
-                "multi_bee_interaction_cluster",
-                List.of(new ContainedBee(0, List.of(193, 412, 232, 439), 1.0)),
-                List.of(List.of(193, 412, 232, 439)),
-                "valid_frame",
-                "valid_crop"
-        );
-        cache.saveSpatialSummary(validF1217);
-        Assertions.assertTrue(cache.loadSpatialSummary("evt_rec2125_seq000_f1217").isPresent());
-
-        EventSpatialSummary buggyZeroBeeF1217 = new EventSpatialSummary(
-                "evt_rec2125_seq000_f1217",
-                "00:20",
-                13.72,
-                "CRITICAL",
+                "ABOVE_TAU",
                 37,
                 0,
-                "potential_non_bee_anomaly",
+                "no_bee_inside_hotspot",
                 List.of(),
+                List.of(List.of(193, 412, 232, 439)),
                 "frame",
                 "crop"
         );
-        Assertions.assertFalse(cache.isValidSpatialSummary(buggyZeroBeeF1217));
+        Assertions.assertTrue(cache.isValidSpatialSummary(zeroInHotspot));
+
+        EventSpatialSummary missingImages = new EventSpatialSummary(
+                "evt_rec2125_seq000_f1217",
+                "00:20",
+                13.72,
+                "ABOVE_TAU",
+                37,
+                0,
+                "no_bee_inside_hotspot",
+                List.of(),
+                List.of(),
+                "",
+                ""
+        );
+        Assertions.assertFalse(cache.isValidSpatialSummary(missingImages));
     }
 
     @Test
@@ -107,13 +108,13 @@ class MuseDiskCacheTest {
         String report = "### Summary\nHive activity is high.";
 
         Assertions.assertTrue(cache.getMuseResponse(key).isEmpty());
-        Assertions.assertTrue(cache.getAnyFallbackResponse().isEmpty());
 
         cache.saveMuseResponse(key, report);
 
         Assertions.assertEquals(Optional.of(report), cache.getMuseResponse(key));
         Assertions.assertEquals(Optional.of(report), cache.getMuseResponse("  WHAT HAPPENED AT MY HIVE TODAY?|evt_001,evt_002  "));
-        Assertions.assertEquals(Optional.of(report), cache.getAnyFallbackResponse());
+        // A different question must never return another question's answer
+        Assertions.assertTrue(cache.getMuseResponse("are there hornets?|evt_003").isEmpty());
 
         byte[] dummyMp3 = new byte[1024];
         dummyMp3[0] = 0x49;

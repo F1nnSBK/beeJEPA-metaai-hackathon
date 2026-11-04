@@ -14,7 +14,7 @@ public record SaccadicTarget(
         long frameIndex,
         double timestampSec,
         String formattedTime,
-        double surpriseScoreSigma,
+        double tokenDeltaScore,
         String severity,
         int focusCenterX,
         int focusCenterY,
