@@ -173,6 +173,9 @@ export class HiveScene {
     this.lastFrameSec = nowSec
     const damping = this.quality.reducedMotion ? 1 : 1 - Math.exp(-SCROLL_DAMPING_PER_SEC * deltaSec)
     this.story += (this.targetStory - this.story) * (deltaSec === 0 ? 1 : damping)
+    if (Math.abs(this.targetStory - this.story) < SETTLED_STORY_DELTA) {
+      this.story = this.targetStory
+    }
 
     this.director.update(this.story, nowSec)
     this.applyStoryToWorld(this.story, this.director.saccadeProgress)
@@ -187,14 +190,14 @@ export class HiveScene {
   }
 
   applyStoryToWorld(story, saccade) {
-    this.honeycomb.setIntensity(0.45 + 0.55 * smoothstep(0, 1, story))
-    this.ribbon.setReveal(smoothstep(0.05, 1.2, story))
-    this.pillars.setGrowth(smoothstep(1.9, 2.7, story))
+    this.honeycomb.setIntensity(0.45 + 0.55 * smoothstep(0, 0.95, story))
+    this.ribbon.setReveal(smoothstep(0.05, 0.95, story))
+    this.pillars.setGrowth(smoothstep(1.15, 1.95, story))
     this.stage.setOpacity(saccade)
-    this.stage.setHeat(smoothstep(3.0, 3.22, story))
-    this.stage.setBoxReveal(smoothstep(3.15, 3.55, story))
-    this.stage.setReticle(saccade, saccade * (1 - smoothstep(4.2, 4.6, story) * 0.65))
-    this.swarm.setLanding(smoothstep(3.2, 3.6, story))
+    this.stage.setHeat(smoothstep(2.35, 2.95, story))
+    this.stage.setBoxReveal(smoothstep(2.5, 3.0, story))
+    this.stage.setReticle(saccade, saccade * (1 - smoothstep(3.4, 4.0, story) * 0.65))
+    this.swarm.setLanding(smoothstep(2.45, 3.0, story))
   }
 
   resize() {

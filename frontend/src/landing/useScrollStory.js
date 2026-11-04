@@ -1,19 +1,12 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 /**
- * Height of the reading line as a fraction of the viewport. A low line means an act
- * starts once its text has scrolled into place; the camera prepares the transition
- * while the next text is still scrolling in.
- */
-export const READING_LINE = 0.2
-
-/**
- * Translates the window scroll position into a continuous story position.
- * The integer part is the index of the section crossing the reading line,
- * the fractional part is how far that section has been scrolled through.
- *
- * Section bounds are re-measured whenever a section is added or changes size,
- * so asynchronously rendered sections and orientation changes are always tracked.
+ * Translates the window scroll position into a continuous story position aligned
+ * with 100svh scroll-snap sections:
+ * - When snapped at section `k`, `storyPosition` is `k` (0.0, 1.0, 2.0, 3.0, 4.0, 5.0).
+ * - While scrolling between `k` and `k + 1`, `storyPosition` interpolates linearly
+ *   from `k` to `k + 1`, and `activeAct` switches as soon as the incoming section
+ *   crosses 45% of the viewport so its text is already revealed upon arrival.
  */
 export function useScrollStory(sectionElements) {
   const storyPosition = ref(0)
@@ -26,7 +19,7 @@ export function useScrollStory(sectionElements) {
   function measure() {
     sectionBounds = sectionElements.value.filter(Boolean).map((element) => {
       const rect = element.getBoundingClientRect()
-      return { top: rect.top + window.scrollY, height: rect.height }
+      return { top: rect.top + window.scrollY, height: Math.max(1, rect.height) }
     })
     update()
   }
@@ -34,19 +27,19 @@ export function useScrollStory(sectionElements) {
   function update() {
     frameRequest = null
     if (sectionBounds.length === 0) return
-    const readingLine = window.scrollY + window.innerHeight * READING_LINE
+    const scrollTop = Math.max(0, window.scrollY)
     const lastIndex = sectionBounds.length - 1
-    const index = Math.max(0, sectionBounds.findLastIndex((bounds) => readingLine >= bounds.top))
+    const index = Math.max(0, sectionBounds.findLastIndex((bounds) => scrollTop >= bounds.top - 2))
 
     const bounds = sectionBounds[index]
-    const span =
-      index === lastIndex
-        ? Math.max(1, document.documentElement.scrollHeight - window.innerHeight * (1 - READING_LINE) - bounds.top)
-        : bounds.height
-    const local = Math.min(1, Math.max(0, (readingLine - bounds.top) / span))
+    const nextBounds = index < lastIndex ? sectionBounds[index + 1] : null
+    const span = nextBounds
+      ? Math.max(1, nextBounds.top - bounds.top)
+      : Math.max(1, bounds.height)
+    const local = Math.min(1, Math.max(0, (scrollTop - bounds.top) / span))
 
-    storyPosition.value = index + local
-    activeAct.value = index
+    storyPosition.value = Math.min(lastIndex, index + local)
+    activeAct.value = local >= 0.45 && index < lastIndex ? index + 1 : index
   }
 
   function scheduleUpdate() {

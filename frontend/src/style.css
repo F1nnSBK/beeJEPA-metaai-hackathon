@@ -67,9 +67,20 @@ html, body, #app {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: rgba(234, 162, 58, 0.15);
-  overflow-x: hidden;
+  overflow-x: clip;
   scrollbar-width: thin;
   scrollbar-color: #202224 #060709;
+}
+
+html.landing-scroll-snap {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.landing-scroll-snap {
+    scroll-behavior: auto;
+  }
 }
 
 .num,

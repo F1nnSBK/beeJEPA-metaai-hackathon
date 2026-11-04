@@ -33,15 +33,26 @@ const smoothstep = (edge0, edge1, x) => {
   return t * t * (3 - 2 * t)
 }
 
-const diveDarkness = computed(() => smoothstep(4.55, 5.0, storyPosition.value))
+const diveDarkness = computed(() => smoothstep(4.2, 4.95, storyPosition.value))
+
+const ACT_LABELS = [
+  { act: ACT.ARRIVAL, label: 'Arrival' },
+  { act: ACT.PERIPHERY, label: 'Periphery' },
+  { act: ACT.SURPRISE, label: 'Surprise' },
+  { act: ACT.SACCADE, label: 'Saccade' },
+  { act: ACT.REPORT, label: 'Report' },
+  { act: ACT.ENTER, label: 'Console' }
+]
 
 function actOpacity(act) {
   if (reducedMotion) return 1
-  const pos = storyPosition.value
-  const fadeOutStart = act === ACT.SACCADE ? act + 0.7 : act + 0.48
-  const fadeOutEnd = act === ACT.SACCADE ? act + 0.92 : act + 0.78
-  if (pos <= fadeOutStart) return 1
-  return 1 - smoothstep(fadeOutStart, fadeOutEnd, pos)
+  const dist = Math.abs(storyPosition.value - act)
+  return 1 - smoothstep(0.22, 0.72, dist)
+}
+
+function scrollToAct(act) {
+  seenActs.value = new Set([...seenActs.value, act])
+  sectionRefs.value[act]?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })
 }
 
 const facts = computed(() => {
@@ -80,8 +91,7 @@ function isSeen(act) {
 }
 
 function skipIntro() {
-  seenActs.value = new Set([...seenActs.value, ACT.ENTER])
-  sectionRefs.value[ACT.ENTER]?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
+  scrollToAct(ACT.ENTER)
 }
 
 function handlePointer(event) {
@@ -136,6 +146,7 @@ watch(storyPosition, (position) => {
 })
 
 onMounted(async () => {
+  document.documentElement.classList.add('landing-scroll-snap')
   window.addEventListener('pointermove', handlePointer, { passive: true })
   try {
     snapshot.value = await loadSnapshot()
@@ -149,6 +160,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  document.documentElement.classList.remove('landing-scroll-snap')
   window.removeEventListener('pointermove', handlePointer)
   hiveScene?.dispose()
   hiveScene = null
@@ -175,6 +187,22 @@ onBeforeUnmount(() => {
       </div>
       <button v-if="activeAct < ACT.ENTER" type="button" class="landing__skip" @click="skipIntro">Skip intro</button>
     </header>
+
+    <nav v-if="facts" class="landing__dots" aria-label="Story sections">
+      <button
+        v-for="item in ACT_LABELS"
+        :key="item.act"
+        type="button"
+        class="landing__dot"
+        :class="{ 'is-active': activeAct === item.act }"
+        :aria-label="item.label"
+        :aria-current="activeAct === item.act ? 'step' : undefined"
+        :title="item.label"
+        @click="scrollToAct(item.act)"
+      >
+        <span class="landing__dot-pip"></span>
+      </button>
+    </nav>
 
     <main v-if="facts" class="landing__story">
       <section :ref="bindSection(ACT.ARRIVAL)" class="act act--arrival" :class="{ 'is-seen': isSeen(ACT.ARRIVAL) }">
@@ -408,6 +436,55 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 
+.landing__dots {
+  position: fixed;
+  right: calc(env(safe-area-inset-right) + 0.75rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.landing__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.landing__dot-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(234, 235, 237, 0.28);
+  transition:
+    transform 0.25s ease,
+    background-color 0.25s ease,
+    height 0.25s ease;
+}
+
+.landing__dot:hover .landing__dot-pip {
+  background: rgba(234, 235, 237, 0.65);
+}
+
+.landing__dot.is-active .landing__dot-pip {
+  height: 18px;
+  background: var(--honey);
+}
+
+.landing__dot:focus-visible {
+  outline: 2px solid var(--honey);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
 .landing__story,
 .landing__error {
   position: relative;
@@ -421,18 +498,22 @@ onBeforeUnmount(() => {
   padding: var(--gutter);
 }
 
-/* ---------- Acts: mobile first, text panel pinned at the bottom, scene above it ---------- */
-/* Sections are taller than the viewport so each text holds in place while the camera moves. */
+/* ---------- Acts: 100svh scroll-snap stops so each section locks cleanly in view ---------- */
 .act {
   position: relative;
-  min-height: 150svh;
+  height: 100svh;
+  min-height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .act--tall {
-  min-height: 260svh;
+  height: 100svh;
+  min-height: 100svh;
 }
 
 .act--enter {
+  height: auto;
   min-height: 100svh;
 }
 
@@ -463,15 +544,24 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72);
+  transition:
+    opacity 0.45s ease,
+    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.act:not(.act--enter):not(.is-seen) .act__inner {
+  opacity: 0 !important;
+  transform: translateY(14px);
+  pointer-events: none;
 }
 
 .act__inner > * {
   margin: 0;
   opacity: 0;
-  transform: translateY(14px);
+  transform: translateY(10px);
   transition:
-    opacity 0.7s ease,
-    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .is-seen .act__inner > * {
@@ -479,10 +569,10 @@ onBeforeUnmount(() => {
   transform: none;
 }
 
-.is-seen .act__inner > :nth-child(2) { transition-delay: 0.08s; }
-.is-seen .act__inner > :nth-child(3) { transition-delay: 0.9s; }
-.is-seen .act__inner > :nth-child(4) { transition-delay: 1.05s; }
-.is-seen .act__inner > :nth-child(5) { transition-delay: 1.2s; }
+.is-seen .act__inner > :nth-child(2) { transition-delay: 0.05s; }
+.is-seen .act__inner > :nth-child(3) { transition-delay: 0.14s; }
+.is-seen .act__inner > :nth-child(4) { transition-delay: 0.22s; }
+.is-seen .act__inner > :nth-child(5) { transition-delay: 0.3s; }
 
 .act--enter.is-seen .act__inner > :nth-child(3) {
   transition-delay: 0.16s;
@@ -640,9 +730,9 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: translateY(0.3em);
   transition:
-    opacity 0.5s ease,
-    transform 0.5s ease;
-  transition-delay: calc(1.2s + var(--i) * 70ms);
+    opacity 0.45s ease,
+    transform 0.45s ease;
+  transition-delay: calc(0.2s + var(--i) * 35ms);
 }
 
 .is-seen .quote span {

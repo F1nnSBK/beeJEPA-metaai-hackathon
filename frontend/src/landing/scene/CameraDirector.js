@@ -69,23 +69,23 @@ export class CameraDirector {
           t
         ),
       [ACT.PERIPHERY]: (t) => {
-        const x = space.xAt(space.durationSec * (0.92 - 0.84 * t))
-        return shot(new Vector3(x, 1.5, 0), 7.5, 4.6, new Vector3(0.45, 0.35, 1), 0.6)
+        const x = space.xAt(space.durationSec * (0.58 - 0.42 * t))
+        return shot(new Vector3(x, 1.5, 0), 8.2, 4.8, new Vector3(0.45, 0.35, 1), 0.6)
       },
       [ACT.SURPRISE]: (t) =>
         blendShots(
-          shot(new Vector3(focusX + 1.2, pillarTop * 0.55, 0), 6.5, pillarTop * 1.4, new Vector3(0.55, 0.28, 1), 0.8),
-          shot(new Vector3(focusX + 0.6, pillarTop * 0.6, 0), 5.5, pillarTop * 1.35, new Vector3(0.3, 0.2, 1), 0.8),
+          shot(new Vector3(focusX + 0.85, pillarTop * 0.58, 0), 6.0, pillarTop * 1.38, new Vector3(0.42, 0.24, 1), 0.8),
+          shot(new Vector3(focusX + 0.55, pillarTop * 0.6, 0), 5.4, pillarTop * 1.35, new Vector3(0.3, 0.2, 1), 0.8),
           t
         ),
       [ACT.SACCADE]: (t) => {
-        const size = stage.width * (0.7 - 0.12 * t)
+        const size = stage.width * (0.64 - 0.08 * t)
         return shot(foveaCenter, size, size, front)
       },
       [ACT.REPORT]: (t) => {
         const overview = shot(stageCenter, stage.width * 1.1, stage.height * 1.06, front)
         const dive = shot(entrance, 0.04, 0.04, front)
-        return blendShots(overview, dive, smoothstep(0.55, 1, t) ** 2)
+        return blendShots(overview, dive, smoothstep(0.25, 0.95, t) ** 2)
       },
       [ACT.ENTER]: () => shot(entrance, 0.04, 0.04, front)
     }
@@ -101,6 +101,9 @@ export class CameraDirector {
   }
 
   shotAt(storyPosition) {
+    if (storyPosition >= ACT.SACCADE - 0.35 && storyPosition < ACT.SACCADE) {
+      return this.shots[ACT.SACCADE](0)
+    }
     const act = Math.min(ACT.ENTER, Math.floor(storyPosition))
     const local = storyPosition - act
     const current = this.shots[act](local)
@@ -125,7 +128,7 @@ export class CameraDirector {
     const aspect = this.camera.aspect
     const layout = aspect < PORTRAIT_ASPECT_LIMIT ? LAYOUTS.portrait : LAYOUTS.landscape
     const pose = this.poseFor(this.shotAt(storyPosition), layout)
-    const saccadeTarget = storyPosition >= ACT.SACCADE ? 1 : 0
+    const saccadeTarget = storyPosition >= ACT.SACCADE - 0.35 ? 1 : 0
 
     if (saccadeTarget !== this.saccade.target) {
       this.saccade = { from: this.lastPose ?? pose, startSec: elapsedSec, target: saccadeTarget }
