@@ -22,15 +22,22 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Loads the BeeJEPA event catalog strictly from measured dataset files.
  *
- * <p>Primary source (Raspberry Pi SSD): {@code metadata/sequence_runs.csv},
+ * <p>
+ * Primary source (Raspberry Pi SSD): {@code metadata/sequence_runs.csv},
  * {@code metadata/event_catalog.csv}, {@code metadata/timeline_points.csv},
  * {@code stitched_sequences/*.mp4} and {@code events/peaks/*.mp4}.
- * Fallback (CI / local sample): {@code hackathon_sample/manifest.json}, of which only the raw
- * measurements (ids, times, frames, token-delta scores, board token peaks) are used.
+ * Fallback (CI / local sample): {@code hackathon_sample/manifest.json}, of
+ * which only the raw
+ * measurements (ids, times, frames, token-delta scores, board token peaks) are
+ * used.
  *
- * <p>Nothing in this class is invented: the score is the dataset's token-delta score, the decision
- * threshold tau is the 99th percentile of all timeline windows, and hotspots are measured from the
- * rendered V-JEPA overlay of the peak frame ({@link HeatmapHotspotExtractor}). Events whose hotspot
+ * <p>
+ * Nothing in this class is invented: the score is the dataset's token-delta
+ * score, the decision
+ * threshold tau is the 99th percentile of all timeline windows, and hotspots
+ * are measured from the
+ * rendered V-JEPA overlay of the peak frame ({@link HeatmapHotspotExtractor}).
+ * Events whose hotspot
  * has not been measured (yet) carry {@code hotspot = null}.
  */
 @Singleton
@@ -68,22 +75,27 @@ public class EventService {
         return museDiskCache;
     }
 
-    // ------------------------------------------------------------------ catalog model
+    // ------------------------------------------------------------------ catalog
+    // model
 
     record SequenceInfo(int index, String sequenceId, String recordingId, int sequenceIndexInRecording,
-                        String filename, double startSecAxis, double meanScore, double maxScore) {}
+            String filename, double startSecAxis, double meanScore, double maxScore) {
+    }
 
     record EventInfo(String eventId, String recordingId, String sequenceId, int sequenceAxisIndex,
-                     String sequenceClip, double timeSecAxis, double timeSecLocal, double recordingTimeSec,
-                     int peakFrame, double score, int boardPeaks, Integer grassPeaks, String submanifoldState,
-                     Double pixelDiff, Integer clipStartFrame) {}
+            String sequenceClip, double timeSecAxis, double timeSecLocal, double recordingTimeSec,
+            int peakFrame, double score, int boardPeaks, Integer grassPeaks, String submanifoldState,
+            Double pixelDiff, Integer clipStartFrame) {
+    }
 
     record TimelinePoint(String sequenceId, String recordingId, int sequenceAxisIndex, double timeSecAxis,
-                         double timeSecLocal, double score, int boardPeaks, String eventId) {}
+            double timeSecLocal, double score, int boardPeaks, String eventId) {
+    }
 
     record Catalog(String source, List<SequenceInfo> sequences, List<EventInfo> events,
-                   Map<String, EventInfo> eventsById, List<TimelinePoint> timeline,
-                   double tau, double minScore, double maxScore) {}
+            Map<String, EventInfo> eventsById, List<TimelinePoint> timeline,
+            double tau, double minScore, double maxScore) {
+    }
 
     private Catalog getCatalog() {
         Catalog c = catalog;
@@ -99,7 +111,8 @@ public class EventService {
                 loaded = loadSampleManifestCatalog();
             }
             if (loaded == null) {
-                loaded = new Catalog("none", List.of(), List.of(), Map.of(), List.of(), Double.NaN, Double.NaN, Double.NaN);
+                loaded = new Catalog("none", List.of(), List.of(), Map.of(), List.of(), Double.NaN, Double.NaN,
+                        Double.NaN);
             }
             catalog = loaded;
             loadPersistedHotspots(loaded);
@@ -138,17 +151,20 @@ public class EventService {
                 String filename = Path.of(seqT.get(r, "stitched_video_path")).getFileName().toString();
                 SequenceInfo s = new SequenceInfo(axisIdx, seqId, seqT.get(r, "recording_id"),
                         Integer.parseInt(seqT.get(r, "sequence_index")), filename, axisIdx * SEQUENCE_SECONDS,
-                        Double.parseDouble(seqT.get(r, "mean_surprise")), Double.parseDouble(seqT.get(r, "max_surprise")));
+                        Double.parseDouble(seqT.get(r, "mean_surprise")),
+                        Double.parseDouble(seqT.get(r, "max_surprise")));
                 sequences.add(s);
                 seqById.put(seqId, s);
             }
 
-            // Timeline windows: always the token-delta score column (surprise_score_l2 mixes in predictor scores).
+            // Timeline windows: always the token-delta score column (surprise_score_l2
+            // mixes in predictor scores).
             List<TimelinePoint> timeline = new ArrayList<>(tlT.rows.size());
             Map<String, Double> eventWindowScore = new HashMap<>();
             for (String[] r : tlT.rows) {
                 SequenceInfo s = seqById.get(tlT.get(r, "sequence_id"));
-                if (s == null) continue;
+                if (s == null)
+                    continue;
                 double local = Double.parseDouble(tlT.get(r, "timestamp_sec"));
                 double score = Double.parseDouble(tlT.get(r, "token_delta_score"));
                 String evId = tlT.get(r, "event_id");
@@ -164,10 +180,12 @@ public class EventService {
             for (String[] r : evtT.rows) {
                 String evId = evtT.get(r, "event_id");
                 SequenceInfo s = seqById.get(evtT.get(r, "sequence_id"));
-                if (s == null) continue;
+                if (s == null)
+                    continue;
                 int peak = Integer.parseInt(evtT.get(r, "peak_frame"));
                 double local = peak / FPS;
-                double score = eventWindowScore.getOrDefault(evId, Double.parseDouble(evtT.get(r, "surprise_score_l2")));
+                double score = eventWindowScore.getOrDefault(evId,
+                        Double.parseDouble(evtT.get(r, "surprise_score_l2")));
                 events.add(new EventInfo(evId, s.recordingId(), s.sequenceId(), s.index(), s.filename(),
                         s.startSecAxis() + local, local, s.sequenceIndexInRecording() * SEQUENCE_SECONDS + local,
                         peak, score, Integer.parseInt(evtT.get(r, "board_peaks_16x16")),
@@ -189,12 +207,14 @@ public class EventService {
     private Catalog loadSampleManifestCatalog() {
         for (Path dir : getCandidateSampleDirectories()) {
             Path manifestFile = dir.resolve("manifest.json");
-            if (!Files.isRegularFile(manifestFile)) continue;
+            if (!Files.isRegularFile(manifestFile))
+                continue;
             try {
                 Map<String, Object> m = objectMapper.readValue(Files.readAllBytes(manifestFile), Map.class);
                 List<Map<String, Object>> rawSeqs = (List<Map<String, Object>>) m.getOrDefault("sequences", List.of());
                 List<Map<String, Object>> rawEvents = (List<Map<String, Object>>) m.getOrDefault("events", List.of());
-                List<Map<String, Object>> rawTimeline = (List<Map<String, Object>>) m.getOrDefault("timeline", List.of());
+                List<Map<String, Object>> rawTimeline = (List<Map<String, Object>>) m.getOrDefault("timeline",
+                        List.of());
 
                 List<SequenceInfo> sequences = new ArrayList<>();
                 Map<String, SequenceInfo> seqById = new HashMap<>();
@@ -203,7 +223,8 @@ public class EventService {
                     int axisIdx = num(rs.get("index")).intValue();
                     String rec = seqId.contains("_") ? seqId.substring(0, seqId.indexOf('_')) : seqId;
                     int seqIdxInRec = Integer.parseInt(seqId.replaceAll(".*_seq", ""));
-                    SequenceInfo s = new SequenceInfo(axisIdx, seqId, rec, seqIdxInRec, String.valueOf(rs.get("filename")),
+                    SequenceInfo s = new SequenceInfo(axisIdx, seqId, rec, seqIdxInRec,
+                            String.valueOf(rs.get("filename")),
                             num(rs.get("start_sec_global")).doubleValue(),
                             num(rs.get("mean_surprise")).doubleValue(), num(rs.get("max_surprise")).doubleValue());
                     sequences.add(s);
@@ -217,25 +238,30 @@ public class EventService {
                     int axisIdx = (int) Math.floor(t / SEQUENCE_SECONDS);
                     SequenceInfo s = axisIdx >= 0 && axisIdx < sequences.size() ? sequences.get(axisIdx) : null;
                     Object ev = p.get("event_id");
-                    timeline.add(new TimelinePoint(s != null ? s.sequenceId() : null, s != null ? s.recordingId() : null,
+                    timeline.add(new TimelinePoint(s != null ? s.sequenceId() : null,
+                            s != null ? s.recordingId() : null,
                             axisIdx, t, t - axisIdx * SEQUENCE_SECONDS, num(p.get("surprise_score")).doubleValue(),
-                            num(p.get("board_bees")).intValue(), ev == null || String.valueOf(ev).isBlank() ? null : String.valueOf(ev)));
+                            num(p.get("board_bees")).intValue(),
+                            ev == null || String.valueOf(ev).isBlank() ? null : String.valueOf(ev)));
                 }
                 timeline.sort(Comparator.comparingDouble(TimelinePoint::timeSecAxis));
 
                 List<EventInfo> events = new ArrayList<>();
                 for (Map<String, Object> e : rawEvents) {
                     SequenceInfo s = seqById.get(String.valueOf(e.get("sequence_id")));
-                    if (s == null) continue;
+                    if (s == null)
+                        continue;
                     double local = num(e.get("time_sec_local")).doubleValue();
-                    events.add(new EventInfo(String.valueOf(e.get("event_id")), s.recordingId(), s.sequenceId(), s.index(),
-                            s.filename(), num(e.get("time_sec_global")).doubleValue(), local,
-                            s.sequenceIndexInRecording() * SEQUENCE_SECONDS + local,
-                            num(e.get("frame_approx")).intValue(), num(e.get("surprise_score")).doubleValue(),
-                            num(e.get("board_bees")).intValue(), null, null, null, null));
+                    events.add(
+                            new EventInfo(String.valueOf(e.get("event_id")), s.recordingId(), s.sequenceId(), s.index(),
+                                    s.filename(), num(e.get("time_sec_global")).doubleValue(), local,
+                                    s.sequenceIndexInRecording() * SEQUENCE_SECONDS + local,
+                                    num(e.get("frame_approx")).intValue(), num(e.get("surprise_score")).doubleValue(),
+                                    num(e.get("board_bees")).intValue(), null, null, null, null));
                 }
                 events.sort(Comparator.comparingDouble(EventInfo::timeSecAxis));
-                LOG.info("Loaded sample manifest catalog from {}: {} sequences, {} events", manifestFile, sequences.size(), events.size());
+                LOG.info("Loaded sample manifest catalog from {}: {} sequences, {} events", manifestFile,
+                        sequences.size(), events.size());
                 return buildCatalog("hackathon_sample_manifest", sequences, events, timeline);
             } catch (Exception e) {
                 LOG.error("Failed to read sample manifest {}: {}", manifestFile, e.toString());
@@ -245,7 +271,7 @@ public class EventService {
     }
 
     private static Catalog buildCatalog(String source, List<SequenceInfo> sequences, List<EventInfo> events,
-                                        List<TimelinePoint> timeline) {
+            List<TimelinePoint> timeline) {
         double[] scores = timeline.stream().mapToDouble(TimelinePoint::score).sorted().toArray();
         double tau = scores.length > 0 ? percentile(scores, 0.99) : Double.NaN;
         double min = scores.length > 0 ? scores[0] : Double.NaN;
@@ -263,7 +289,8 @@ public class EventService {
 
     /** Linear-interpolated percentile on a sorted array. */
     static double percentile(double[] sorted, double q) {
-        if (sorted.length == 1) return sorted[0];
+        if (sorted.length == 1)
+            return sorted[0];
         double pos = q * (sorted.length - 1);
         int lo = (int) Math.floor(pos);
         int hi = Math.min(sorted.length - 1, lo + 1);
@@ -271,13 +298,16 @@ public class EventService {
     }
 
     private static Number num(Object o) {
-        if (o instanceof Number n) return n;
-        if (o == null) return 0;
+        if (o instanceof Number n)
+            return n;
+        if (o == null)
+            return 0;
         return Double.parseDouble(String.valueOf(o));
     }
 
     private static double round(double v, int digits) {
-        if (Double.isNaN(v)) return v;
+        if (Double.isNaN(v))
+            return v;
         double f = Math.pow(10, digits);
         return Math.round(v * f) / f;
     }
@@ -287,7 +317,10 @@ public class EventService {
         return String.format(Locale.US, "%02d:%02d", totalSec / 60, totalSec % 60);
     }
 
-    /** Minimal header-aware CSV reader for the dataset files (no quoted fields in these files). */
+    /**
+     * Minimal header-aware CSV reader for the dataset files (no quoted fields in
+     * these files).
+     */
     static final class CsvTable {
         final Map<String, Integer> header = new HashMap<>();
         final List<String[]> rows = new ArrayList<>();
@@ -295,7 +328,8 @@ public class EventService {
         static CsvTable read(Path path) throws IOException {
             CsvTable t = new CsvTable();
             List<String> lines = Files.readAllLines(path);
-            if (lines.isEmpty()) return t;
+            if (lines.isEmpty())
+                return t;
             String[] head = lines.getFirst().trim().split(",", -1);
             for (int i = 0; i < head.length; i++) {
                 t.header.put(head[i].trim(), i);
@@ -318,10 +352,12 @@ public class EventService {
         }
     }
 
-    // ------------------------------------------------------------------ hotspot measurement
+    // ------------------------------------------------------------------ hotspot
+    // measurement
 
     private void loadPersistedHotspots(Catalog c) {
-        if (museDiskCache.getStateRepository() == null) return;
+        if (museDiskCache.getStateRepository() == null)
+            return;
         for (EventInfo e : c.events()) {
             try {
                 museDiskCache.getStateRepository().get(HOTSPOT_KEY_PREFIX + e.eventId()).ifPresent(s -> {
@@ -342,28 +378,32 @@ public class EventService {
     }
 
     private void startHotspotMeasurement(Catalog c) {
-        if (c.events().isEmpty() || !measurementStarted.compareAndSet(false, true)) return;
+        if (c.events().isEmpty() || !measurementStarted.compareAndSet(false, true))
+            return;
         measurementThread = Thread.ofVirtual().name("hotspot-measurement").start(() -> {
             int measured = 0;
             for (EventInfo e : c.events()) {
-                if (measuredHotspots.containsKey(e.eventId())) continue;
+                if (measuredHotspots.containsKey(e.eventId()))
+                    continue;
                 Optional<File> video = getSequenceFile(e.sequenceClip());
                 if (video.isEmpty()) {
                     continue; // video not available: hotspot stays unmeasured (null), never guessed
                 }
-                Optional<HeatmapHotspotExtractor.MeasuredHotspot> h =
-                        HeatmapHotspotExtractor.measure(video.get().toPath(), e.timeSecLocal(), resolveFfmpegBinary());
+                Optional<HeatmapHotspotExtractor.MeasuredHotspot> h = HeatmapHotspotExtractor
+                        .measure(video.get().toPath(), e.timeSecLocal(), resolveFfmpegBinary());
                 measuredHotspots.put(e.eventId(), h);
                 persistHotspot(e.eventId(), h);
                 hotspotVersion.incrementAndGet();
                 measured++;
             }
-            LOG.info("Hotspot measurement finished: {} newly measured, {} total known", measured, measuredHotspots.size());
+            LOG.info("Hotspot measurement finished: {} newly measured, {} total known", measured,
+                    measuredHotspots.size());
         });
     }
 
     private void persistHotspot(String eventId, Optional<HeatmapHotspotExtractor.MeasuredHotspot> h) {
-        if (museDiskCache.getStateRepository() == null) return;
+        if (museDiskCache.getStateRepository() == null)
+            return;
         try {
             museDiskCache.getStateRepository().set(HOTSPOT_KEY_PREFIX + eventId,
                     h.map(HeatmapHotspotExtractor.MeasuredHotspot::serialize).orElse(HOTSPOT_NONE));
@@ -372,17 +412,24 @@ public class EventService {
         }
     }
 
-    /** Monotonic counter that changes whenever a hotspot measurement becomes available. */
+    /**
+     * Monotonic counter that changes whenever a hotspot measurement becomes
+     * available.
+     */
     public long getHotspotVersion() {
         getCatalog();
         return hotspotVersion.get();
     }
 
-    /** Blocks until the background hotspot measurement has finished (used by tests and warm-up). */
+    /**
+     * Blocks until the background hotspot measurement has finished (used by tests
+     * and warm-up).
+     */
     public boolean awaitHotspotMeasurement(long timeoutMs) throws InterruptedException {
         getCatalog();
         Thread t = measurementThread;
-        if (t == null) return true;
+        if (t == null)
+            return true;
         return t.join(java.time.Duration.ofMillis(timeoutMs));
     }
 
@@ -390,7 +437,8 @@ public class EventService {
         return new AnomalyEvent.Hotspot(h.gridX(), h.gridY(), h.normCenterX(), h.normCenterY(), h.boxPx());
     }
 
-    // ------------------------------------------------------------------ public catalog API
+    // ------------------------------------------------------------------ public
+    // catalog API
 
     public double getDecisionThreshold() {
         return getCatalog().tau();
@@ -431,9 +479,12 @@ public class EventService {
         item.put("aboveThreshold", !Double.isNaN(c.tau()) && e.score() >= c.tau());
         item.put("severity", !Double.isNaN(c.tau()) && e.score() >= c.tau() ? "ABOVE_TAU" : "BELOW_TAU");
         item.put("boardPeaks", e.boardPeaks());
-        if (e.grassPeaks() != null) item.put("grassPeaks", e.grassPeaks());
-        if (e.submanifoldState() != null) item.put("submanifoldState", e.submanifoldState());
-        if (e.pixelDiff() != null) item.put("pixelDiffBaseline", e.pixelDiff());
+        if (e.grassPeaks() != null)
+            item.put("grassPeaks", e.grassPeaks());
+        if (e.submanifoldState() != null)
+            item.put("submanifoldState", e.submanifoldState());
+        if (e.pixelDiff() != null)
+            item.put("pixelDiffBaseline", e.pixelDiff());
         item.put("horizonDeltaFrames", 60);
 
         Optional<HeatmapHotspotExtractor.MeasuredHotspot> measured = measuredHotspots.get(e.eventId());
@@ -568,14 +619,19 @@ public class EventService {
         return candidates;
     }
 
-    /** Kept for API compatibility: there are no pre-rendered keyframe files; frames come from the videos. */
+    /**
+     * Kept for API compatibility: there are no pre-rendered keyframe files; frames
+     * come from the videos.
+     */
     public Optional<File> findExactEventFrameFile(String eventId) {
         return Optional.empty();
     }
 
     /**
-     * Extracts the exact peak frame of an event from its stitched sequence (or, if absent, from the
-     * 4-second event clip at the peak offset) and caches the JPEG bytes in Redis + SQLite.
+     * Extracts the exact peak frame of an event from its stitched sequence (or, if
+     * absent, from the
+     * 4-second event clip at the peak offset) and caches the JPEG bytes in Redis +
+     * SQLite.
      */
     public synchronized Optional<byte[]> getOrExtractEventFrameBytes(String eventId) {
         if (!isSafePathSegment(eventId)) {
@@ -694,9 +750,13 @@ public class EventService {
         return "ffmpeg";
     }
 
-    // ------------------------------------------------------------------ SAM status per event
+    // ------------------------------------------------------------------ SAM status
+    // per event
 
-    /** Returns the cached real SAM 3.1 segmentation of an event, or a NOT_CACHED status. Nothing else. */
+    /**
+     * Returns the cached real SAM 3.1 segmentation of an event, or a NOT_CACHED
+     * status. Nothing else.
+     */
     public Map<String, Object> analyzeEvent(String eventId, boolean forceRefresh) {
         if (!isSafePathSegment(eventId)) {
             return Map.of("error", "Invalid eventId", "cached", false);
@@ -706,7 +766,8 @@ public class EventService {
         result.put("analyzedAt", java.time.Instant.now().toString());
         Map<String, Object> samResult = new LinkedHashMap<>();
         samResult.put("model", "meta/sam-3.1");
-        Optional<SamGeometry.EventSpatialSummary> sp = forceRefresh ? Optional.empty() : museDiskCache.loadSpatialSummary(eventId);
+        Optional<SamGeometry.EventSpatialSummary> sp = forceRefresh ? Optional.empty()
+                : museDiskCache.loadSpatialSummary(eventId);
         if (sp.isPresent()) {
             result.put("cached", true);
             samResult.put("status", "SUCCESS");
@@ -721,3 +782,5 @@ public class EventService {
         return result;
     }
 }
+
+//

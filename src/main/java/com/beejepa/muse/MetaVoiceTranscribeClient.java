@@ -16,17 +16,22 @@ import java.util.UUID;
 
 /**
  * Client for Meta's speech-to-text model {@code muse-voice-transcribe-1.0}
- * ({@code POST https://api.meta.ai/v1/asr/transcribe}, multipart with a JSON {@code request}
- * part and a WAV {@code audio} part). Accepts mono 16-bit PCM WAV at 16 kHz or 24 kHz.
+ * ({@code POST https://api.meta.ai/v1/asr/transcribe}, multipart with a JSON
+ * {@code request}
+ * part and a WAV {@code audio} part). Accepts mono 16-bit PCM WAV at 16 kHz or
+ * 24 kHz.
  *
- * <p>Failures are reported as exceptions; this client never returns a substitute transcript.
+ * <p>
+ * Failures are reported as exceptions; this client never returns a substitute
+ * transcript.
  */
 @Singleton
 public class MetaVoiceTranscribeClient {
 
     public static final String MODEL = "muse-voice-transcribe-1.0";
 
-    public record Transcription(String transcript, long audioDurationMs, String sessionId) {}
+    public record Transcription(String transcript, long audioDurationMs, String sessionId) {
+    }
 
     private final ObjectMapper objectMapper = JacksonFactory.createTolerantMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -68,9 +73,11 @@ public class MetaVoiceTranscribeClient {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        JsonNode root = response.body() != null && !response.body().isBlank() ? objectMapper.readTree(response.body()) : null;
+        JsonNode root = response.body() != null && !response.body().isBlank() ? objectMapper.readTree(response.body())
+                : null;
         if (response.statusCode() >= 400 || root == null || root.has("error")) {
-            String msg = root != null && root.path("error").has("message") ? root.path("error").path("message").asText() : response.body();
+            String msg = root != null && root.path("error").has("message") ? root.path("error").path("message").asText()
+                    : response.body();
             throw new IllegalStateException("Meta transcription HTTP " + response.statusCode() + ": " + msg);
         }
         return new Transcription(
@@ -79,7 +86,10 @@ public class MetaVoiceTranscribeClient {
                 root.path("sessionId").asText(""));
     }
 
-    /** Checks RIFF/WAVE header, PCM 16-bit mono and 16/24 kHz as required by the API. */
+    /**
+     * Checks RIFF/WAVE header, PCM 16-bit mono and 16/24 kHz as required by the
+     * API.
+     */
     static void validateWav(byte[] wav) {
         if (wav == null || wav.length < 44) {
             throw new IllegalArgumentException("Audio is not a WAV file");
@@ -90,7 +100,8 @@ public class MetaVoiceTranscribeClient {
             throw new IllegalArgumentException("Audio is not a RIFF/WAVE file");
         }
         int channels = (wav[22] & 0xFF) | ((wav[23] & 0xFF) << 8);
-        int sampleRate = (wav[24] & 0xFF) | ((wav[25] & 0xFF) << 8) | ((wav[26] & 0xFF) << 16) | ((wav[27] & 0xFF) << 24);
+        int sampleRate = (wav[24] & 0xFF) | ((wav[25] & 0xFF) << 8) | ((wav[26] & 0xFF) << 16)
+                | ((wav[27] & 0xFF) << 24);
         int bits = (wav[34] & 0xFF) | ((wav[35] & 0xFF) << 8);
         if (channels != 1 || bits != 16 || (sampleRate != 16000 && sampleRate != 24000)) {
             throw new IllegalArgumentException("WAV must be mono 16-bit at 16 or 24 kHz (got "
@@ -99,7 +110,7 @@ public class MetaVoiceTranscribeClient {
     }
 
     private static void writePart(ByteArrayOutputStream out, String boundary, String name, String filename,
-                                  String contentType, byte[] data) throws java.io.IOException {
+            String contentType, byte[] data) throws java.io.IOException {
         StringBuilder head = new StringBuilder();
         head.append("--").append(boundary).append("\r\n");
         head.append("Content-Disposition: form-data; name=\"").append(name).append('"');
