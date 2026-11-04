@@ -54,15 +54,39 @@ public class TelemetryHttpFilter implements HttpServerFilter {
                 String val = request.getHeaders().get(header);
                 if (val != null && !val.isBlank()) {
                     int comma = val.indexOf(',');
-                    return (comma > 0 ? val.substring(0, comma) : val).trim();
+                    String rawIp = (comma > 0 ? val.substring(0, comma) : val).trim();
+                    return anonymizeIp(rawIp);
                 }
             }
             if (request.getRemoteAddress() != null && request.getRemoteAddress().getAddress() != null) {
-                return request.getRemoteAddress().getAddress().getHostAddress();
+                return anonymizeIp(request.getRemoteAddress().getAddress().getHostAddress());
             }
         } catch (Exception ignored) {
         }
         return "127.0.0.1";
+    }
+
+    /**
+     * DSGVO/GDPR IP anonymization: truncates the last octet of IPv4 addresses (x.x.x.0)
+     * and masks IPv6 addresses to their /32 prefix so no personal IP is persisted in SQLite.
+     */
+    static String anonymizeIp(String ip) {
+        if (ip == null || ip.isBlank() || "127.0.0.1".equals(ip) || "::1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+            return "127.0.0.1";
+        }
+        int lastDot = ip.lastIndexOf('.');
+        if (lastDot > 0 && ip.indexOf(':') < 0) {
+            return ip.substring(0, lastDot) + ".0";
+        }
+        int firstColon = ip.indexOf(':');
+        if (firstColon > 0) {
+            int secondColon = ip.indexOf(':', firstColon + 1);
+            if (secondColon > 0) {
+                return ip.substring(0, secondColon) + "::0";
+            }
+            return ip.substring(0, firstColon) + "::0";
+        }
+        return "0.0.0.0";
     }
 
     private String determinePlatform(String uri) {
