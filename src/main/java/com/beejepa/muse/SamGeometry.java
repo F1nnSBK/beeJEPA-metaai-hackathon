@@ -14,15 +14,30 @@ public final class SamGeometry {
     public static final int BOARD_MIN_Y = 372;
     public static final int BOARD_MAX_Y = 518;
 
-    private SamGeometry() {}
+    private SamGeometry() {
+    }
 
     @Serdeable
     public record BoundingBox(int x1, int y1, int x2, int y2) {
-        public int width() { return Math.max(1, x2 - x1); }
-        public int height() { return Math.max(1, y2 - y1); }
-        public int area() { return width() * height(); }
-        public double centerX() { return 0.5 * (x1 + x2); }
-        public double centerY() { return 0.5 * (y1 + y2); }
+        public int width() {
+            return Math.max(1, x2 - x1);
+        }
+
+        public int height() {
+            return Math.max(1, y2 - y1);
+        }
+
+        public int area() {
+            return width() * height();
+        }
+
+        public double centerX() {
+            return 0.5 * (x1 + x2);
+        }
+
+        public double centerY() {
+            return 0.5 * (y1 + y2);
+        }
 
         public boolean isOnLandingBoard() {
             return centerX() <= LEFT_PANEL_MAX_X
@@ -36,7 +51,8 @@ public final class SamGeometry {
     }
 
     @Serdeable
-    public record ContainedBee(int beeIndex, List<Integer> box, double containmentRatio) {}
+    public record ContainedBee(int beeIndex, List<Integer> box, double containmentRatio) {
+    }
 
     @Serdeable
     public record EventSpatialSummary(
@@ -50,8 +66,7 @@ public final class SamGeometry {
             List<ContainedBee> containedBees,
             List<List<Integer>> boardBees,
             String frameBase64,
-            String cropBase64
-    ) {
+            String cropBase64) {
         public EventSpatialSummary(
                 String eventId,
                 String timestamp,
@@ -62,8 +77,7 @@ public final class SamGeometry {
                 String geometricPreClassification,
                 List<ContainedBee> containedBees,
                 String frameBase64,
-                String cropBase64
-        ) {
+                String cropBase64) {
             this(
                     eventId,
                     timestamp,
@@ -75,14 +89,15 @@ public final class SamGeometry {
                     containedBees,
                     containedBees != null ? containedBees.stream().map(ContainedBee::box).toList() : List.of(),
                     frameBase64,
-                    cropBase64
-            );
+                    cropBase64);
         }
     }
 
     /**
-     * Converts a measured hotspot box_px [ymin, xmin, ymax, xmax] (1080x960 frame, left panel)
-     * into BoundingBox(x1, y1, x2, y2) clamped to the image. Returns null if no box is given.
+     * Converts a measured hotspot box_px [ymin, xmin, ymax, xmax] (1080x960 frame,
+     * left panel)
+     * into BoundingBox(x1, y1, x2, y2) clamped to the image. Returns null if no box
+     * is given.
      */
     public static BoundingBox fromManifestBoxPx(int[] boxPx, int imageWidth, int imageHeight) {
         if (boxPx == null || boxPx.length < 4) {
@@ -144,7 +159,8 @@ public final class SamGeometry {
     }
 
     /**
-     * Fraction of the hotspot box area covered by segmented bee boxes (pure geometry, no interpretation).
+     * Computes the fraction of the hotspot bounding box covered by contained bee
+     * boxes.
      */
     public static double computeHotspotBeeCoverageRatio(BoundingBox hotspot, List<ContainedBee> contained) {
         if (hotspot == null || contained == null || contained.isEmpty()) {
@@ -170,8 +186,8 @@ public final class SamGeometry {
     }
 
     /**
-     * Factual count label of SAM 3.1 bee instances inside the measured hotspot (IoA >= 0.25).
-     * It deliberately makes no claim about predators or intruders: SAM was only asked for "bee".
+     * Classifies hotspot occupancy from the number of contained SAM 3.1 bee
+     * instances.
      */
     public static String classifyHotspot(List<ContainedBee> contained) {
         int n = contained == null ? 0 : contained.size();

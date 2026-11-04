@@ -25,7 +25,7 @@ function loadUiPrefs() {
 function saveUiPrefs(prefs) {
   try {
     localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs))
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function loadSessionState() {
@@ -40,7 +40,7 @@ function loadSessionState() {
 function saveSessionState(state) {
   try {
     sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state))
-  } catch (e) {}
+  } catch (e) { }
 }
 
 const initialPrefs = loadUiPrefs()
@@ -69,7 +69,7 @@ const metaHealth = ref({
 })
 const resilienceTelemetry = ref(null)
 const ringBufferTelemetry = ref({
-  capacity: 600,
+  capacity: 64,
   currentSequence: 0,
   activeSlotsCount: 0,
   totalAllocatedBytes: 0,
@@ -147,7 +147,7 @@ function stopAllAudio() {
     try {
       activeAudioElement.pause()
       activeAudioElement.src = ''
-    } catch (e) {}
+    } catch (e) { }
     activeAudioElement = null
   }
   isSpeakingAloud.value = false
@@ -329,9 +329,21 @@ async function loadSystemAndData() {
   fetchAblationPyramid(selectedEvent.value?.eventId)
 }
 
+function isGlobalCohortQuestion(questionText) {
+  return /\b(today|day|overall|summary|all events|timeline|recordings?|cohort|global)\b/i.test(questionText || '')
+}
+
 async function askMuse(question = null, options = {}) {
   const silentAutoLoad = Boolean(options?.silentAutoLoad)
-  const q = (question || museQuestionInput.value || 'What happened at my hive today?').trim()
+  const q = (question ?? museQuestionInput.value ?? '').trim()
+  if (!q) {
+    museError.value = 'Please enter a question.'
+    return
+  }
+  const targetEventId = options?.globalQuery || isGlobalCohortQuestion(q)
+    ? null
+    : (selectedEvent.value?.eventId || null)
+
   isAskingMuse.value = true
   museError.value = null
   try {
@@ -340,186 +352,186 @@ async function askMuse(question = null, options = {}) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: q,
-        eventId: selectedEvent.value?.eventId,
+        eventId: targetEventId,
         maxEvents: 3
       }),
       cancelKey: 'askMuse',
       retries: 1,
       timeoutMs: 45000
     })
-    if (res.ok && res.data && res.data.sourceMode !== 'UNAVAILABLE') {
-      const normalized = normalizeMuseDiagnosis(res.data)
-      museDiagnosis.value = normalized
-      fetchSaccadicTargets()
+      if (res.ok && res.data && res.data.sourceMode !== 'UNAVAILABLE') {
+        const normalized = normalizeMuseDiagnosis(res.data)
+        museDiagnosis.value = normalized
+        fetchSaccadicTargets()
 
-      if (!silentAutoLoad) {
-        if (beeModeActive.value) {
-          const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
-          playBeeBuzz(textToBuzz)
-        } else if (autoReadAloud.value && normalized.spokenSummary) {
-          readAloud(normalized.spokenSummary)
+        if (!silentAutoLoad) {
+          if (beeModeActive.value) {
+            const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
+            playBeeBuzz(textToBuzz)
+          } else if (autoReadAloud.value && normalized.spokenSummary) {
+            readAloud(normalized.spokenSummary)
+          }
         }
+      } else if (!res.aborted) {
+        museDiagnosis.value = null
+        museError.value = res.data?.error || 'Meta Muse is currently unavailable. No answer was generated.'
       }
-    } else if (!res.aborted) {
-      museDiagnosis.value = null
-      museError.value = res.data?.error || 'Meta Muse is currently unavailable. No answer was generated.'
+    } finally {
+      isAskingMuse.value = false
     }
-  } finally {
-    isAskingMuse.value = false
   }
-}
 
 async function prepareMusePayload(event = null, question = null) {
-  const ev = event || selectedEvent.value
-  const q = question || museQuestionInput.value
+    const ev = event || selectedEvent.value
+    const q = question || museQuestionInput.value
 
-  isPreparingMuse.value = true
-  try {
-    const res = await apiFetch('/api/v1/muse/prepare-query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId: ev?.eventId || (events.value.length > 0 ? events.value[0].eventId : null),
-        question: q,
-        eventData: ev || (events.value.length > 0 ? events.value[0] : null),
-        dryRun: true
-      }),
-      cancelKey: 'prepareMuse',
-      retries: 1
-    })
-    if (res.ok && res.data) {
-      stagedMuseQuery.value = res.data
-      stagedTab.value = 'prompt'
-      stagedMuseModalOpen.value = true
-    }
-  } finally {
-    isPreparingMuse.value = false
-  }
-}
-
-async function prepareSamPayload(event = null, prompt = null) {
-  const ev = event || selectedEvent.value
-  if (!ev) return
-  const p = prompt || museQuestionInput.value
-
-  isPreparingMuse.value = true
-  try {
-    const res = await apiFetch('/api/v1/muse/prepare-sam', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventId: ev.eventId,
-        prompt: p,
-        customBox: ev.hotspot ? {
-          x: ev.hotspot.normCenterX - 0.06,
-          y: ev.hotspot.normCenterY - 0.07,
-          width: 0.12,
-          height: 0.14
-        } : null,
-        mediaType: 'image'
-      }),
-      cancelKey: 'prepareSam',
-      retries: 1
-    })
-    if (res.ok && res.data) {
-      stagedSamQuery.value = res.data
-      stagedTab.value = 'payload'
-      stagedMuseModalOpen.value = true
-    }
-  } finally {
-    isPreparingMuse.value = false
-  }
-}
-
-async function runMetaAnalysis() {
-  if (!selectedEvent.value) return
-  isAnalyzing.value = true
-  try {
-    const res = await apiFetch(`/api/v1/events/${selectedEvent.value.eventId}/analyze?forceRefresh=true`, {
-      method: 'POST',
-      cancelKey: 'runMetaAnalysis',
-      retries: 1,
-      timeoutMs: 45000
-    })
-    if (res.ok && res.data) {
-      selectedEvent.value.agentResult = res.data
-      selectedEvent.value.isCached = true
-      const idx = events.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
-      if (idx !== -1) {
-        events.value[idx].agentResult = res.data
-        events.value[idx].isCached = true
+    isPreparingMuse.value = true
+    try {
+      const res = await apiFetch('/api/v1/muse/prepare-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: ev?.eventId || (events.value.length > 0 ? events.value[0].eventId : null),
+          question: q,
+          eventData: ev || (events.value.length > 0 ? events.value[0] : null),
+          dryRun: true
+        }),
+        cancelKey: 'prepareMuse',
+        retries: 1
+      })
+      if (res.ok && res.data) {
+        stagedMuseQuery.value = res.data
+        stagedTab.value = 'prompt'
+        stagedMuseModalOpen.value = true
       }
-      fetchSaccadicTargets()
+    } finally {
+      isPreparingMuse.value = false
     }
-  } finally {
-    isAnalyzing.value = false
   }
-}
 
-export function useHiveStore() {
-  return {
-    // Auth
-    isAuthenticated,
-    isAuthResolved,
-    currentUser,
-    fetchUserProfile,
+  async function prepareSamPayload(event = null, prompt = null) {
+    const ev = event || selectedEvent.value
+    if (!ev) return
+    const p = prompt || museQuestionInput.value
 
-    // System & Health
-    storageStatus,
-    metaHealth,
-    resilienceTelemetry,
-    ringBufferTelemetry,
-    checkMetaHealth,
-    fetchPerceptionTelemetry,
-    loadSystemAndData,
-
-    // Timeline, Events & Saccades
-    timelineData,
-    timelineMeta,
-    events,
-    selectedEvent,
-    currentTimelineSec,
-    activeView,
-    isAnalyzing,
-    saccadicTargets,
-    activeSaccade,
-    ablationPyramid,
-    selectedPyramidTier,
-    selectedCounterfactual,
-    fetchSaccadicTargets,
-    fetchAblationPyramid,
-    updateActiveSaccade,
-    runMetaAnalysis,
-
-    // Muse & Staging
-    stagedMuseModalOpen,
-    stagedMuseQuery,
-    stagedSamQuery,
-    isPreparingMuse,
-    isTranscribing,
-    voiceTranscript,
-    museQuestionInput,
-    stagedTab,
-    museDiagnosis,
-    museError,
-    isAskingMuse,
-    showRawWirePayload,
-    askMuse,
-    prepareMusePayload,
-    prepareSamPayload,
-
-    // Unified Audio & Voice
-    beeModeActive,
-    autoReadAloud,
-    isBeeModePlaying,
-    isPlayingBeeBuzz,
-    isSpeakingAloud,
-    isRecording,
-    isProcessing,
-    stopAllAudio,
-    readAloud,
-    stopReadAloud,
-    playBeeBuzz
+    isPreparingMuse.value = true
+    try {
+      const res = await apiFetch('/api/v1/muse/prepare-sam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: ev.eventId,
+          prompt: p,
+          customBox: ev.hotspot ? {
+            x: ev.hotspot.normCenterX - 0.06,
+            y: ev.hotspot.normCenterY - 0.07,
+            width: 0.12,
+            height: 0.14
+          } : null,
+          mediaType: 'image'
+        }),
+        cancelKey: 'prepareSam',
+        retries: 1
+      })
+      if (res.ok && res.data) {
+        stagedSamQuery.value = res.data
+        stagedTab.value = 'payload'
+        stagedMuseModalOpen.value = true
+      }
+    } finally {
+      isPreparingMuse.value = false
+    }
   }
-}
+
+  async function runMetaAnalysis() {
+    if (!selectedEvent.value) return
+    isAnalyzing.value = true
+    try {
+      const res = await apiFetch(`/api/v1/events/${selectedEvent.value.eventId}/analyze?forceRefresh=true`, {
+        method: 'POST',
+        cancelKey: 'runMetaAnalysis',
+        retries: 1,
+        timeoutMs: 45000
+      })
+      if (res.ok && res.data) {
+        selectedEvent.value.agentResult = res.data
+        selectedEvent.value.isCached = true
+        const idx = events.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
+        if (idx !== -1) {
+          events.value[idx].agentResult = res.data
+          events.value[idx].isCached = true
+        }
+        fetchSaccadicTargets()
+      }
+    } finally {
+      isAnalyzing.value = false
+    }
+  }
+
+  export function useHiveStore() {
+    return {
+      // Auth
+      isAuthenticated,
+      isAuthResolved,
+      currentUser,
+      fetchUserProfile,
+
+      // System & Health
+      storageStatus,
+      metaHealth,
+      resilienceTelemetry,
+      ringBufferTelemetry,
+      checkMetaHealth,
+      fetchPerceptionTelemetry,
+      loadSystemAndData,
+
+      // Timeline, Events & Saccades
+      timelineData,
+      timelineMeta,
+      events,
+      selectedEvent,
+      currentTimelineSec,
+      activeView,
+      isAnalyzing,
+      saccadicTargets,
+      activeSaccade,
+      ablationPyramid,
+      selectedPyramidTier,
+      selectedCounterfactual,
+      fetchSaccadicTargets,
+      fetchAblationPyramid,
+      updateActiveSaccade,
+      runMetaAnalysis,
+
+      // Muse & Staging
+      stagedMuseModalOpen,
+      stagedMuseQuery,
+      stagedSamQuery,
+      isPreparingMuse,
+      isTranscribing,
+      voiceTranscript,
+      museQuestionInput,
+      stagedTab,
+      museDiagnosis,
+      museError,
+      isAskingMuse,
+      showRawWirePayload,
+      askMuse,
+      prepareMusePayload,
+      prepareSamPayload,
+
+      // Unified Audio & Voice
+      beeModeActive,
+      autoReadAloud,
+      isBeeModePlaying,
+      isPlayingBeeBuzz,
+      isSpeakingAloud,
+      isRecording,
+      isProcessing,
+      stopAllAudio,
+      readAloud,
+      stopReadAloud,
+      playBeeBuzz
+    }
+  }
 

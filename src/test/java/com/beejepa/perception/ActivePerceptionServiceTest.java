@@ -20,6 +20,7 @@ public class ActivePerceptionServiceTest {
     private ActivePerceptionService perceptionService;
 
     @BeforeEach
+
     void setUp() throws InterruptedException {
         ringBuffer = new OffHeapFrameRingBuffer(50);
         simdEvaluator = new SimdLatentEvaluator();
@@ -72,7 +73,8 @@ public class ActivePerceptionServiceTest {
     @Test
     void testRingBufferIngestionIntegrity() {
         OffHeapFrameRingBuffer.BufferTelemetry telemetry = perceptionService.getRingBufferTelemetry();
-        Assertions.assertTrue(telemetry.activeSlotsCount() > 0, "Real keyframes should have been ingested into off-heap buffer");
+        Assertions.assertTrue(telemetry.activeSlotsCount() > 0,
+                "Real keyframes should have been ingested into off-heap buffer");
         Assertions.assertTrue(telemetry.isOffHeap());
         Assertions.assertEquals(0L, telemetry.droppedFrames());
     }

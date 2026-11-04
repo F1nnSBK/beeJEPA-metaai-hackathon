@@ -42,6 +42,7 @@ public class AudioSpectralAnalyzerTest {
     }
 
     @Test
+
     public void testZeroArtificialLatencyModel() {
         ResponseLatencyModel model = new ResponseLatencyModel();
         assertEquals(0L, model.sampleConversationalDelayMs());

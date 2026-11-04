@@ -74,10 +74,10 @@ class ApplicationTest {
                 38,
                 15,
                 "multibee_cluster",
-                java.util.List.of(new com.beejepa.muse.SamGeometry.ContainedBee(0, java.util.List.of(10, 20, 30, 40), 0.85)),
+                java.util.List
+                        .of(new com.beejepa.muse.SamGeometry.ContainedBee(0, java.util.List.of(10, 20, 30, 40), 0.85)),
                 "frameB64",
-                "cropB64"
-        );
+                "cropB64");
         String json = jsonMapper.writeValueAsString(summary);
         Assertions.assertNotNull(json);
         Assertions.assertTrue(json.contains("evt-1"));

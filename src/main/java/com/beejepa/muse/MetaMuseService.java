@@ -59,10 +59,10 @@ public class MetaMuseService {
 
     private static final Logger LOG = LoggerFactory.getLogger(MetaMuseService.class);
     private static final String BASETEN_MODEL = "meta-models/muse-spark-open-1026";
-    private static final Pattern COMMENTARY_BLOCK =
-            Pattern.compile("<\\|start\\|>assistant to=commentary<\\|message\\|>(.*?)<\\|eom\\|>", Pattern.DOTALL);
-    private static final Pattern INTERNAL_TAG_BLOCK =
-            Pattern.compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eot\\|>|$)", Pattern.DOTALL);
+    private static final Pattern COMMENTARY_BLOCK = Pattern
+            .compile("<\\|start\\|>assistant to=commentary<\\|message\\|>(.*?)<\\|eom\\|>", Pattern.DOTALL);
+    private static final Pattern INTERNAL_TAG_BLOCK = Pattern
+            .compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eot\\|>|$)", Pattern.DOTALL);
 
     private final MetaMuseClient client;
     private final MetaMuseConfig config;
@@ -86,41 +86,40 @@ public class MetaMuseService {
             String reportMarkdown,
             String spokenSummary,
             String sourceMode,
-            boolean degradedFallback
-    ) {
+            boolean degradedFallback) {
         public MuseAnswerResult(
                 String rawCombinedOrMarkdown,
                 String sourceMode,
-                boolean degradedFallback
-        ) {
+                boolean degradedFallback) {
             this(
                     TolerantPayloadParser.parseDualMuseOutput(rawCombinedOrMarkdown).displayReport(),
                     TolerantPayloadParser.parseDualMuseOutput(rawCombinedOrMarkdown).spokenSummary(),
                     sourceMode,
-                    degradedFallback
-            );
+                    degradedFallback);
         }
     }
 
     @Inject
     public MetaMuseService(MetaMuseClient client,
-                           MetaMuseConfig config,
-                           @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
-                           StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService,
-                           @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
-                           @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
-                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache,
-                           @io.micronaut.core.annotation.Nullable ResilientApiExecutor resilientExecutor,
-                           @io.micronaut.core.annotation.Nullable com.beejepa.perception.ActivePerceptionService perceptionService) {
+            MetaMuseConfig config,
+            @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
+            StateRepository stateRepository,
+            com.beejepa.event.EventService eventService,
+            @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
+            @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
+            @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache,
+            @io.micronaut.core.annotation.Nullable ResilientApiExecutor resilientExecutor,
+            @io.micronaut.core.annotation.Nullable com.beejepa.perception.ActivePerceptionService perceptionService) {
         this.client = client;
         this.config = config;
         this.basetenConfig = basetenConfig != null ? basetenConfig : new BasetenConfig();
         this.stateRepository = stateRepository;
         this.eventService = eventService;
-        this.objectMapper = objectMapper != null ? objectMapper : com.beejepa.config.JacksonFactory.createTolerantMapper();
+        this.objectMapper = objectMapper != null ? objectMapper
+                : com.beejepa.config.JacksonFactory.createTolerantMapper();
         this.resilientExecutor = resilientExecutor != null ? resilientExecutor : new ResilientApiExecutor();
-        this.sam31Client = sam31Client != null ? sam31Client : new Sam31Client(this.objectMapper, this.resilientExecutor);
+        this.sam31Client = sam31Client != null ? sam31Client
+                : new Sam31Client(this.objectMapper, this.resilientExecutor);
         this.diskCache = diskCache != null ? diskCache : new MuseDiskCache(this.objectMapper);
         this.perceptionService = perceptionService;
 
@@ -131,8 +130,7 @@ public class MetaMuseService {
                 ? "true".equalsIgnoreCase(envLive)
                 : this.basetenConfig.isAllowInferenceCalls();
         this.simulatedOfflineDelayMs = Long.parseLong(
-                Optional.ofNullable(getEnvOrProp("UX_SIMULATE_LATENCY_MS")).orElse("450")
-        );
+                Optional.ofNullable(getEnvOrProp("UX_SIMULATE_LATENCY_MS")).orElse("450"));
 
         String primaryKey = Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY1"))
                 .or(() -> Optional.ofNullable(getEnvOrProp("BASETEN_API_KEY")))
@@ -159,14 +157,15 @@ public class MetaMuseService {
     }
 
     public MetaMuseService(MetaMuseClient client,
-                           MetaMuseConfig config,
-                           @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
-                           StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService,
-                           @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
-                           @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
-                           @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache) {
-        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper, diskCache, new ResilientApiExecutor(), null);
+            MetaMuseConfig config,
+            @io.micronaut.core.annotation.Nullable BasetenConfig basetenConfig,
+            StateRepository stateRepository,
+            com.beejepa.event.EventService eventService,
+            @io.micronaut.core.annotation.Nullable Sam31Client sam31Client,
+            @io.micronaut.core.annotation.Nullable ObjectMapper objectMapper,
+            @io.micronaut.core.annotation.Nullable MuseDiskCache diskCache) {
+        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper, diskCache,
+                new ResilientApiExecutor(), null);
     }
 
     private static String getEnvOrProp(String key) {
@@ -175,27 +174,29 @@ public class MetaMuseService {
     }
 
     public MetaMuseService(MetaMuseClient client,
-                           MetaMuseConfig config,
-                           BasetenConfig basetenConfig,
-                           StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService,
-                           Sam31Client sam31Client,
-                           ObjectMapper objectMapper) {
-        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper, new MuseDiskCache(objectMapper != null ? objectMapper : new ObjectMapper()));
+            MetaMuseConfig config,
+            BasetenConfig basetenConfig,
+            StateRepository stateRepository,
+            com.beejepa.event.EventService eventService,
+            Sam31Client sam31Client,
+            ObjectMapper objectMapper) {
+        this(client, config, basetenConfig, stateRepository, eventService, sam31Client, objectMapper,
+                new MuseDiskCache(objectMapper != null ? objectMapper : new ObjectMapper()));
     }
 
     public MetaMuseService(MetaMuseClient client,
-                           MetaMuseConfig config,
-                           BasetenConfig basetenConfig,
-                           StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService) {
-        this(client, config, basetenConfig, stateRepository, eventService, new Sam31Client(new ObjectMapper()), new ObjectMapper());
+            MetaMuseConfig config,
+            BasetenConfig basetenConfig,
+            StateRepository stateRepository,
+            com.beejepa.event.EventService eventService) {
+        this(client, config, basetenConfig, stateRepository, eventService, new Sam31Client(new ObjectMapper()),
+                new ObjectMapper());
     }
 
     public MetaMuseService(MetaMuseClient client,
-                           MetaMuseConfig config,
-                           StateRepository stateRepository,
-                           com.beejepa.event.EventService eventService) {
+            MetaMuseConfig config,
+            StateRepository stateRepository,
+            com.beejepa.event.EventService eventService) {
         this(client, config, new BasetenConfig(), stateRepository, eventService);
     }
 
@@ -211,7 +212,8 @@ public class MetaMuseService {
         long startTime = System.currentTimeMillis();
         String logId = UUID.randomUUID().toString();
         String endpoint = "/v1/chat/completions";
-        String promptKey = "infer:" + (request.model() != null ? request.model() : BASETEN_MODEL) + ":" + request.prompt();
+        String promptKey = "infer:" + (request.model() != null ? request.model() : BASETEN_MODEL) + ":"
+                + request.prompt();
 
         Optional<String> cachedText = diskCache != null ? diskCache.getMuseResponse(promptKey) : Optional.empty();
         if (cachedText.isPresent()) {
@@ -220,15 +222,16 @@ public class MetaMuseService {
                     .filter(m -> !m.isBlank())
                     .orElseGet(() -> Optional.ofNullable(basetenConfig.getModel()).orElse(BASETEN_MODEL));
             if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
+                stateRepository
+                        .logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
             }
             return new MuseInferenceResponse(
                     "cache-" + UUID.randomUUID(),
                     activeModel,
                     List.of(),
                     cachedText.get(),
-                    Map.of("status", "cache_hit", "cacheBackend", diskCache.getCacheBackendDescription(), "latencyMs", latency)
-            );
+                    Map.of("status", "cache_hit", "cacheBackend", diskCache.getCacheBackendDescription(), "latencyMs",
+                            latency));
         }
 
         if (!basetenConfig.isConfigured() && !config.isConfigured()) {
@@ -253,15 +256,15 @@ public class MetaMuseService {
                 }
                 long latency = System.currentTimeMillis() - startTime;
                 if (stateRepository != null) {
-                    stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
+                    stateRepository.logMuseCall(
+                            new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
                 }
                 return new MuseInferenceResponse(
                         completion.id(),
                         activeModel,
                         List.of(),
                         text,
-                        Map.of("status", "live_success", "provider", "baseten", "latencyMs", latency)
-                );
+                        Map.of("status", "live_success", "provider", "baseten", "latencyMs", latency));
             }
 
             String authHeader = "Bearer " + config.getApiKey();
@@ -270,7 +273,8 @@ public class MetaMuseService {
 
             int statusCode = response.getStatus().getCode();
             if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), statusCode, latency, Instant.now()));
+                stateRepository.logMuseCall(
+                        new MuseLogEntry(logId, endpoint, request.prompt(), statusCode, latency, Instant.now()));
             }
 
             if (response.getBody().isPresent()) {
@@ -286,7 +290,8 @@ public class MetaMuseService {
             long latency = System.currentTimeMillis() - startTime;
             LOG.error("Meta Muse API call failed: {}", e.getMessage());
             if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 500, latency, Instant.now()));
+                stateRepository
+                        .logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 500, latency, Instant.now()));
             }
             throw new RuntimeException("Meta Muse API call failed: " + e.getMessage(), e);
         }
@@ -308,7 +313,8 @@ public class MetaMuseService {
 
             int statusCode = response.getStatus().getCode();
             if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), statusCode, latency, Instant.now()));
+                stateRepository.logMuseCall(
+                        new MuseLogEntry(logId, endpoint, request.prompt(), statusCode, latency, Instant.now()));
             }
 
             if (response.getBody().isPresent()) {
@@ -320,7 +326,8 @@ public class MetaMuseService {
             long latency = System.currentTimeMillis() - startTime;
             LOG.error("Meta Muse embedding API call failed: {}", e.getMessage());
             if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 500, latency, Instant.now()));
+                stateRepository
+                        .logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 500, latency, Instant.now()));
             }
             throw new RuntimeException("Meta Muse embedding API call failed: " + e.getMessage(), e);
         }
@@ -340,8 +347,7 @@ public class MetaMuseService {
                     0,
                     basetenConfig.getBaseUrl(),
                     List.of(),
-                    "No BASETEN_API_KEY or META_MUSE_API_KEY configured."
-            );
+                    "No BASETEN_API_KEY or META_MUSE_API_KEY configured.");
         }
     }
 
@@ -352,7 +358,8 @@ public class MetaMuseService {
                     .connectTimeout(Duration.ofSeconds(5))
                     .build();
 
-            String rawBase = basetenConfig.getBaseUrl() != null ? basetenConfig.getBaseUrl().trim() : "https://inference.baseten.co/v1";
+            String rawBase = basetenConfig.getBaseUrl() != null ? basetenConfig.getBaseUrl().trim()
+                    : "https://inference.baseten.co/v1";
             String base = rawBase.replaceAll("/+$", "");
             String targetUrl = base.endsWith("/models") ? base : base + "/models";
 
@@ -364,11 +371,13 @@ public class MetaMuseService {
                     .GET()
                     .build();
 
-            java.net.http.HttpResponse<String> response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            java.net.http.HttpResponse<String> response = httpClient.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
             long latency = System.currentTimeMillis() - startTime;
             int code = response.statusCode();
 
-            if ((code == 401 || code == 403) && !basetenConfig.getFallbackApiKey().isBlank() && !basetenConfig.getFallbackApiKey().equals(basetenConfig.getApiKey())) {
+            if ((code == 401 || code == 403) && !basetenConfig.getFallbackApiKey().isBlank()
+                    && !basetenConfig.getFallbackApiKey().equals(basetenConfig.getApiKey())) {
                 LOG.info("Baseten primary API key returned HTTP {}. Retrying with secondary API key fallback...", code);
                 request = HttpRequest.newBuilder()
                         .uri(URI.create(targetUrl))
@@ -384,7 +393,8 @@ public class MetaMuseService {
 
             if (code >= 200 && code < 300) {
                 List<String> models = parseModelIds(response.body());
-                boolean hasMuseSpark = models.contains("meta-models/muse-spark-open") || models.contains("meta-models/muse-spark-open-1026");
+                boolean hasMuseSpark = models.contains("meta-models/muse-spark-open")
+                        || models.contains("meta-models/muse-spark-open-1026");
                 String msg = hasMuseSpark
                         ? "Baseten Muse Spark Open Model API connected & verified (0 credits consumed)."
                         : "Baseten Model API connected (0 credits consumed).";
@@ -397,8 +407,7 @@ public class MetaMuseService {
                         latency,
                         basetenConfig.getBaseUrl(),
                         models,
-                        msg
-                );
+                        msg);
             } else if (code == 401 || code == 403) {
                 return new MetaHealthCheckResult(
                         true,
@@ -408,8 +417,7 @@ public class MetaMuseService {
                         latency,
                         basetenConfig.getBaseUrl(),
                         List.of(),
-                        "Baseten API authentication failed (HTTP " + code + "): Invalid or expired BASETEN_API_KEY."
-                );
+                        "Baseten API authentication failed (HTTP " + code + "): Invalid or expired BASETEN_API_KEY.");
             } else {
                 return new MetaHealthCheckResult(
                         true,
@@ -419,8 +427,7 @@ public class MetaMuseService {
                         latency,
                         basetenConfig.getBaseUrl(),
                         List.of(),
-                        "Baseten API returned status HTTP " + code
-                );
+                        "Baseten API returned status HTTP " + code);
             }
         } catch (Exception e) {
             long latency = System.currentTimeMillis() - startTime;
@@ -433,8 +440,7 @@ public class MetaMuseService {
                     latency,
                     basetenConfig.getBaseUrl(),
                     List.of(),
-                    "Unable to reach Baseten API endpoint: " + e.getMessage()
-            );
+                    "Unable to reach Baseten API endpoint: " + e.getMessage());
         }
     }
 
@@ -456,7 +462,8 @@ public class MetaMuseService {
                     .GET()
                     .build();
 
-            java.net.http.HttpResponse<String> response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            java.net.http.HttpResponse<String> response = httpClient.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
             long latency = System.currentTimeMillis() - startTime;
             int code = response.statusCode();
 
@@ -470,8 +477,7 @@ public class MetaMuseService {
                         latency,
                         config.getBaseUrl(),
                         models,
-                        "Successfully connected to Meta Model API (0 credits consumed)."
-                );
+                        "Successfully connected to Meta Model API (0 credits consumed).");
             } else if (code == 401 || code == 403) {
                 return new MetaHealthCheckResult(
                         true,
@@ -481,8 +487,7 @@ public class MetaMuseService {
                         latency,
                         config.getBaseUrl(),
                         List.of(),
-                        "Meta API authentication failed (HTTP " + code + "): Invalid or expired META_MUSE_API_KEY."
-                );
+                        "Meta API authentication failed (HTTP " + code + "): Invalid or expired META_MUSE_API_KEY.");
             } else {
                 return new MetaHealthCheckResult(
                         true,
@@ -492,8 +497,7 @@ public class MetaMuseService {
                         latency,
                         config.getBaseUrl(),
                         List.of(),
-                        "Meta API returned status HTTP " + code
-                );
+                        "Meta API returned status HTTP " + code);
             }
         } catch (Exception e) {
             long latency = System.currentTimeMillis() - startTime;
@@ -506,14 +510,14 @@ public class MetaMuseService {
                     latency,
                     config.getBaseUrl(),
                     List.of(),
-                    "Unable to reach Meta API endpoint: " + e.getMessage()
-            );
+                    "Unable to reach Meta API endpoint: " + e.getMessage());
         }
     }
 
     private List<String> parseModelIds(String json) {
         List<String> models = new ArrayList<>();
-        if (json == null || json.isBlank()) return models;
+        if (json == null || json.isBlank())
+            return models;
         Matcher m = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
         while (m.find()) {
             models.add(m.group(1));
@@ -522,9 +526,12 @@ public class MetaMuseService {
     }
 
     /**
-     * Builds the exact Muse request that {@link #answerBeekeeperQuestionWithMeta} would send for this event,
-     * without transmitting it. Only already measured SAM results are included (no live calls here);
-     * image parts are listed with their size but their base64 payload is omitted from the preview.
+     * Builds the exact Muse request that {@link #answerBeekeeperQuestionWithMeta}
+     * would send for this event,
+     * without transmitting it. Only already measured SAM results are included (no
+     * live calls here);
+     * image parts are listed with their size but their base64 payload is omitted
+     * from the preview.
      */
     public StagedMuseRequest prepareMuseQuery(PrepareMuseQueryRequest request) {
         String eventId = request != null ? request.eventId() : null;
@@ -540,8 +547,9 @@ public class MetaMuseService {
             if (s == null) {
                 s = diskCache.loadSpatialSummary(in.eventId()).orElse(null);
             }
-            return s != null ? s : new EventSpatialSummary(in.eventId(), in.formattedTime(), in.surpriseScore(),
-                    in.severity(), -1, -1, "not_segmented_yet", List.of(), List.of(), "", "");
+            return s != null ? s
+                    : new EventSpatialSummary(in.eventId(), in.formattedTime(), in.surpriseScore(),
+                            in.severity(), -1, -1, "not_segmented_yet", List.of(), List.of(), "", "");
         }).toList();
 
         Map<String, ManifestEventInput> inputsById = new HashMap<>();
@@ -559,14 +567,16 @@ public class MetaMuseService {
         for (EventSpatialSummary s : summaries) {
             if (s.cropBase64() != null && !s.cropBase64().isBlank()) {
                 userContent.add(Map.of("type", "image_url", "image_url",
-                        Map.of("url", "data:image/jpeg;base64,<" + s.cropBase64().length() + " base64 chars omitted in preview>")));
+                        Map.of("url", "data:image/jpeg;base64,<" + s.cropBase64().length()
+                                + " base64 chars omitted in preview>")));
             }
         }
 
         String activeModel = Optional.ofNullable(getEnvOrProp("BASETEN_MUSE_MODEL"))
                 .or(() -> Optional.ofNullable(basetenConfig.getModel()))
                 .orElse(BASETEN_MODEL);
-        String rawBase = basetenConfig.getBaseUrl() != null ? basetenConfig.getBaseUrl().trim() : "https://inference.baseten.co/v1";
+        String rawBase = basetenConfig.getBaseUrl() != null ? basetenConfig.getBaseUrl().trim()
+                : "https://inference.baseten.co/v1";
         String base = rawBase.replaceAll("/+$", "");
         String targetUrl = base.endsWith("/chat/completions") ? base : base + "/chat/completions";
 
@@ -574,7 +584,8 @@ public class MetaMuseService {
                 "type", "function",
                 "function", Map.of(
                         "name", "QuerySam31Concept",
-                        "description", "Calls Meta SAM 3.1 on the event's peak frame to count instances of a short noun concept (e.g. 'bee', 'wasp').",
+                        "description",
+                        "Calls Meta SAM 3.1 on the event's peak frame to count instances of a short noun concept (e.g. 'bee', 'wasp').",
                         "parameters", Map.of(
                                 "type", "object",
                                 "properties", Map.of(
@@ -622,7 +633,8 @@ public class MetaMuseService {
     /** Maps an EventService event map onto the input record used for SAM + Muse. */
     @SuppressWarnings("unchecked")
     public static ManifestEventInput toManifestInput(Map<String, Object> ev) {
-        com.beejepa.event.AnomalyEvent.Hotspot hs = ev.get("hotspot") instanceof com.beejepa.event.AnomalyEvent.Hotspot h ? h : null;
+        com.beejepa.event.AnomalyEvent.Hotspot hs = ev
+                .get("hotspot") instanceof com.beejepa.event.AnomalyEvent.Hotspot h ? h : null;
         return new ManifestEventInput(
                 String.valueOf(ev.get("eventId")),
                 String.valueOf(ev.getOrDefault("formattedTime", "")),
@@ -638,7 +650,8 @@ public class MetaMuseService {
     }
 
     /**
-     * Builds the exact SAM 3.1 request that {@link Sam31Client#queryConcept} sends for this event's peak
+     * Builds the exact SAM 3.1 request that {@link Sam31Client#queryConcept} sends
+     * for this event's peak
      * frame, without transmitting it.
      */
     public com.beejepa.muse.dto.StagedSamRequest prepareSamQuery(com.beejepa.muse.dto.PrepareSamQueryRequest request) {
@@ -646,7 +659,8 @@ public class MetaMuseService {
             throw new IllegalArgumentException("eventId is required to stage SAM query");
         }
         String eventId = request.eventId().trim();
-        String rawBase = config.getBaseUrl() != null && !config.getBaseUrl().isBlank() ? config.getBaseUrl().trim() : "https://api.meta.ai";
+        String rawBase = config.getBaseUrl() != null && !config.getBaseUrl().isBlank() ? config.getBaseUrl().trim()
+                : "https://api.meta.ai";
         String base = rawBase.replaceAll("/+$", "");
         String targetUrl = base.endsWith("/v1") ? base + "/responses" : base + "/v1/responses";
         String concept = request.prompt() != null && !request.prompt().isBlank() ? request.prompt().trim() : "bee";
@@ -667,7 +681,8 @@ public class MetaMuseService {
                 "role", "user",
                 "content", List.of(
                         Map.of("type", "input_text", "text", concept),
-                        Map.of("type", "input_image", "image_url", "data:image/jpeg;base64,<peak frame of " + eventId + ", 688x688 top-left crop>")))));
+                        Map.of("type", "input_image", "image_url",
+                                "data:image/jpeg;base64,<peak frame of " + eventId + ", 688x688 top-left crop>")))));
         payload.put("metadata", Map.of("mask_encoding", "one_bit"));
 
         Map<String, Object> hotspot = new LinkedHashMap<>();
@@ -728,15 +743,17 @@ public class MetaMuseService {
             int[] boundingBoxPx,
             String recordingId,
             Integer boardPeaks,
-            Double decisionThreshold
-    ) {
-        public ManifestEventInput(String eventId, String formattedTime, double surpriseScore, String severity, Path keyframePath) {
+            Double decisionThreshold) {
+        public ManifestEventInput(String eventId, String formattedTime, double surpriseScore, String severity,
+                Path keyframePath) {
             this(eventId, formattedTime, surpriseScore, severity, keyframePath, null, null, null, null, null, null);
         }
 
-        public ManifestEventInput(String eventId, String formattedTime, double surpriseScore, String severity, Path keyframePath,
-                                  Double normCenterX, Double normCenterY, int[] boundingBoxPx) {
-            this(eventId, formattedTime, surpriseScore, severity, keyframePath, normCenterX, normCenterY, boundingBoxPx, null, null, null);
+        public ManifestEventInput(String eventId, String formattedTime, double surpriseScore, String severity,
+                Path keyframePath,
+                Double normCenterX, Double normCenterY, int[] boundingBoxPx) {
+            this(eventId, formattedTime, surpriseScore, severity, keyframePath, normCenterX, normCenterY, boundingBoxPx,
+                    null, null, null);
         }
     }
 
@@ -753,15 +770,12 @@ public class MetaMuseService {
         public boolean includeBaselineBeeCount;
     }
 
-    /** Classification used when SAM 3.1 could not be executed; counts are then reported as -1 (unknown). */
     public static final String SAM_UNAVAILABLE = "sam_unavailable";
-    /** Classification used when the event has no measured V-JEPA hotspot (no in-hotspot count possible). */
     public static final String NO_MEASURED_HOTSPOT = "no_measured_hotspot";
 
     /**
-     * Runs real SAM 3.1 "bee" segmentation on the event's exact peak frame and intersects it with the
-     * measured V-JEPA hotspot. Only successful SAM results are cached. Failures yield counts of -1 and
-     * the classification {@link #SAM_UNAVAILABLE}; nothing is estimated or substituted.
+     * Runs SAM 3.1 bee segmentation on the event peak frame and computes hotspot
+     * containment.
      */
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
         EventSpatialSummary inMemory = spatialCache.get(evt.eventId());
@@ -810,7 +824,8 @@ public class MetaMuseService {
             return unavailableSummary(evt, score, frameB64, "");
         }
 
-        BoundingBox hotspot = SamGeometry.fromManifestBoxPx(evt.boundingBoxPx(), canonical.getWidth(), canonical.getHeight());
+        BoundingBox hotspot = SamGeometry.fromManifestBoxPx(evt.boundingBoxPx(), canonical.getWidth(),
+                canonical.getHeight());
         EventSpatialSummary summary;
         try {
             if (hotspot == null) {
@@ -819,7 +834,8 @@ public class MetaMuseService {
                         boardBees.stream().map(BoundingBox::toList).toList(), frameB64, "");
             } else {
                 List<ContainedBee> contained = SamGeometry.findContainedBees(hotspot, boardBees);
-                RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(canonical, hotspot, boardBees, contained, 35);
+                RenderedVisuals visuals = VisualCropRenderer.renderOverlaysAndCrop(canonical, hotspot, boardBees,
+                        contained, 35);
                 summary = new EventSpatialSummary(evt.eventId(), evt.formattedTime(), score, evt.severity(),
                         boardBees.size(), contained.size(), SamGeometry.classifyHotspot(contained), contained,
                         boardBees.stream().map(BoundingBox::toList).toList(),
@@ -831,7 +847,7 @@ public class MetaMuseService {
         }
 
         spatialCache.put(evt.eventId(), summary);
-        diskCache.saveSpatialSummary(summary); // persisted only if it carries frame + crop evidence
+        diskCache.saveSpatialSummary(summary);
         if (perceptionService != null) {
             try {
                 perceptionService.refreshTrajectory();
@@ -841,7 +857,8 @@ public class MetaMuseService {
         return summary;
     }
 
-    private static EventSpatialSummary unavailableSummary(ManifestEventInput evt, double score, String frameB64, String cropB64) {
+    private static EventSpatialSummary unavailableSummary(ManifestEventInput evt, double score, String frameB64,
+            String cropB64) {
         return new EventSpatialSummary(evt.eventId(), evt.formattedTime(), score, evt.severity(),
                 -1, -1, SAM_UNAVAILABLE, List.of(), List.of(), frameB64, cropB64);
     }
@@ -874,7 +891,8 @@ public class MetaMuseService {
         return answerBeekeeperQuestion(beekeeperQuestion, events, maxEvents, false);
     }
 
-    public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> events, int maxEvents, boolean forceLive) {
+    public String answerBeekeeperQuestion(String beekeeperQuestion, List<ManifestEventInput> events, int maxEvents,
+            boolean forceLive) {
         return answerBeekeeperQuestionWithMeta(beekeeperQuestion, events, maxEvents, forceLive).reportMarkdown();
     }
 
@@ -882,17 +900,15 @@ public class MetaMuseService {
             String beekeeperQuestion,
             List<ManifestEventInput> events,
             int maxEvents,
-            boolean forceLive
-    ) {
+            boolean forceLive) {
         List<ManifestEventInput> safeEvents = events != null ? events : List.of();
         List<ManifestEventInput> selectedEvents = safeEvents.stream()
                 .limit(Math.max(1, maxEvents))
                 .toList();
 
         String eventIdsKey = selectedEvents.stream().map(ManifestEventInput::eventId).reduce("", (a, b) -> a + "," + b);
-        String cacheKey = promptVersionKey() + "|" + beekeeperQuestion + "|" + eventIdsKey;
+        String cacheKey = MuseDiskCache.buildDeterministicKey(eventIdsKey, beekeeperQuestion, promptVersionKey());
 
-        // 1. Exact cache hit for this question + event set + prompt/model version only
         if (!forceLive) {
             Optional<String> cachedReport = diskCache.getMuseResponse(cacheKey);
             if (cachedReport.isPresent()) {
@@ -900,8 +916,6 @@ public class MetaMuseService {
             }
         }
 
-        // 2. Live API execution. On failure the caller receives an explicit UNAVAILABLE result:
-        //    no answer from another question, no synthesized report.
         LOG.info("[MetaMuseService] LIVE QUERY to Meta Muse: question='{}', events={}",
                 beekeeperQuestion, selectedEvents.stream().map(ManifestEventInput::eventId).toList());
         try {
@@ -917,7 +931,9 @@ public class MetaMuseService {
         }
     }
 
-    /** Short hash of model + system prompt so cached answers are invalidated whenever either changes. */
+    /**
+     * Computes a version tag from the active model identifier and system prompt.
+     */
     String promptVersionKey() {
         String activeModel = Optional.ofNullable(getEnvOrProp("BASETEN_MUSE_MODEL"))
                 .or(() -> Optional.ofNullable(basetenConfig.getModel()))
@@ -925,8 +941,9 @@ public class MetaMuseService {
         return "v" + Integer.toHexString((activeModel + "\n" + getEffectiveSystemPrompt()).hashCode());
     }
 
-    /** Measured facts per event sent to Muse. Unknown values are null, never estimated. */
-    List<Map<String, Object>> buildDigest(List<EventSpatialSummary> summaries, Map<String, ManifestEventInput> inputsById) {
+    /** Builds the per-event summary digest payload for multimodal reasoning. */
+    List<Map<String, Object>> buildDigest(List<EventSpatialSummary> summaries,
+            Map<String, ManifestEventInput> inputsById) {
         return summaries.stream().map(s -> {
             ManifestEventInput in = inputsById.get(s.eventId());
             Map<String, Object> m = new LinkedHashMap<>();
@@ -963,8 +980,8 @@ public class MetaMuseService {
         List<ChatCompletionContentPart> userParts = new ArrayList<>();
         try {
             userParts.add(ChatCompletionContentPart.ofText(
-                    ChatCompletionContentPartText.builder().text(buildHeaderText(beekeeperQuestion, digestList)).build()
-            ));
+                    ChatCompletionContentPartText.builder().text(buildHeaderText(beekeeperQuestion, digestList))
+                            .build()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -978,15 +995,13 @@ public class MetaMuseService {
                             .text("Hotspot crop (peak frame, measured V-JEPA hotspot, SAM bee boxes drawn) for "
                                     + s.eventId() + " at " + s.timestamp() + " into its recording (token-delta score "
                                     + s.tokenDeltaScore() + "):")
-                            .build()
-            ));
+                            .build()));
             userParts.add(ChatCompletionContentPart.ofImageUrl(
                     ChatCompletionContentPartImage.builder()
                             .imageUrl(ChatCompletionContentPartImage.ImageUrl.builder()
                                     .url("data:image/jpeg;base64," + s.cropBase64())
                                     .build())
-                            .build()
-            ));
+                            .build()));
         }
 
         String systemPrompt = getEffectiveSystemPrompt();
@@ -1028,8 +1043,8 @@ public class MetaMuseService {
             }
             ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
             String rawArgsJson = ftc.function()._arguments().toString();
-            TolerantPayloadParser.ParsedSamConceptArgs args =
-                    TolerantPayloadParser.parseSamConceptArgs(rawArgsJson, summaries);
+            TolerantPayloadParser.ParsedSamConceptArgs args = TolerantPayloadParser.parseSamConceptArgs(rawArgsJson,
+                    summaries);
             EventSpatialSummary targetEvent = summaries.stream()
                     .filter(s -> s.eventId().equals(args.resolvedEventId()))
                     .findFirst()
@@ -1055,18 +1070,19 @@ public class MetaMuseService {
                 toolResult.put("matches", matches.size());
                 toolResult.put("match_boxes_xyxy", matches.stream().map(BoundingBox::toList).toList());
             } catch (Exception samEx) {
-                LOG.warn("[MetaMuseService] Tool SAM 3.1 concept query '{}' failed: {}", args.conceptPrompt(), samEx.getMessage());
+                LOG.warn("[MetaMuseService] Tool SAM 3.1 concept query '{}' failed: {}", args.conceptPrompt(),
+                        samEx.getMessage());
                 toolResult.put("sam_status", "FAILED");
                 toolResult.put("error", "SAM 3.1 could not be executed; the number of matches is unknown.");
             }
-            toolResult.put("instruction", "Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> and <SPOKEN>...</SPOKEN>. If sam_status is FAILED, state that the check could not be performed.");
+            toolResult.put("instruction",
+                    "Do NOT invoke further tools. Return the final response with BOTH <REPORT>...</REPORT> and <SPOKEN>...</SPOKEN>. If sam_status is FAILED, state that the check could not be performed.");
 
             paramsBuilder.addMessage(
                     ChatCompletionToolMessageParam.builder()
                             .toolCallId(ftc.id())
                             .contentAsJson(toolResult)
-                            .build()
-            );
+                            .build());
         }
 
         ChatCompletion secondTurn = executeWithKeyFailover(paramsBuilder.build());
@@ -1094,8 +1110,7 @@ public class MetaMuseService {
                                 .create(params);
                     }
                     return basetenClient.chat().completions().create(params);
-                }
-        );
+                });
     }
 
     public ResilientApiExecutor getResilientExecutor() {
@@ -1111,7 +1126,8 @@ public class MetaMuseService {
         if (cleaned.contains("</think>")) {
             cleaned = cleaned.substring(cleaned.indexOf("</think>") + 8).trim();
         }
-        // Strip emojis and pictographs while preserving standard ASCII/Latin/Greek symbols (sigma)
+        // Strip emojis and pictographs while preserving standard ASCII/Latin/Greek
+        // symbols (sigma)
         cleaned = cleaned.replaceAll("[\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE00}-\\x{FE0F}]", "");
         // Strip standalone horizontal markdown divider lines (---)
         cleaned = cleaned.replaceAll("(?m)^\\s*---+\\s*$", "");
@@ -1119,7 +1135,8 @@ public class MetaMuseService {
     }
 
     public String getEffectiveSystemPrompt() {
-        if (basetenConfig != null && basetenConfig.getSystemPrompt() != null && !basetenConfig.getSystemPrompt().isBlank()) {
+        if (basetenConfig != null && basetenConfig.getSystemPrompt() != null
+                && !basetenConfig.getSystemPrompt().isBlank()) {
             String cfgPrompt = basetenConfig.getSystemPrompt().trim();
             if (cfgPrompt.contains("<REPORT>")) {
                 return cfgPrompt;
@@ -1185,4 +1202,3 @@ public class MetaMuseService {
         return basetenConfig;
     }
 }
-

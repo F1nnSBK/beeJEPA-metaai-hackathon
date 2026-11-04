@@ -20,8 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 /**
- * Dual-tier live cache backed by Redis (L1 distributed cache) and SQLite WAL (L2 persistent state.db).
- * Replaces all static JSON/MP3 mock cache files on disk.
+ * Multi-tier cache backed by an in-memory L0 map, Redis L1, and SQLite WAL L2
+ * persistence.
  */
 @Singleton
 public class MuseDiskCache {
@@ -40,30 +40,26 @@ public class MuseDiskCache {
     public MuseDiskCache(
             ObjectMapper objectMapper,
             @Nullable StateRepository stateRepository,
-            @Nullable RedisCacheClient redisCacheClient
-    ) {
+            @Nullable RedisCacheClient redisCacheClient) {
         this(
                 objectMapper != null ? objectMapper : JacksonFactory.createTolerantMapper(),
                 stateRepository != null ? stateRepository : createDefaultStateRepository(null),
                 redisCacheClient != null ? redisCacheClient : new RedisCacheClient(),
                 resolveDefaultCacheDir(),
-                resolveDefaultTtlSeconds()
-        );
+                resolveDefaultTtlSeconds());
     }
 
     public MuseDiskCache(
             ObjectMapper objectMapper,
             StateRepository stateRepository,
             RedisCacheClient redisCacheClient,
-            long ttlSeconds
-    ) {
+            long ttlSeconds) {
         this(
                 objectMapper != null ? objectMapper : JacksonFactory.createTolerantMapper(),
                 stateRepository != null ? stateRepository : createDefaultStateRepository(null),
                 redisCacheClient != null ? redisCacheClient : new RedisCacheClient("127.0.0.1", 6379, false),
                 resolveDefaultCacheDir(),
-                ttlSeconds
-        );
+                ttlSeconds);
     }
 
     public MuseDiskCache(ObjectMapper objectMapper, Path cacheDir) {
@@ -72,8 +68,7 @@ public class MuseDiskCache {
                 createDefaultStateRepository(cacheDir),
                 new RedisCacheClient("127.0.0.1", 6379, false),
                 cacheDir,
-                resolveDefaultTtlSeconds()
-        );
+                resolveDefaultTtlSeconds());
     }
 
     public MuseDiskCache(ObjectMapper objectMapper) {
@@ -82,8 +77,7 @@ public class MuseDiskCache {
                 createDefaultStateRepository(null),
                 new RedisCacheClient("127.0.0.1", 6379, false),
                 resolveDefaultCacheDir(),
-                resolveDefaultTtlSeconds()
-        );
+                resolveDefaultTtlSeconds());
     }
 
     public MuseDiskCache() {
@@ -95,8 +89,7 @@ public class MuseDiskCache {
             StateRepository stateRepository,
             RedisCacheClient redisCacheClient,
             Path cacheDir,
-            long ttlSeconds
-    ) {
+            long ttlSeconds) {
         this.objectMapper = objectMapper;
         this.stateRepository = stateRepository;
         this.redisCacheClient = redisCacheClient;
@@ -231,8 +224,7 @@ public class MuseDiskCache {
                         json,
                         summary.landingBoardBeeCount(),
                         summary.beesInsideHotspotCount(),
-                        ttlSeconds
-                );
+                        ttlSeconds);
             }
             if (redisCacheClient != null) {
                 redisCacheClient.setString("beejepa:sam:" + summary.eventId(), json, ttlSeconds);
@@ -242,8 +234,19 @@ public class MuseDiskCache {
         }
     }
 
+    public static String buildDeterministicKey(String eventId, String prompt, String modelVersion) {
+        String normPrompt = prompt == null ? "" : prompt.trim().toLowerCase().replaceAll("\\s+", " ");
+        String normEvent = eventId == null ? "" : eventId.trim();
+        String normVer = modelVersion == null ? "" : modelVersion.trim();
+        return normVer + "|" + normPrompt + "|" + normEvent;
+    }
+
     public Optional<String> getMuseResponse(String cacheKey) {
         String norm = normalizeKey(cacheKey);
+        String l0Hit = l0ResponseCache.get(norm);
+        if (l0Hit != null && !l0Hit.isBlank()) {
+            return Optional.of(l0Hit);
+        }
         String redisKey = "beejepa:muse:" + norm;
         if (redisCacheClient != null) {
             Optional<String> redisHit = redisCacheClient.getString(redisKey);

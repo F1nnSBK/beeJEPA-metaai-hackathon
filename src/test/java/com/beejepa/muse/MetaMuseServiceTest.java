@@ -32,8 +32,7 @@ class MetaMuseServiceTest {
                 "evt_seq015_f0720",
                 "Did a collision happen here?",
                 Map.of(),
-                true
-        );
+                true);
 
         StagedMuseRequest staged = service.prepareMuseQuery(request);
 
@@ -78,12 +77,13 @@ class MetaMuseServiceTest {
         basetenConfig.setApiKey("");
 
         MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
-        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null, JacksonFactory.createTolerantMapper(), cache);
+        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null,
+                JacksonFactory.createTolerantMapper(), cache);
 
-        // Unconfigured service without cache entry must throw IllegalStateException (no mock responses)
-        Assertions.assertThrows(IllegalStateException.class, () ->
-                service.callInference(new MuseInferenceRequest("Uncached prompt"))
-        );
+        // Unconfigured service without cache entry must throw IllegalStateException (no
+        // mock responses)
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> service.callInference(new MuseInferenceRequest("Uncached prompt")));
 
         // When cached in SQLite/Redis, callInference returns the cached response
         MuseInferenceRequest cachedReq = new MuseInferenceRequest("Diagnose collision");
@@ -142,8 +142,7 @@ class MetaMuseServiceTest {
                 "evt_test_123",
                 userPrompt,
                 Map.of("x", 0.35, "y", 0.40, "width", 0.15, "height", 0.15),
-                "image"
-        );
+                "image");
 
         var stagedSam = service.prepareSamQuery(req);
 
@@ -180,15 +179,18 @@ class MetaMuseServiceTest {
     }
 
     @Test
+
     void testAnswerBeekeeperQuestionReturnsUnavailableWhenInferenceDisabledAndUncached(@TempDir Path tempDir) {
         MetaMuseConfig metaConfig = new MetaMuseConfig();
         BasetenConfig basetenConfig = new BasetenConfig();
         basetenConfig.setAllowInferenceCalls(false);
 
         MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
-        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null, JacksonFactory.createTolerantMapper(), cache);
+        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null,
+                JacksonFactory.createTolerantMapper(), cache);
 
-        MetaMuseService.MuseAnswerResult result = service.answerBeekeeperQuestionWithMeta("What happened at my hive today?", List.of(), 3, false);
+        MetaMuseService.MuseAnswerResult result = service
+                .answerBeekeeperQuestionWithMeta("What happened at my hive today?", List.of(), 3, false);
         Assertions.assertNotNull(result);
         Assertions.assertEquals("UNAVAILABLE", result.sourceMode());
         Assertions.assertTrue(result.degradedFallback());

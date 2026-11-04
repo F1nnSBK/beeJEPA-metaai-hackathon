@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
-Generates the scientific Tufte-style SVG figure for the 5-Tier BeeJEPA Pipeline
-(figures/ablation_pyramid_roles.svg) purely from measured dataset metrics in
-data/hackathon_sample/manifest.json and frontend/public/landing/snapshot.json.
-
-Strict compliance with visualization rules:
-- Output format: SVG only (never PNG).
-- Style: Edward Tufte minimalist scientific layout (despined top/right, high data-ink ratio).
-- Typography: Fira Sans / Fira Math, normal weight only (no bold / textbf), no internal annotations.
+Generates the 5-Tier BeeJEPA pipeline SVG figure (figures/ablation_pyramid_roles.svg).
 """
 
 import json

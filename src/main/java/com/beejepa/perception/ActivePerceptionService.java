@@ -15,9 +15,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Builds the saccadic fixation trajectory from events whose V-JEPA hotspot has been measured, and keeps
- * the peak frames of those events in the FFM off-heap ring buffer. Every value exposed here is either
- * read from the dataset, measured from the rendered overlay, or taken from a real SAM 3.1 result.
+ * Maintains the saccadic fixation trajectory across measured event hotspots and
+ * buffers peak frames off-heap.
  */
 @Singleton
 @Context
@@ -31,6 +30,7 @@ public class ActivePerceptionService {
     private final EventService eventService;
     private final MuseDiskCache museDiskCache;
 
+    public final Map<String, float[]> latentStore = new ConcurrentHashMap<>();
     private final Map<String, SaccadicTarget> targetsCache = new ConcurrentHashMap<>();
     private final Map<String, Long> eventBufferSequences = new ConcurrentHashMap<>();
     private final List<SaccadicTarget> trajectory = new ArrayList<>();
@@ -61,7 +61,10 @@ public class ActivePerceptionService {
         refreshTrajectory();
     }
 
-    /** Rebuilds the trajectory over all events that currently have a measured hotspot. */
+    /**
+     * Rebuilds the trajectory over all events that currently have a measured
+     * hotspot.
+     */
     public synchronized List<SaccadicTarget> refreshTrajectory() {
         long version = eventService.getHotspotVersion();
         trajectory.clear();
@@ -71,7 +74,7 @@ public class ActivePerceptionService {
         Integer prevY = null;
         for (Map<String, Object> ev : eventService.listEvents()) {
             if (!(ev.get("hotspot") instanceof AnomalyEvent.Hotspot hotspot) || hotspot.boundingBoxPx() == null) {
-                continue; // no measured hotspot: no fixation target, never a default position
+                continue;
             }
             String eventId = String.valueOf(ev.get("eventId"));
             long frameIndex = ev.get("frameIndex") instanceof Number n ? n.longValue() : 0L;
@@ -128,20 +131,34 @@ public class ActivePerceptionService {
     }
 
     private void ingestFrameIntoRingBuffer(String eventId, long frameIndex, double timestampSec,
-                                           float score, float focusX, float focusY) {
+            float score, float focusX, float focusY) {
         if (eventBufferSequences.containsKey(eventId)) {
             return;
         }
         Optional<byte[]> frameBytesOpt = eventService.getOrExtractEventFrameBytes(eventId);
         if (frameBytesOpt.isPresent() && frameBytesOpt.get().length > 0) {
+            byte[] rawBytes = frameBytesOpt.get();
             long timestampNs = (long) (timestampSec * 1_000_000_000L);
-            long seq = ringBuffer.appendFrame(timestampNs, frameIndex, score, focusX, focusY, frameBytesOpt.get());
+            long seq = ringBuffer.appendFrame(timestampNs, frameIndex, score, focusX, focusY, rawBytes);
             eventBufferSequences.put(eventId, seq);
+            try {
+                java.awt.image.BufferedImage img = javax.imageio.ImageIO
+                        .read(new java.io.ByteArrayInputStream(rawBytes));
+                if (img != null) {
+                    latentStore.put(eventId, com.beejepa.event.HeatmapHotspotExtractor.extractBoardEnergyLatent64(img));
+                }
+            } catch (Exception ignored) {
+            }
         }
     }
 
+    public Map<String, float[]> getLatentStore() {
+        return latentStore;
+    }
+
     /**
-     * Returns the peak frame of an event from the FFM off-heap ring buffer, ingesting it on demand.
+     * Returns the peak frame of an event from the FFM off-heap ring buffer,
+     * ingesting it on demand.
      */
     public Optional<byte[]> getBufferedFrameBytes(String eventId) {
         if (eventId == null) {
@@ -187,8 +204,8 @@ public class ActivePerceptionService {
     }
 
     /**
-     * Describes the role of each pipeline tier for one event, together with the values that are actually
-     * measured for that event. No counterfactual or benchmark numbers are reported: none were measured.
+     * Assembles the 5-tier pipeline role breakdown and measured telemetry for an
+     * event.
      */
     public Map<String, Object> buildAblationPyramid(String requestedEventId) {
         refreshIfHotspotsChanged();
@@ -206,9 +223,11 @@ public class ActivePerceptionService {
 
         Map<String, Object> measured = new LinkedHashMap<>();
         measured.put("datasetSource", timeline.get("source"));
-        measured.put("timelineWindows", timeline.get("summary") instanceof Map<?, ?> s ? s.get("timeline_points_count") : null);
+        measured.put("timelineWindows",
+                timeline.get("summary") instanceof Map<?, ?> s ? s.get("timeline_points_count") : null);
         measured.put("eventsTotal", allEvents.size());
-        measured.put("eventsAboveTau", timeline.get("summary") instanceof Map<?, ?> s ? s.get("events_above_tau") : null);
+        measured.put("eventsAboveTau",
+                timeline.get("summary") instanceof Map<?, ?> s ? s.get("events_above_tau") : null);
         measured.put("eventsWithMeasuredHotspot", withHotspot);
         measured.put("decisionThresholdTau", timeline.get("decisionThreshold"));
         measured.put("decisionThresholdMethod", timeline.get("decisionThresholdMethod"));
@@ -286,7 +305,7 @@ public class ActivePerceptionService {
     }
 
     private static Map<String, Object> tier(String id, int idx, String shortTitle, String name, String component,
-                                            String question, String input, String output, String without) {
+            String question, String input, String output, String without) {
         Map<String, Object> t = new LinkedHashMap<>();
         t.put("id", id);
         t.put("tierIndex", idx);

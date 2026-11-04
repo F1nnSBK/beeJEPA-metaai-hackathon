@@ -15,15 +15,8 @@ import java.time.Duration;
 import java.util.UUID;
 
 /**
- * Client for Meta's speech-to-text model {@code muse-voice-transcribe-1.0}
- * ({@code POST https://api.meta.ai/v1/asr/transcribe}, multipart with a JSON
- * {@code request}
- * part and a WAV {@code audio} part). Accepts mono 16-bit PCM WAV at 16 kHz or
- * 24 kHz.
- *
- * <p>
- * Failures are reported as exceptions; this client never returns a substitute
- * transcript.
+ * HTTP client for speech-to-text transcription via Meta
+ * {@code muse-voice-transcribe-1.0}.
  */
 @Singleton
 public class MetaVoiceTranscribeClient {

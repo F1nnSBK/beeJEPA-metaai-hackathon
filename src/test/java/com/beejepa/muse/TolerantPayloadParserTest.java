@@ -13,10 +13,12 @@ class TolerantPayloadParserTest {
 
     private static List<EventSpatialSummary> sampleEvents() {
         return List.of(
-                new EventSpatialSummary("evt_rec2125_seq000_f0000", "00:00", 16.05, "CRITICAL", 38, 15, "multi_bee_interaction_cluster", List.of(), "f", "c"),
-                new EventSpatialSummary("evt_rec2125_seq000_f1217", "00:20", 13.72, "CRITICAL", 35, 12, "multi_bee_interaction_cluster", List.of(), "f", "c"),
-                new EventSpatialSummary("evt_rec2125_seq001_f0320", "00:35", 12.60, "HIGH", 26, 6, "multi_bee_interaction_cluster", List.of(), "f", "c")
-        );
+                new EventSpatialSummary("evt_rec2125_seq000_f0000", "00:00", 16.05, "CRITICAL", 38, 15,
+                        "multi_bee_interaction_cluster", List.of(), "f", "c"),
+                new EventSpatialSummary("evt_rec2125_seq000_f1217", "00:20", 13.72, "CRITICAL", 35, 12,
+                        "multi_bee_interaction_cluster", List.of(), "f", "c"),
+                new EventSpatialSummary("evt_rec2125_seq001_f0320", "00:35", 12.60, "HIGH", 26, 6,
+                        "multi_bee_interaction_cluster", List.of(), "f", "c"));
     }
 
     @Test
@@ -57,13 +59,15 @@ class TolerantPayloadParserTest {
 
     @Test
     void testParseSamBoxesTokenAndJsonAndCoordinateScaling() {
-        // 1. Standard <|box;x1=...;y1=...;x2=...;y2=...| > token format in [0..1000] scaled to 688x688
+        // 1. Standard <|box;x1=...;y1=...;x2=...;y2=...| > token format in [0..1000]
+        // scaled to 688x688
         String tokenOutput = "<|box;x1=500;y1=500;x2=1000;y2=1000|><|object;0|><|mask;rle|>";
         List<BoundingBox> scaledTokens = TolerantPayloadParser.parseSamBoxes(tokenOutput, 688, 688, true, false);
         Assertions.assertEquals(1, scaledTokens.size());
         Assertions.assertEquals(new BoundingBox(344, 344, 688, 688), scaledTokens.get(0));
 
-        // 2. Live SAM 3.1 token with explicit ;w=688;h=688 preserves pixel coordinates and passes landing-board filter
+        // 2. Live SAM 3.1 token with explicit ;w=688;h=688 preserves pixel coordinates
+        // and passes landing-board filter
         String liveSamToken = "<0f>0<|box;x1=290;y1=385;x2=318;y2=415;w=688;h=688|><|mask;x=0;y=0;data=31,29|>";
         List<BoundingBox> liveBoxes = TolerantPayloadParser.parseSamBoxes(liveSamToken, 688, 688, true, true);
         Assertions.assertEquals(1, liveBoxes.size());
@@ -78,9 +82,10 @@ class TolerantPayloadParserTest {
     }
 
     @Test
+
     void testManifestBoxPxCoordinateFix() {
         // Manifest box_px is [ymin, xmin, ymax, xmax] = [351, 178, 487, 314]
-        BoundingBox fromManifest = SamGeometry.fromManifestBoxPx(new int[]{351, 178, 487, 314}, 688, 688);
+        BoundingBox fromManifest = SamGeometry.fromManifestBoxPx(new int[] { 351, 178, 487, 314 }, 688, 688);
         Assertions.assertEquals(new BoundingBox(178, 351, 314, 487), fromManifest);
     }
 
@@ -105,13 +110,15 @@ class TolerantPayloadParserTest {
         Assertions.assertFalse(parsed.spokenSummary().contains("###"));
         Assertions.assertFalse(parsed.spokenSummary().contains("00:00"));
 
-        // Fallback when raw Markdown without <SPOKEN> is passed: converts 00:00 -> second zero and strips headings
+        // Fallback when raw Markdown without <SPOKEN> is passed: converts 00:00 ->
+        // second zero and strips headings
         String legacyMd = "### Summary\n- Peak at 00:00 (evt_rec2125_seq000_f0000) with 38 bees and 00:20 with 35 bees.";
         TolerantPayloadParser.DualMuseOutput fallback = TolerantPayloadParser.parseDualMuseOutput(legacyMd);
         Assertions.assertFalse(fallback.spokenSummary().contains("00:00"));
         Assertions.assertFalse(fallback.spokenSummary().contains("00:20"));
         Assertions.assertFalse(fallback.spokenSummary().contains("evt_rec2125"));
         Assertions.assertTrue(fallback.spokenSummary().contains("second zero"));
-        Assertions.assertTrue(fallback.spokenSummary().contains("second 20") || fallback.spokenSummary().contains("second twenty"));
+        Assertions.assertTrue(
+                fallback.spokenSummary().contains("second 20") || fallback.spokenSummary().contains("second twenty"));
     }
 }

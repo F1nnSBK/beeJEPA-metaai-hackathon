@@ -50,3 +50,4 @@ class HeatmapHotspotExtractorTest {
         Assertions.assertEquals(hs.gridY(), roundTrip.orElseThrow().gridY());
     }
 }
+

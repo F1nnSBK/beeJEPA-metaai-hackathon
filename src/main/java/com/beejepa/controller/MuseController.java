@@ -45,12 +45,12 @@ public class MuseController {
 
     @jakarta.inject.Inject
     public MuseController(MetaMuseService museService,
-                          BeeAcousticSynthesizer acousticSynthesizer,
-                          AudioSpectralAnalyzer spectralAnalyzer,
-                          ResponseLatencyModel latencyModel,
-                          EventService eventService,
-                          StateRepository stateRepository,
-                          com.beejepa.muse.MetaVoiceTranscribeClient voiceClient) {
+            BeeAcousticSynthesizer acousticSynthesizer,
+            AudioSpectralAnalyzer spectralAnalyzer,
+            ResponseLatencyModel latencyModel,
+            EventService eventService,
+            StateRepository stateRepository,
+            com.beejepa.muse.MetaVoiceTranscribeClient voiceClient) {
         this.museService = museService;
         this.acousticSynthesizer = acousticSynthesizer;
         this.spectralAnalyzer = spectralAnalyzer;
@@ -61,13 +61,14 @@ public class MuseController {
     }
 
     public MuseController(MetaMuseService museService,
-                          BeeAcousticSynthesizer acousticSynthesizer,
-                          AudioSpectralAnalyzer spectralAnalyzer,
-                          ResponseLatencyModel latencyModel) {
+            BeeAcousticSynthesizer acousticSynthesizer,
+            AudioSpectralAnalyzer spectralAnalyzer,
+            ResponseLatencyModel latencyModel) {
         this(museService, acousticSynthesizer, spectralAnalyzer, latencyModel, null, null, null);
     }
 
-    @Post(value = "/acoustic-mirror", consumes = {"audio/wav", "application/octet-stream", "audio/*"}, produces = "audio/wav")
+    @Post(value = "/acoustic-mirror", consumes = { "audio/wav", "application/octet-stream",
+            "audio/*" }, produces = "audio/wav")
     public HttpResponse<byte[]> acousticMirror(@Body byte[] inputAudioBytes) {
         if (inputAudioBytes == null || inputAudioBytes.length == 0) {
             return HttpResponse.badRequest();
@@ -119,8 +120,12 @@ public class MuseController {
     }
 
     @Get(value = "/voice", produces = "audio/wav")
-    public HttpResponse<byte[]> getBeeVoice(@QueryValue(defaultValue = "Brood nest stable at thirty-four degrees. Foraging traffic normal.") String text) {
-        byte[] wavBytes = acousticSynthesizer.synthesizeWav(text);
+
+    public HttpResponse<byte[]> getBeeVoice(@QueryValue(defaultValue = "") String text) {
+        if (text == null || text.isBlank()) {
+            return HttpResponse.badRequest();
+        }
+        byte[] wavBytes = acousticSynthesizer.synthesizeWav(text.trim());
         return HttpResponse.ok(wavBytes)
                 .header("Content-Type", "audio/wav")
                 .header("Cache-Control", "no-cache");
@@ -179,8 +184,7 @@ public class MuseController {
                         edgeTtsBin,
                         "--voice", "en-US-AvaNeural",
                         "--text", spokenText,
-                        "--write-media", tmpFile.toAbsolutePath().toString()
-                );
+                        "--write-media", tmpFile.toAbsolutePath().toString());
                 pb.redirectErrorStream(true);
                 Process proc = pb.start();
                 boolean finished = proc.waitFor(10, TimeUnit.SECONDS);
@@ -232,40 +236,52 @@ public class MuseController {
     }
 
     @Post("/query-voice")
-    public Map<String, Object> queryVoice(@Body Map<String, String> payload) {
-        String prompt = payload != null ? payload.getOrDefault("prompt", "How are my bees doing?") : "How are my bees doing?";
+
+    public HttpResponse<Map<String, Object>> queryVoice(@Body Map<String, String> payload) {
+        String prompt = payload != null && payload.get("prompt") != null ? payload.get("prompt").trim() : "";
+        if (prompt.isBlank()) {
+            return HttpResponse.badRequest(Map.of("error", "prompt is required"));
+        }
         List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(null, 1);
         MetaMuseService.MuseAnswerResult answer = museService.answerBeekeeperQuestionWithMeta(prompt, topEvents, 1, false);
+        if ("UNAVAILABLE".equals(answer.sourceMode())) {
+            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "Meta Muse is currently unavailable.", "mode", "UNAVAILABLE"));
+        }
         String spoken = answer.spokenSummary();
 
-        return Map.of(
+        return HttpResponse.ok(Map.of(
                 "prompt", prompt,
                 "response", spoken,
                 "mode", answer.sourceMode(),
                 "audioEndpoint", "/api/v1/muse/tts?text=" + java.net.URLEncoder.encode(spoken, StandardCharsets.UTF_8)
-        );
+        ));
     }
 
     @Post("/prepare-query")
-    public HttpResponse<com.beejepa.muse.dto.StagedMuseRequest> prepareQuery(@Body com.beejepa.muse.dto.PrepareMuseQueryRequest request) {
+    public HttpResponse<com.beejepa.muse.dto.StagedMuseRequest> prepareQuery(
+            @Body com.beejepa.muse.dto.PrepareMuseQueryRequest request) {
         com.beejepa.muse.dto.StagedMuseRequest staged = museService.prepareMuseQuery(request);
         return HttpResponse.ok(staged);
     }
 
     @Get("/events/{eventId}/sam/staged")
-    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> stageSam(@io.micronaut.http.annotation.PathVariable String eventId) {
+    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> stageSam(
+            @io.micronaut.http.annotation.PathVariable String eventId) {
         return HttpResponse.ok(museService.prepareSamQuery(eventId));
     }
 
     @Post("/prepare-sam")
-    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> prepareSam(@Body com.beejepa.muse.dto.PrepareSamQueryRequest request) {
+    public HttpResponse<com.beejepa.muse.dto.StagedSamRequest> prepareSam(
+            @Body com.beejepa.muse.dto.PrepareSamQueryRequest request) {
         if (request == null || request.eventId() == null || request.eventId().isBlank()) {
             return HttpResponse.badRequest();
         }
         return HttpResponse.ok(museService.prepareSamQuery(request));
     }
 
-    @Post(value = "/transcribe", consumes = {"audio/wav", "audio/*", "application/octet-stream"}, produces = "application/json")
+    @Post(value = "/transcribe", consumes = { "audio/wav", "audio/*",
+            "application/octet-stream" }, produces = "application/json")
     public HttpResponse<Map<String, Object>> transcribeVoice(@Body byte[] audioBytes) {
         if (voiceClient == null || !voiceClient.isConfigured()) {
             return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
@@ -295,8 +311,8 @@ public class MuseController {
     }
 
     /**
-     * Selects the events sent to SAM + Muse: the event selected in the UI (if any) first, followed by the
-     * highest token-delta events of the catalog, so catalog-wide questions are never answered from one event.
+     * Resolves up to {@code maxEventsToTake} catalog events ordered by token-delta
+     * score, placing {@code requestedEventId} first when specified.
      */
     private List<MetaMuseService.ManifestEventInput> resolveTopEvents(String requestedEventId, int maxEventsToTake) {
         List<MetaMuseService.ManifestEventInput> topEvents = new ArrayList<>();
@@ -314,8 +330,10 @@ public class MuseController {
                     .ifPresent(ev -> topEvents.add(MetaMuseService.toManifestInput(ev)));
         }
         for (Map<String, Object> ev : rawEvents) {
-            if (topEvents.size() >= maxEventsToTake) break;
-            if (requestedEventId != null && requestedEventId.equals(ev.get("eventId"))) continue;
+            if (topEvents.size() >= maxEventsToTake)
+                break;
+            if (requestedEventId != null && requestedEventId.equals(ev.get("eventId")))
+                continue;
             topEvents.add(MetaMuseService.toManifestInput(ev));
         }
         return topEvents;
@@ -352,8 +370,7 @@ public class MuseController {
                     question,
                     "UNAVAILABLE".equals(answerResult.sourceMode()) ? 503 : 200,
                     latency,
-                    Instant.now()
-            ));
+                    Instant.now()));
         }
 
         Map<String, Object> telemetry = new LinkedHashMap<>();
@@ -380,7 +397,8 @@ public class MuseController {
 
         if ("UNAVAILABLE".equals(answerResult.sourceMode())) {
             responseMap.put("error", "Meta Muse is currently unavailable. No answer was generated.");
-            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE).body(responseMap);
+            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(responseMap);
         }
         return HttpResponse.ok(responseMap);
     }

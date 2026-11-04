@@ -36,6 +36,7 @@ public class EventServiceTest {
     }
 
     @Test
+
     void testLazyLoadEventsFromHackathonSample() throws InterruptedException {
         eventService.awaitHotspotMeasurement(10_000);
         List<Map<String, Object>> events = eventService.listEvents();
@@ -74,7 +75,8 @@ public class EventServiceTest {
         Assertions.assertTrue(clip.get().exists());
 
         Optional<byte[]> frameBytes = eventService.getOrExtractEventFrameBytes("evt_rec2125_seq000_f0000");
-        Assertions.assertTrue(frameBytes.isPresent(), "Peak frame bytes should be extracted via ffmpeg pipe and cached in SQLite/Redis");
+        Assertions.assertTrue(frameBytes.isPresent(),
+                "Peak frame bytes should be extracted via ffmpeg pipe and cached in SQLite/Redis");
         Assertions.assertTrue(frameBytes.get().length > 1000);
     }
 
@@ -84,5 +86,33 @@ public class EventServiceTest {
         Assertions.assertTrue(seqFile.isPresent(), "Sequence clip should be present in sequences directory");
         Assertions.assertTrue(seqFile.get().exists());
         Assertions.assertTrue(seqFile.get().length() > 100_000);
+    }
+
+    @Test
+    void testLoadFromCsvDirectory(@TempDir Path csvRoot) throws Exception {
+        Path meta = java.nio.file.Files.createDirectories(csvRoot.resolve("metadata"));
+        java.nio.file.Files.createDirectories(csvRoot.resolve("stitched_sequences"));
+
+        java.nio.file.Files.writeString(meta.resolve("sequence_runs.csv"),
+                "sequence_id,recording_id,sequence_index,stitched_video_path,mean_surprise,max_surprise\n"
+                        + "rec2123_seq000,rec2123,0,stitched_sequences/full_rec2123_seq000.mp4,11.4,14.8\n");
+
+        java.nio.file.Files.writeString(meta.resolve("timeline_points.csv"),
+                "sequence_id,timestamp_sec,token_delta_score,board_peaks_9x9,event_id\n"
+                        + "rec2123_seq000,0.0,14.8,24,evt_rec2123_seq000_f0000\n"
+                        + "rec2123_seq000,1.07,11.2,18,\n");
+
+        java.nio.file.Files.writeString(meta.resolve("event_catalog.csv"),
+                "event_id,sequence_id,peak_frame,surprise_score_l2,board_peaks_16x16,grass_peaks,submanifold_state,pixel_diff_baseline,start_frame\n"
+                        + "evt_rec2123_seq000_f0000,rec2123_seq000,0,14.8,26,3,active,4.2,0\n");
+
+        CatalogLoader.RawCatalogData data = CatalogLoader.loadFromCsvDirectory(csvRoot);
+        Assertions.assertNotNull(data);
+        Assertions.assertEquals("ssd_metadata_csv", data.source());
+        Assertions.assertEquals(1, data.sequences().size());
+        Assertions.assertEquals(1, data.events().size());
+        Assertions.assertEquals(2, data.timeline().size());
+        Assertions.assertEquals("evt_rec2123_seq000_f0000", data.events().getFirst().eventId());
+        Assertions.assertEquals(26, data.events().getFirst().boardPeaks());
     }
 }

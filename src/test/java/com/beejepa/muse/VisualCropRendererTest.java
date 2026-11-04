@@ -44,8 +44,7 @@ class VisualCropRendererTest {
                 hotspot,
                 List.of(bee),
                 List.of(containedBee),
-                35
-        );
+                35);
 
         Assertions.assertNotNull(visuals);
         Assertions.assertNotNull(visuals.canonicalFrameB64());

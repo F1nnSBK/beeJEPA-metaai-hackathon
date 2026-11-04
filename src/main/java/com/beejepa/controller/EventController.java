@@ -34,7 +34,7 @@ public class EventController {
     public HttpResponse<?> getEvent(@PathVariable String eventId) {
         Optional<Map<String, Object>> event = eventService.getEvent(eventId);
         return event.map(HttpResponse::ok)
-                    .orElseGet(HttpResponse::notFound);
+                .orElseGet(HttpResponse::notFound);
     }
 
     @Get(value = "/events/{eventId}/media/{filename}")
@@ -49,7 +49,6 @@ public class EventController {
             return HttpResponse.notFound();
         }
 
-        // Media is served only from the local SSD. Missing files are a 404, never a third-party redirect.
         Optional<File> file = eventService.getMediaFile(eventId, filename);
         if (file.isEmpty()) {
             return HttpResponse.notFound();
@@ -68,9 +67,8 @@ public class EventController {
 
     @Post("/events/{eventId}/analyze")
     public HttpResponse<Map<String, Object>> analyzeEvent(
-        @PathVariable String eventId,
-        @QueryValue(defaultValue = "false") boolean forceRefresh
-    ) {
+            @PathVariable String eventId,
+            @QueryValue(defaultValue = "false") boolean forceRefresh) {
         return HttpResponse.ok(eventService.analyzeEvent(eventId, forceRefresh));
     }
 }

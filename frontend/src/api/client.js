@@ -8,7 +8,7 @@ function createCombinedSignal(cancelKey, timeoutMs) {
   if (cancelKey && activeControllers.has(cancelKey)) {
     try {
       activeControllers.get(cancelKey).abort(new DOMException('Superseded by newer request', 'AbortError'))
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const controller = new AbortController()
@@ -21,7 +21,7 @@ function createCombinedSignal(cancelKey, timeoutMs) {
     timeoutId = setTimeout(() => {
       try {
         controller.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError'))
-      } catch (e) {}
+      } catch (e) { }
     }, timeoutMs)
   }
 
@@ -248,17 +248,17 @@ export function normalizeMuseDiagnosis(raw) {
   const report = String(raw.report ?? raw.diagnosis ?? raw.reportMarkdown ?? '').trim()
   const events = Array.isArray(raw.events)
     ? raw.events.filter(e => e && typeof e === 'object').map(e => ({
-        ...e,
-        eventId: String(e.eventId ?? e.event_id ?? ''),
-        timestamp: String(e.timestamp ?? '00:00'),
-        tokenDeltaScore: toFiniteNumber(e.tokenDeltaScore ?? e.surprise_score_sigma ?? e.surpriseScoreL2, 0),
-        landingBoardBeeCount: Math.round(toFiniteNumber(e.landingBoardBeeCount ?? e.landing_board_bee_count, -1)),
-        beesInsideHotspotCount: Math.round(toFiniteNumber(
+      ...e,
+      eventId: String(e.eventId ?? e.event_id ?? ''),
+      timestamp: String(e.timestamp ?? '00:00'),
+      tokenDeltaScore: toFiniteNumber(e.tokenDeltaScore ?? e.surprise_score_sigma ?? e.surpriseScoreL2, 0),
+      landingBoardBeeCount: Math.round(toFiniteNumber(e.landingBoardBeeCount ?? e.landing_board_bee_count, -1)),
+      beesInsideHotspotCount: Math.round(toFiniteNumber(
           e.beesInsideHotspotCount ?? e.bees_inside_hotspot_count,
-          -1
-        )),
-        cropBase64: typeof e.cropBase64 === 'string' ? e.cropBase64 : null
-      }))
+        -1
+      )),
+      cropBase64: typeof e.cropBase64 === 'string' ? e.cropBase64 : null
+    }))
     : []
 
   const offlineLocked = Boolean(raw.offlineLocked ?? raw.offline_locked ?? false)
@@ -324,7 +324,7 @@ export function normalizeMetaHealth(raw) {
 export function normalizeRingBuffer(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
-      capacity: 600,
+      capacity: 64,
       currentSequence: 0,
       activeSlotsCount: 0,
       totalAllocatedBytes: 0,
@@ -335,7 +335,7 @@ export function normalizeRingBuffer(raw) {
   }
   return {
     ...raw,
-    capacity: Math.round(toFiniteNumber(raw.capacity, 600)),
+    capacity: Math.round(toFiniteNumber(raw.capacity, 64)),
     currentSequence: Math.round(toFiniteNumber(raw.currentSequence, 0)),
     activeSlotsCount: Math.round(toFiniteNumber(raw.activeSlotsCount, 0)),
     totalAllocatedBytes: Math.round(toFiniteNumber(raw.totalAllocatedBytes, 0)),

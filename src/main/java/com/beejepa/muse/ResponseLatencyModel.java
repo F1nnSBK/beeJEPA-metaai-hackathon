@@ -3,7 +3,7 @@ package com.beejepa.muse;
 import jakarta.inject.Singleton;
 
 /**
- * Deterministic zero-delay latency model (no artificial random sleep).
+ * Provides response pacing parameters for acoustic turn-taking.
  */
 @Singleton
 public class ResponseLatencyModel {
