@@ -1,6 +1,6 @@
 # beeJEPA
 
-Autonomous hive entrance monitoring and active perception edge system combining self-supervised **V-JEPA 2.1** latent surprise detection, **Meta SAM 3.1** spatial segmentation, and **Meta Muse Spark Open** multimodal reasoning on a **Raspberry Pi 4 Model B** (ARM64) using **Java 25** and **GraalVM Native Image**.
+Autonomous hive entrance monitoring and active perception system combining self-supervised **V-JEPA 2.1** latent surprise detection, **Meta SAM 3.1** spatial segmentation, and **Meta Muse Spark Open** multimodal reasoning on **Java 25** and **GraalVM Native Image**.
 
 - **Web Console & Live Demo:** [https://beejepa.finn-hertsch.de](https://beejepa.finn-hertsch.de)
 - **Dataset (Hugging Face):** [F1nnSBK/bee-jepa-entrance-anomalies](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies)
@@ -8,100 +8,98 @@ Autonomous hive entrance monitoring and active perception edge system combining 
 [![Live Demo](https://img.shields.io/badge/Demo-beejepa.finn--hertsch.de-D97706.svg)](https://beejepa.finn-hertsch.de)
 [![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-bee--jepa--entrance--anomalies-F59E0B.svg)](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies)
 [![Runtime](https://img.shields.io/badge/Runtime-Java%2025%20%7C%20GraalVM%20Native-EA580C.svg)](https://www.graalvm.org/)
-[![Hardware](https://img.shields.io/badge/Target-Raspberry%20Pi%204%20(ARM64)-C51A4A.svg)](https://www.raspberrypi.com/)
+[![Hardware](https://img.shields.io/badge/Target-Raspberry%20Pi%204%20%7C%20ARM64-C51A4A.svg)](https://www.raspberrypi.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B82F6.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## Overview & Hackathon Scope
+## Overview & System Design
 
 ![Figure 1: Biological-to-Computational Paradigm in beeJEPA](figures/figure1_head_concept.svg)
 
-*Figure 1: Biological-to-computational active perception loop in beeJEPA — mapping honeybee ommatidia optic flow, retinal-slip saccades, frontal acute-zone inspection, and waggle-dance signaling (top) to V-JEPA 2.1 peripheral prediction, latent surprise gating (`S(t) >= 10.2σ`, `-93.6%` frames), SAM 3.1 + `IoA >= 0.25` foveal grounding (`+8.3x` token density), and Muse Spark Open dual `<REPORT>` + `<SPOKEN>` synthesis (bottom).*
+*Figure 1: Biological-to-computational active perception loop in beeJEPA — mapping peripheral optic flow, saccadic fixation, foveal inspection, and colony signaling (top) to V-JEPA 2.1 peripheral prediction, latent surprise gating (`S(t) >= τ`), SAM 3.1 + `IoA >= 0.25` spatial grounding, and Muse Spark Open dual `<REPORT>` + `<SPOKEN>` synthesis (bottom).*
 
-Continuous 60 fps video monitoring of a honeybee (*Apis mellifera*) flight board generates high-volume footage where manual inspection or uniform cloud VLM polling is computationally prohibitive. **beeJEPA** pairs a pre-existing self-supervised sensory pipeline (**System 1**) with an active perception, spatial grounding, and multimodal reasoning engine built during the **Meta Global AI Developer Hackathon 2026** (**System 2**):
+Continuous 60 fps video monitoring of a honeybee (*Apis mellifera*) flight board produces a high-volume stream where manual review or continuous cloud VLM polling is impractical. **beeJEPA** couples a self-supervised sensory pipeline (**System 1**) with an event-driven active perception, spatial grounding, and multimodal reasoning backend (**System 2**):
 
-- **Pre-Existing Foundation (System 1 — Peripheral Sensor Stream):**
-  Unsupervised feature extraction from 60 fps 1080x960 hive entrance footage using V-JEPA 2.1 (ViT-H/16) with a biologically grounded 9x9 pixel Mean-Bee patch grid (43x43 spatial tokens). Produces continuous predictor surprise trajectories `S(t) = ||z_pred - z_target||_2` across 9x9 spatial tubelets and isolates 184 peak kinematic events across 48 minutes of dual-recording footage.
+- **System 1 — Peripheral Sensory Stream (V-JEPA 2.1):**
+  Extracts spatiotemporal representations from 60 fps `1080x960` hive entrance footage using **V-JEPA 2.1** (`ViT-H/16`) over an overlapping `9x9` Mean-Bee patch grid (`43x43` spatial tokens). Computes the continuous latent prediction error `S(t) = ||z_pred - z_target||_2` and gates downstream execution to peak anomaly windows (`S(t) >= τ`).
 
-- **Built During the Meta AI Hackathon (System 2 — Active Perception, Grounding & Edge Delivery):**
-  - **Active Perception & Saccadic Foveal Zoom:** Decouples 60 fps peripheral surveillance from autonomous foveal targeting. When `S(t) >= 10.2σ`, the engine triggers a saccadic jump to the tubelet hotspot `(i*, j*)`, extracting a 384x384 high-resolution crop (+8.3x visual token density) directly from an off-heap circular frame buffer.
-  - **Java 25 FFM Ring Buffer & SIMD Vector Evaluator:** Ingests peak keyframes into a 600-slot off-heap circular buffer (`java.lang.foreign.Arena` / `MemorySegment`) with zero GC pressure and evaluates 64-dimensional spatial latent signatures via the Java 25 Vector API (`jdk.incubator.vector.FloatVector`).
-  - **3-Channel Meta SAM 3.1 Spatial Grounding:** Combines Channel 1 Promptable Concept Segmentation (`"bee"`) across the full landing board with Channel 2 Promptable Visual Segmentation (bounding-box prompt at the V-JEPA hotspot) and scale-invariant Bee Containment (`IoA_bee >= 0.25`) to distinguish dense honeybee clustering from foreign intruders.
-  - **Meta Muse Spark Open Dual-Output Pipeline:** Synthesizes chronological multi-event digests via `meta-models/muse-spark-open` in a single structured pass returning both a concise Markdown dashboard brief (`<REPORT>`) and a 100% fact-preserving natural-language narration (`<SPOKEN>`) tailored for spoken audio without Markdown syntax or raw timestamps.
-  - **Resilience & State Management Layer:** Protects edge-to-cloud execution via circuit breakers, exponential backoff with full jitter, in-flight request deduplication, schema-tolerant JSON parsing (`TolerantPayloadParser`), and atomic `.tmp` + `.bak` disk caching (`MuseDiskCache`).
-  - **Interactive Three.js & Vue 3 Console:** Features an interactive 6-stage Three.js landing scroll experience with custom low-poly 3D honeybee models and calligraphy shaders, transitioning into the Propolis Black monitoring console with synchronized video inspection, saccadic reticle HUD, and bioacoustic honeybee voice synthesis.
+- **System 2 — Active Perception, Spatial Grounding & Reasoning:**
+  - **Saccadic Foveal Cropping:** When `S(t)` crosses the decision threshold `τ`, the system localizes the spatial attention hotspot on the flight board and renders both a canonical `688x688` camera overview and a bicubic-upsampled `384x384` foveal crop (`VisualCropRenderer`).
+  - **Java 25 FFM Off-Heap Ring Buffer & SIMD Vector API:** Buffers raw JPEG keyframes off-heap via `java.lang.foreign.Arena` / `MemorySegment` (`OffHeapFrameRingBuffer`) without garbage-collection pressure and evaluates compact frame signatures via `jdk.incubator.vector.FloatVector` (`SimdLatentEvaluator`).
+  - **Meta SAM 3.1 Spatial Grounding & Containment (`IoA`):** Queries **Meta SAM 3.1** (`sam-3.1`) for promptable concept segmentation on the landing board ROI (`Sam31Client`) and intersects detected instances with the V-JEPA attention hotspot (`SamGeometry`, `IoA_bee >= 0.25` and `< 22%` hotspot coverage void guard) to separate normal honeybee clustering from potential foreign intruders.
+  - **Meta Muse Spark Open Dual-Output Pipeline:** Synthesizes multi-event visual digests via `meta-models/muse-spark-open-1026` on Baseten (`MetaMuseService`) with autonomous tool-calling (`QuerySam31Concept`, `QueryFovealHotspot`), returning both a structured Markdown brief (`<REPORT>`) and a natural-language voice summary (`<SPOKEN>`) stripped of Markdown and raw timestamps (`TolerantPayloadParser`).
+  - **Resilience & Multi-Tier Caching:** Protects upstream inference calls with a circuit breaker, exponential backoff with jitter, and automatic primary/secondary API key failover (`ResilientApiExecutor`), backed by a 3-tier cache (**L0 In-Memory -> L1 Redis RESP2 -> L2 SQLite WAL** in `state.db`).
+  - **Interactive Three.js & Vue 3 Web Console:** Combines a 6-stage Three.js scroll introduction (`LandingPage.vue`) with a two-column operational console (`App.vue`) featuring synchronized video playback, saccadic HUD overlays, neural English TTS (`edge-tts`), and deterministic bioacoustic honeybee synthesis (`BeeAcousticSynthesizer`).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  SYSTEM 1: SENSORY FOUNDATION (Pre-Hackathon)                │
-│  60 fps 1080x960 Hive Stream -> V-JEPA 2.1 (9x9 Mean-Bee)    │
-│  Surprise Trajectory S(t) & 184 Verified Peak Event Clips    │
+│  SYSTEM 1: SENSORY FOUNDATION                                │
+│  60 fps 1080x960 Hive Stream -> V-JEPA 2.1 (ViT-H/16)        │
+│  Latent Surprise Trajectory S(t) = ||z_pred - z_target||_2   │
 └──────────────────────────────┬───────────────────────────────┘
-                               │  S(t) >= 10.2σ Saccadic Trigger
+                               │  S(t) >= τ Saccadic Trigger
 ┌──────────────────────────────▼───────────────────────────────┐
-│  SYSTEM 2: ACTIVE PERCEPTION & COGNITION (Meta AI Hackathon) │
+│  SYSTEM 2: ACTIVE PERCEPTION & COGNITION                     │
 │  1. Java 25 FFM Off-Heap Ring Buffer & SIMD Vector Evaluator │
-│  2. Meta SAM 3.1 (Ch.1 Concept "bee" + Ch.2 Hotspot Box)     │
-│  3. Scale-Invariant Containment (IoA_bee >= 0.25)            │
+│  2. Meta SAM 3.1 Concept Segmentation & Landing Board ROI    │
+│  3. Scale-Invariant Containment (IoA_bee >= 0.25) & Guard    │
 │  4. Meta Muse Spark Open Dual Output (<REPORT> + <SPOKEN>)   │
-│  5. Resilient API Executor, Atomic Disk Cache & SQLite WAL   │
-│  6. Three.js 3D Landing Experience & Vue 3 Edge Console      │
+│  5. Resilient API Executor + L0/Redis L1/SQLite WAL L2 Cache │
+│  6. Three.js 3D Scroll Story & Vue 3 Operational Console     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Empirical Findings & Pipeline Grounding
+## Pipeline Visuals & Functional Stages
 
 ### Side-by-Side Latent Representation (Camera Stream vs. V-JEPA Attention)
 ![Live Side-by-Side V-JEPA Anomaly Detection](figures/side_by_side_vjepa_detection.gif)
 
-- **Left (Camera View):** Raw 60 fps entrance footage during peak arrival clustering (`evt_rec2125_seq001_f0320`, `S(t) = 12.60σ`).
-- **Right (V-JEPA 2.1 Latent Space):** Spatial tubelet surprise heatmap isolating kinematic anomalies at the hive entrance slot in real time.
+- **Left (Camera View):** Raw 60 fps flight board recording.
+- **Right (V-JEPA 2.1 Latent Space):** Spatial surprise heatmap highlighting unpredictability in motion dynamics at the hive entrance.
 
-### 1. Three-Channel Spatial Isolation (SAM 3.1 + IoA Containment)
-![Single Frame 3-Channel Spatial Isolation](figures/channel1_and_2_spatial_isolation.svg)
+### 1. Spatial Grounding & Hotspot Containment (SAM 3.1 + IoA)
+![Single Frame Spatial Isolation](figures/channel1_and_2_spatial_isolation.svg)
 
-- **Overview Panel (Left):** SAM 3.1 Channel 1 segments 38 honeybee instances across the flight board, while the V-JEPA hotspot `(i*, j*) = (4, 2)` at `S(t) = 16.05σ` projects the focus window `[235, 330, 395, 450]` onto the central entrance slot.
-- **Hotspot Crop (Right):** Scale-invariant containment evaluation (`IoA_bee >= 0.25`) isolates 15 honeybees inside the hotspot (highlighted in bright green), confirming localized guard and foraging congestion rather than a wasp or hornet intrusion.
+- **Overview Panel (Left):** SAM 3.1 segments honeybees on the landing board ROI while the V-JEPA hotspot projects a focus window onto the region of highest latent surprise.
+- **Hotspot Crop (Right):** Scale-invariant containment (`IoA_bee >= 0.25`) isolates the instances inside the hotspot (highlighted in bright green) and passes the `384x384` foveal crop to Muse Spark Open.
 
-### 2. Multi-Event Chronological Storyboard
+### 2. Multi-Event Chronological Tracking
 ![Multi-Event Timeline Storyboard](figures/multi_event_timeline_storyboard.svg)
 
-Across consecutive kinematic peaks in recording `rec2125`, the pipeline tracks entrance crowd progression from an initial 15-bee guard bottleneck (`16.05σ` at `00:00`, 38 total bees) through active landing dispersion (`13.72σ` at `00:20`, 42 total bees; `12.60σ` at `00:35`, 39 total bees) to steady baseline flow.
+Rather than inspecting isolated frames in a vacuum, `MetaMuseService` aggregates consecutive peak events along the timeline in parallel using Java 25 Virtual Threads so the model can distinguish transient landing bursts from sustained entrance anomalies.
 
-### 3. Ablation: With vs. Without V-JEPA Kinematic Guidance
+### 3. Event-Driven Saccades vs. Uniform Polling
 ![Ablation Study: Without vs With V-JEPA](figures/ablation_vjepa_vs_no_vjepa.svg)
 
-| Metric | Without V-JEPA (Uniform Baseline) | With V-JEPA (Full 3-Channel Pipeline) |
+| Dimension | Uniform Baseline (Without V-JEPA) | Event-Driven Pipeline (With V-JEPA) |
 | :--- | :--- | :--- |
-| **Temporal Search Space** | 2,880 frames (1 fps uniform sampling over 48 min) | **184 peak events (-93.6% API calls)** |
-| **SAM 3.1 Grounding** | Channel 1 (`"bee"`) only — 38 unlocalized boxes | **Channel 1 PCS + Channel 2 PVS Hotspot + IoA** |
-| **Visual Tokens on Anomaly** | **88 patches** (160x120 px in full frame) | **729 patches** (384x384 foveal crop, **+8.3x**) |
-| **Muse Spark Diagnosis** | Unlocalized baseline assessment; misses localized entrance bottleneck | Identifies the 15-bee guard bottleneck, tracks dispersion across keyframes, and rules out predators |
+| **Temporal Triggering** | Uniform frame polling across the continuous stream | **Surprise-gated peak triggers (`S(t) >= τ`)** |
+| **Spatial Context** | Full-frame overview only | **Full-frame overview + `384x384` foveal hotspot crop** |
+| **Geometric Filtering** | Unlocalized board detections | **Hotspot containment (`IoA_bee >= 0.25`) + `< 22%` void guard** |
+| **Causal Synthesis** | Single-frame VLM prompt | **Chronological multi-event digest (`<REPORT>` + `<SPOKEN>`)** |
 
-### 4. Five-Tier Ablation Pyramid & Empirical Baseline Evaluation (V-JEPA 2.1 to SAM 3.1 to Muse Spark Open)
+### 4. Five-Tier Architecture Funnel
 ![Five-Tier Ablation Pyramid and Role Analysis](figures/ablation_pyramid_roles.svg)
 
-Each layer in the pipeline acts simultaneously as an information funnel (compressing temporal and spatial search volume) and a semantic amplifier (elevating raw pixels to verified causal reasoning). To prevent confounded attribution, the ablation study separates **spatial cropping (`88` native patches, `1x` MHSA FLOPs)** from **bicubic foveal upsampling (`729` patches, `+8.3x` tokens, `68.6x` quadratic MHSA attention FLOPs)** and evaluates active saccadic targeting against non-trivial spatial and temporal baselines across all `N = 20` validation anomaly events in `rec2125` (`184` total events across the `48`-minute cohort):
-
-| Pyramid Tier | Model / Subsystem | Functional Role | Empirical Output (`rec2125` Peak `00:00`) | What Breaks If Ablated |
-| :--- | :--- | :--- | :--- | :--- |
-| **Tier 4 (Apex)** | `Meta Muse Spark Open` (`<REPORT>` + `<SPOKEN>`) | Multi-event causal synthesis & natural speech | 3-keyframe digest (`00:00 -> 00:20 -> 00:35`) + lossless TTS audio | Stops at raw per-frame JSON numbers; no temporal narrative or voice briefing |
-| **Tier 3** | `SamGeometry` (`IoA_bee >= 0.25` + `< 22%` Void Guard) | Cross-channel geometric & bee-balling attribution | `15 / 38` bees in hotspot (`63.5%` box coverage -> `multi_bee_interaction_cluster`) | Cannot separate multi-bee crowding (`63.5%` coverage) from defensive bee-balling around an unsegmented predator (`< 22%` coverage) or solitary intruder |
-| **Tier 2** | `Meta SAM 3.1` (Ch.1 PCS + Ch.2 PVS) | Physical instance segmentation | `38` landing-board bees segmented + class-agnostic hotspot mask | V-JEPA 2.1 has `0` object labels; Muse Spark without SAM (`C11`) suffers `2.8` bee count MAE |
-| **Tier 1** | `V-JEPA 2.1` + Java 25 SIMD & FFM Buffer | Dynamic temporal-spatial saccadic trigger | `20` peak clips (`-93.6%` frames), `S(t) = 16.05σ` at `[4,2]`, `100%` pointing hit rate | Static entrance crop (`B1/C10` at `cx=315, cy=426`) misses `70.0%` of laterally drifting anomalies (`30.0%` hit rate, `159.3 px` mean center error, `0.1402` IoU); Random gaze (`B3`, `K=5` seeds) hits only `21.0%` (`177.9 px` error) |
-| **Tier 0 (Base)** | Raw 60 fps Stream + Pixel-Diff (`B0/C01`) | Optical sensor capture | `18,000` frames / 5 min (`|ΔI| = 0.0566`) | Triggered by cloud luminance dips and moving grass blades (`y > 440`); `0.0` spatial IoU |
+| Pyramid Tier | Subsystem | Functional Role in the Pipeline | What Breaks If Omitted |
+| :--- | :--- | :--- | :--- |
+| **Tier 4 (Apex)** | `Meta Muse Spark Open` (`<REPORT>` + `<SPOKEN>`) | Multi-event causal synthesis, tool calling & spoken briefing | Stops at per-frame geometric JSON; no temporal narrative or voice output |
+| **Tier 3** | `SamGeometry` (`IoA_bee >= 0.25` + Void Guard) | Geometric intersection between V-JEPA hotspot and SAM 3.1 boxes | Cannot separate localized multi-bee crowding from an unsegmented foreign object in the hotspot |
+| **Tier 2** | `Meta SAM 3.1` (`Sam31Client`) | Physical instance segmentation on the landing board ROI | V-JEPA 2.1 produces latent surprise maps without object boundaries or instance masks |
+| **Tier 1** | `V-JEPA 2.1` + Java 25 FFM & SIMD | Spatiotemporal surprise gating and dynamic hotspot localization | Requires uniform polling or a static crop that misses anomalies drifting across the flight board |
+| **Tier 0 (Base)** | Raw 60 fps Stream (`EventService`) | Optical capture and on-demand `ffmpeg` keyframe extraction | Raw pixel differences trigger on illumination changes and moving grass outside the flight board |
 
 ---
 
-## Dataset: Hugging Face & Local SSD Layout
+## Dataset: Hugging Face & Media Resolution
 
-The pre-hackathon trajectory dataset and evaluation clips are published at [**F1nnSBK/bee-jepa-entrance-anomalies**](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies).
+The trajectory dataset and event clips are hosted at [**F1nnSBK/bee-jepa-entrance-anomalies**](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies).
 
-- **Recordings:** `rec2123` (75 sequences, 37.5 min continuous runtime) and `rec2125` (21 sequences, 10.5 min validation transfer) from `mrkschtr/thehiveisreal`.
-- **Artifacts:** `metadata/timeline_points.parquet` (2,688 windows), `metadata/event_catalog.parquet` (184 peak events), `metadata/patch_granularity.parquet`, `metadata/method_ablations.parquet`, and 4-second 60 fps side-by-side MP4 clips.
+- **Recordings:** `rec2123` and `rec2125` from `mrkschtr/thehiveisreal` (`1080x960` @ 60 fps side-by-side raw camera + V-JEPA 2.1 heatmap).
+- **On-Demand Media Resolution:** If local `.mp4` clips or `peak_frame.jpg` keyframes are not present on disk, `EventService` extracts keyframes on the fly via `ffmpeg` (`image2pipe` at `00:00:01.5`) into the Redis/SQLite frame cache, and `EventController` redirects video stream requests (`307 Temporary Redirect`) to the Hugging Face CDN.
 
 ```python
 import pandas as pd
@@ -119,30 +117,31 @@ print(peaks[["sequence_id", "timestamp_sec", "surprise_score_l2", "event_id"]].h
 
 ---
 
-## System Architecture & Key Subsystems
+## System Architecture & Key Packages
 
-1. **Active Perception & Zero-GC Memory (`com.beejepa.perception`):**
-   - `OffHeapFrameRingBuffer`: Pre-allocates off-heap memory segments via Java 25 FFM (`Arena.ofShared()`) to buffer raw JPEG keyframes and 64-float spatial latent vectors.
-   - `SimdLatentEvaluator`: Computes vectorized L2 surprise scores and cosine similarity across consecutive anomaly keyframes using `FloatVector.SPECIES_PREFERRED`.
-   - `ActivePerceptionService`: Coordinates frame ingestion into the off-heap buffer, computes inter-event SIMD latent cosine similarity along the saccadic trajectory, and serves buffered frame bytes directly to the visual crop renderer.
+1. **Active Perception & Off-Heap Memory (`com.beejepa.perception`):**
+   - `OffHeapFrameRingBuffer`: Pre-allocates 64-byte aligned off-heap memory slots via Java 25 FFM (`Arena.ofShared()`) with a 32-byte binary header (`timestampNs`, `frameIndex`, `surpriseSigma`, `hotspotCx`, `hotspotCy`, `payloadSize`) and raw JPEG payload bytes.
+   - `SimdLatentEvaluator`: Computes vectorized Euclidean distance, L2 norm, and cosine similarity using `FloatVector.SPECIES_PREFERRED`.
+   - `ActivePerceptionService`: Coordinates frame ingestion into the off-heap ring buffer, builds the saccadic trajectory (`SaccadicTarget`), and serves the 5-tier ablation pyramid.
 
-2. **Multimodal Grounding & Dual-Output Reasoning (`com.beejepa.muse`):**
-   - `Sam31Client` & `SamGeometry`: Executes Channel 1 concept segmentation and Channel 2 box/point visual segmentation against `/v1/responses`, normalizing coordinate schemas and computing `IoA_bee`.
-   - `VisualCropRenderer`: Renders canonical 688x688 annotated overviews and 384x384 foveal crops directly from buffered off-heap frames or SSD fallback.
-   - `MetaMuseService` & `TolerantPayloadParser`: Orchestrates multimodal inference with `muse-spark-open` and parses dual `<REPORT>` (Markdown UI brief) and `<SPOKEN>` (natural-language TTS narration with spoken time expressions and zero Markdown artifacts) outputs.
-   - `ResilientApiExecutor` & `MuseDiskCache`: Enforces per-upstream circuit breakers, exponential backoff, single-flight coalescing, and atomic `.tmp`/`.bak` persistence with domain sanity validation.
-   - `BeeAcousticSynthesizer` & `EdgeTtsService`: Provides natural English speech synthesis alongside a deterministic bioacoustic honeybee synthesizer (210–460 Hz fundamental carriers with 26–30 Hz wingbeat modulation).
+2. **Spatial Grounding, Multimodal Reasoning & Audio (`com.beejepa.muse`):**
+   - `Sam31Client` & `SamGeometry`: Executes promptable concept segmentation against `/v1/responses` (`model: "sam-3.1"`), filters boxes to the landing board ROI (`x <= 535`, `372 <= y <= 518`), and computes scale-invariant containment (`IoA_bee >= 0.25`) and the hotspot coverage void guard (`< 22%`).
+   - `VisualCropRenderer`: Renders canonical `688x688` annotated overviews and `384x384` bicubic foveal crops.
+   - `MetaMuseService` & `TolerantPayloadParser`: Orchestrates multimodal inference with `meta-models/muse-spark-open-1026` on Baseten using Java 25 Virtual Threads, handles autonomous tool calls (`QuerySam31Concept`, `QueryFovealHotspot`), and parses `<REPORT>` and `<SPOKEN>` outputs.
+   - `ResilientApiExecutor`, `MuseDiskCache` & `RedisCacheClient`: Provides circuit breaking, exponential backoff with jitter, API key failover (`BASETEN_API_KEY1` -> `BASETEN_API_KEY2`), and 3-tier caching across in-memory maps, Redis (custom zero-dependency RESP2 socket client), and SQLite WAL (`state.db`).
+   - `BeeAcousticSynthesizer` & `AudioSpectralAnalyzer`: Synthesizes deterministic 22.05 kHz PCM WAV honeybee bioacoustic signals (210–460 Hz fundamental carriers with 26–31 Hz wingbeat amplitude modulation and 35 ms comb resonance) and analyzes microphone input via a 1024-point Radix-2 Cooley-Tukey FFT.
 
-3. **Edge Runtime & Persistence (`com.beejepa.state`, `com.beejepa.event`):**
-   - Built on **Micronaut 4.7** with **Java 25 Virtual Threads** and **SQLite WAL** (`state.db`) for sub-millisecond local telemetry, PBKDF2 authentication, and zero-credit cached playback.
+3. **Edge Runtime, Auth & Persistence (`com.beejepa.state`, `com.beejepa.auth`, `com.beejepa.event`):**
+   - Built on **Micronaut 4.7** (Netty) with **SQLite WAL** (`state.db`) for response/spatial/audio/frame caching, request latency telemetry (`TelemetryService`), and session authentication (`AuthService` using `PBKDF2WithHmacSHA256` and 12-hour bearer tokens).
 
 ---
 
 ## Quickstart & Deployment
 
 ### Prerequisites
-- **JDK 25** (with `--enable-preview` and `--add-modules jdk.incubator.vector` configured automatically in `build.gradle`)
+- **JDK 25** (configured with `--enable-preview` and `--add-modules jdk.incubator.vector` in `build.gradle`)
 - **Node.js 18+** and `npm`
+- Optional: **Redis** on `127.0.0.1:6379` (automatically falls back to in-memory L0 + SQLite WAL L2 if unavailable) and **ffmpeg** for on-the-fly keyframe extraction
 
 ### 1. Configure Environment
 ```bash
@@ -150,15 +149,26 @@ cp .env.example .env
 ```
 Key settings in `.env`:
 ```env
-BASETEN_API_KEY=your_api_key_here
-BASETEN_MUSE_MODEL=meta-models/muse-spark-open
-BASETEN_ALLOW_INFERENCE=false
+BASETEN_API_KEY=your_baseten_api_key_here
+BASETEN_BASE_URL=https://inference.baseten.co/v1
+BASETEN_MUSE_MODEL=meta-models/muse-spark-open-1026
+BASETEN_ALLOW_INFERENCE=true
+
+META_MUSE_API_KEY=your_meta_muse_api_key_here
+META_MUSE_BASE_URL=https://api.meta.ai
+
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_ENABLED=true
+CACHE_TTL_SECONDS=604800
+
 PORT=8080
-BEEJEPA_DATA_PATH=./data/hackathon_sample
-BEEJEPA_REQUIRE_SYMLINK=false
+BEEJEPA_DATA_PATH=./data
+BEEJEPA_RING_BUFFER_CAPACITY=64
+BEEJEPA_RING_BUFFER_MAX_PAYLOAD_BYTES=393216
 ```
 
-### 2. Build Frontend & Run Edge Server
+### 2. Build Frontend & Run Server
 ```bash
 ./build_ui.sh
 ./gradlew run
@@ -182,19 +192,24 @@ Open `http://localhost:8080` in your browser. For frontend hot-reload during dev
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/login` | Authenticate operator and issue a 12-hour `bee_` bearer token (`GET /me`, `POST /logout`) |
 | `GET` | `/api/v1/timeline` | Full surprise trajectory `S(t)` and sequence metadata |
-| `GET` | `/api/v1/events` | Detected peak anomaly events with hydrated SAM 3.1 & Muse summaries |
-| `GET` | `/api/v1/events/{id}/media/{file}` | Stream `clip_raw.mp4`, `clip_comparison.mp4`, or `peak_frame.jpg` |
+| `GET` | `/api/v1/events` | Detected peak anomaly events with cached SAM 3.1 & Muse summaries |
+| `GET` | `/api/v1/events/{id}/media/{file}` | Serve event keyframes (`peak_frame.jpg` via cache/`ffmpeg`) or `.mp4` clips (local or HF `307` redirect) |
+| `GET` | `/api/v1/sequences/{filename}` | Stream 30-second stitched sequence videos (local or HF `307` redirect) |
 | `POST` | `/api/v1/events/{id}/analyze` | Execute or refresh SAM 3.1 + Muse Spark analysis for an event |
-| `POST` | `/api/v1/muse/ask` | Multi-event visual reasoning returning `diagnosis` (`<REPORT>`), `spokenSummary` (`<SPOKEN>`), and annotated crops |
-| `GET` | `/api/v1/muse/tts?text=...` | Natural-language neural TTS audio stream |
+| `GET` | `/api/v1/muse/status` | Upstream Baseten/Meta API connectivity, active model, and circuit breaker state |
+| `POST` | `/api/v1/muse/ask` | Multi-event visual reasoning returning `diagnosis` (`<REPORT>`), `spokenSummary` (`<SPOKEN>`), and crops |
+| `GET/POST` | `/api/v1/muse/events/{id}/sam` | Retrieve or execute SAM 3.1 concept segmentation and `IoA` containment for an event |
+| `GET` | `/api/v1/muse/tts?text=...` | Neural English TTS audio stream (`edge-tts`, cached in Redis/SQLite) |
 | `GET` | `/api/v1/muse/voice?text=...` | Deterministic 22.05 kHz WAV honeybee bioacoustic stream |
-| `GET` | `/api/v1/muse/health` | Upstream API connectivity and circuit breaker status |
+| `POST` | `/api/v1/muse/acoustic-mirror` | 1024-point FFT prosody analysis of microphone audio with bioacoustic bee reply |
 | `GET` | `/api/v1/perception/ring-buffer` | Java 25 FFM off-heap circular frame buffer telemetry |
-| `GET` | `/api/v1/perception/saccades` | Saccadic trajectory targets with SIMD latent similarity metrics |
-| `GET` | `/api/v1/perception/ablation-pyramid` | Live 5-tier ablation pyramid funnel metrics and counterfactual role analysis |
-| `POST` | `/api/v1/perception/simd-eval` | Direct hardware SIMD (`FloatVector`) latent distance & cosine evaluation |
+| `GET` | `/api/v1/perception/saccades` | Saccadic trajectory targets with SIMD cosine similarity metrics |
+| `GET` | `/api/v1/perception/ablation-pyramid` | 5-tier architecture funnel and component role breakdown |
+| `POST` | `/api/v1/perception/simd-eval` | Hardware SIMD (`FloatVector`) Euclidean distance & cosine evaluation |
 | `GET` | `/api/v1/telemetry/stats` | Request latency percentiles (`p50`, `p95`, `p99`) and `/prometheus` metrics |
+| `GET` | `/api/v1/overview` | Full system state, storage health (`/api/v1/storage`), and virtual thread status (`/api/v1/ping`) |
 
 ---
 
