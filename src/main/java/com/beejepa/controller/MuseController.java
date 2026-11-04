@@ -216,6 +216,7 @@ public class MuseController {
         return HttpResponse.status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE);
     }
 
+
     private static boolean isRiffWav(byte[] bytes) {
         return bytes != null && bytes.length >= 4
                 && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F';
@@ -234,7 +235,8 @@ public class MuseController {
             return HttpResponse.badRequest(Map.of("error", "prompt is required"));
         }
         List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(null, 1);
-        MetaMuseService.MuseAnswerResult answer = museService.answerBeekeeperQuestionWithMeta(prompt, topEvents, 1, false);
+        MetaMuseService.MuseAnswerResult answer = museService.answerBeekeeperQuestionWithMeta(prompt, topEvents, 1,
+                false);
         if ("UNAVAILABLE".equals(answer.sourceMode())) {
             return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("error", "Meta Muse is currently unavailable.", "mode", "UNAVAILABLE"));
@@ -245,8 +247,8 @@ public class MuseController {
                 "prompt", prompt,
                 "response", spoken,
                 "mode", answer.sourceMode(),
-                "audioEndpoint", "/api/v1/muse/tts?text=" + java.net.URLEncoder.encode(spoken, StandardCharsets.UTF_8)
-        ));
+                "audioEndpoint",
+                "/api/v1/muse/tts?text=" + java.net.URLEncoder.encode(spoken, StandardCharsets.UTF_8)));
     }
 
     @Post("/prepare-query")

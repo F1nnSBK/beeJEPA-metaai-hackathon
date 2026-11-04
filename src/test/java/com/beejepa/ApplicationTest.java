@@ -95,30 +95,28 @@ class ApplicationTest {
                 eventId, "00:00", 16.05, "ABOVE_TAU", 28, 11, "multi_bee_cluster_in_hotspot",
                 List.of(
                         new SamGeometry.ContainedBee(0, List.of(220, 320, 380, 460), 0.92),
-                        new SamGeometry.ContainedBee(1, List.of(240, 340, 360, 440), 0.88)
-                ),
+                        new SamGeometry.ContainedBee(1, List.of(240, 340, 360, 440), 0.88)),
                 List.of(List.of(220, 320, 380, 460), List.of(240, 340, 360, 440)),
-                "frameB64", "cropB64"
-        ));
+                "frameB64", "cropB64"));
         var answer = metaMuseService.answerBeekeeperQuestionWithMeta(
                 question,
-                List.of(new com.beejepa.muse.MetaMuseService.ManifestEventInput(eventId, "00:00", 16.05, "ABOVE_TAU", null)),
+                List.of(new com.beejepa.muse.MetaMuseService.ManifestEventInput(eventId, "00:00", 16.05, "ABOVE_TAU",
+                        null)),
                 1,
-                false
-        );
+                false);
         Assertions.assertNotNull(answer);
         var req = io.micronaut.http.HttpRequest.POST("/api/v1/muse/ask", Map.of(
                 "question", question,
                 "eventId", eventId,
-                "maxEvents", 1
-        ));
+                "maxEvents", 1));
         try {
             var resp = httpClient.toBlocking().exchange(req, String.class);
             Assertions.assertEquals(200, resp.getStatus().getCode());
             Assertions.assertNotNull(resp.body());
             Assertions.assertTrue(resp.body().contains("spokenSummary") || resp.body().contains("events"));
         } catch (io.micronaut.http.client.exceptions.HttpClientResponseException ex) {
-            // When live inference is disabled or unconfigured and uncached, /ask returns 503 with explicit error JSON
+            // When live inference is disabled or unconfigured and uncached, /ask returns
+            // 503 with explicit error JSON
             Assertions.assertEquals(503, ex.getStatus().getCode());
         }
     }

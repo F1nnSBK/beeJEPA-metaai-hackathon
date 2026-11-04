@@ -790,7 +790,8 @@ public class MetaMuseService {
         }
         Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(evt.eventId());
         if (cachedOnDisk.isPresent()) {
-            EventSpatialSummary aligned = alignSummaryTimestamp(cachedOnDisk.get(), evt.formattedTime(), score, evt.severity());
+            EventSpatialSummary aligned = alignSummaryTimestamp(cachedOnDisk.get(), evt.formattedTime(), score,
+                    evt.severity());
             spatialCache.put(evt.eventId(), aligned);
             return aligned;
         }
@@ -861,6 +862,7 @@ public class MetaMuseService {
         }
         return summary;
     }
+
 
     private static EventSpatialSummary alignSummaryTimestamp(EventSpatialSummary s, String formattedTime, double score,
             String severity) {

@@ -1071,15 +1071,15 @@ async function handleLogout() {
           </div>
 
           <!-- Coupled Token-Delta Timeline & Stepper -->
-          <div class="bg-ink-900 px-3 sm:px-4 py-3 shrink-0">
+          <div class="bg-ink-900 px-3 sm:px-4 py-2.5 sm:py-3 shrink-0">
             <div class="flex items-center justify-between gap-2 mb-2 text-xs">
               <div class="flex items-center gap-2 min-w-0">
-                <span class="font-medium text-ink-200 truncate">Token-Δ Timeline</span>
+                <span class="font-medium text-ink-200 truncate">Timeline</span>
                 <span
                   v-if="timelineData && timelineData.length > 0 && timelineMeta?.decisionThreshold != null"
-                  class="text-[11px] text-ink-400 tabular-nums shrink-0"
+                  class="hidden sm:inline text-[11px] text-ink-400 tabular-nums shrink-0"
                 >
-                  · <span class="math">𝜏 = {{ Number(timelineMeta.decisionThreshold).toFixed(2) }}</span> (P99)
+                  <span class="math">𝜏 = {{ Number(timelineMeta.decisionThreshold).toFixed(2) }}</span>
                 </span>
               </div>
 
@@ -1208,7 +1208,7 @@ async function handleLogout() {
         <!-- RIGHT PANE (5 Cols): DISTILLED BRIEFING & ABLATION WORKSPACE    -->
         <!-- =============================================================== -->
         <section class="lg:col-span-5 flex flex-col bg-ink-900 rounded-lg overflow-hidden lg:min-h-0">
-          <!-- Mode Tabs (Briefing | Ablation) + Classification Tag -->
+          <!-- Mode Tabs (Briefing | Ablation) -->
           <div class="px-3.5 sm:px-4 pt-2.5 pb-1 flex items-center justify-between gap-2 shrink-0">
             <div class="flex items-center gap-1 bg-ink-950 p-1 rounded-md" role="tablist" aria-label="Inspector mode">
               <button
@@ -1236,59 +1236,38 @@ async function handleLogout() {
                 Ablation
               </button>
             </div>
-
-            <span
-              v-if="selectedEvent"
-              class="text-[11px] text-ink-400 truncate max-w-[180px] sm:max-w-[220px]"
-            >
-              {{ selectedEvent.hasSamSpatial && selectedEvent.samSpatial?.geometricPreClassification
-                ? selectedEvent.samSpatial.geometricPreClassification
-                : 'V-JEPA 2.1 peak' }}
-            </span>
           </div>
 
-          <div v-if="selectedEvent" class="flex-1 flex flex-col p-3.5 sm:p-4 lg:overflow-y-auto lg:min-h-0">
+          <div v-if="selectedEvent" class="flex-1 flex flex-col p-3 sm:p-4 lg:overflow-y-auto lg:min-h-0">
             <!-- 4-Cell Metric Strip (One Figure, One Place) -->
             <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-1.5 shrink-0">
-              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">Token-Δ Score</div>
-                <div class="text-xl font-semibold text-ember-400 mt-0.5 tabular-nums leading-tight">
+              <div class="p-2 sm:p-2.5 bg-ink-950 rounded-md flex flex-col justify-between">
+                <div class="text-[11px] text-ink-400">Score</div>
+                <div class="text-lg sm:text-xl font-semibold text-ember-400 mt-0.5 tabular-nums leading-tight">
                   <span class="math">{{ Number(selectedEvent.tokenDeltaScore ?? selectedEvent.surpriseScoreL2).toFixed(2) }}</span>
                 </div>
-                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
-                  P99 𝜏 = {{ timelineMeta?.decisionThreshold != null ? Number(timelineMeta.decisionThreshold).toFixed(2) : '—' }}
-                </div>
               </div>
 
-              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
+              <div class="p-2 sm:p-2.5 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">Landing Board</div>
-                <div class="text-lg font-semibold text-ink-100 mt-0.5 tabular-nums leading-tight">
+                <div class="text-base sm:text-lg font-semibold text-ink-100 mt-0.5 tabular-nums leading-tight">
                   {{ selectedEvent.hasSamSpatial && selectedEvent.boardBees >= 0 ? `${selectedEvent.boardBees} bees` : `${selectedEvent.boardPeaks ?? '—'} peaks` }}
                 </div>
-                <div class="text-[10px] text-ink-500 mt-0.5">
-                  {{ selectedEvent.hasSamSpatial && selectedEvent.boardBees >= 0 ? 'SAM 3.1' : 'V-JEPA board tokens' }}
-                </div>
               </div>
 
-              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
+              <div class="p-2 sm:p-2.5 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">
                   {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? 'Hotspot' : 'Active Cells' }}
                 </div>
-                <div class="text-lg font-semibold text-electric-300 mt-0.5 tabular-nums leading-tight">
+                <div class="text-base sm:text-lg font-semibold text-electric-300 mt-0.5 tabular-nums leading-tight">
                   {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? `${selectedEvent.hotspotBeesCount} bees` : `${selectedEvent.activeCells ?? '—'} cells` }}
-                </div>
-                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
-                  {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? 'IoA ≥ 0.25' : '43×43 board overlay' }}
                 </div>
               </div>
 
-              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
+              <div class="p-2 sm:p-2.5 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">Fixation</div>
-                <div class="text-lg font-semibold text-honey-400 mt-0.5 tabular-nums leading-tight">
+                <div class="text-base sm:text-lg font-semibold text-honey-400 mt-0.5 tabular-nums leading-tight">
                   {{ selectedEvent?.hotspot ? `(${selectedEvent.hotspot.tubeletGridX}, ${selectedEvent.hotspot.tubeletGridY})` : (selectedEvent?.hotspotStatus || 'PENDING') }}
-                </div>
-                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
-                  {{ activeSaccade ? `Jump ${activeSaccade.saccadicJumpDistancePx} px` : (selectedEvent?.hotspot ? `(${Number(selectedEvent.hotspot.normCenterX).toFixed(2)}, ${Number(selectedEvent.hotspot.normCenterY).toFixed(2)})` : 'Measured overlay') }}
                 </div>
               </div>
             </div>
@@ -1406,7 +1385,7 @@ async function handleLogout() {
                     @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
                     class="px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 text-ink-400 hover:text-ink-200 text-[11px] transition-colors touch-manipulation"
                   >
-                    SAM contour
+                    Board activity
                   </button>
                 </div>
 
@@ -1420,7 +1399,7 @@ async function handleLogout() {
                     type="text"
                     v-model="museQuestionInput"
                     class="flex-1 min-w-0 px-2.5 py-1.5 bg-transparent text-ink-100 text-base sm:text-xs focus:outline-none font-sans placeholder:text-ink-500"
-                    placeholder="Ask Muse Spark about this event..."
+                    placeholder="Ask a question..."
                   />
 
                   <button

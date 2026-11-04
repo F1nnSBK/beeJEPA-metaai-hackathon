@@ -22,6 +22,8 @@ public class Sam31Client {
     private final String apiKey;
     private final String fallbackApiKey;
     private final String endpointUrl;
+    private final String modelsUrl;
+    private volatile long lastWarmupEpochMs;
 
     @jakarta.inject.Inject
     public Sam31Client(ObjectMapper objectMapper, @io.micronaut.core.annotation.Nullable ResilientApiExecutor resilientExecutor) {
@@ -49,9 +51,34 @@ public class Sam31Client {
         }
         String trimmed = baseUrl.replaceAll("/+$", "");
         this.endpointUrl = trimmed.endsWith("/v1") ? trimmed + "/responses" : trimmed + "/v1/responses";
+        this.modelsUrl = trimmed.endsWith("/v1") ? trimmed + "/models" : trimmed + "/v1/models";
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
+    }
+
+    /** Establishes an HTTP/2 TLS keep-alive connection to the Meta endpoint. */
+    public void warmConnection() {
+        if (apiKey.isBlank() && fallbackApiKey.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastWarmupEpochMs < 45_000L) {
+            return;
+        }
+        lastWarmupEpochMs = now;
+        String activeKey = !apiKey.isBlank() ? apiKey : fallbackApiKey;
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(modelsUrl))
+                    .header("Authorization", "Bearer " + activeKey)
+                    .header("Accept", "application/json")
+                    .timeout(Duration.ofSeconds(4))
+                    .GET()
+                    .build();
+            httpClient.send(req, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception ignored) {
+        }
     }
 
     public Sam31Client(ObjectMapper objectMapper) {

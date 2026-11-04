@@ -445,12 +445,8 @@ onBeforeUnmount(() => {
               <CalligraphyWord word="beeJEPA" :drawn="sceneState !== 'loading'" />
             </h1>
             <p class="lead">
-              V-JEPA 2.1 (ViT-B/16) tracks frame-to-frame token changes across the hive entrance. Where the token-delta score peaks, SAM 3.1
-              and Muse Spark take a closer look.
-            </p>
-            <p class="data">
-              {{ facts.durationSec }} s · {{ facts.fps }} fps · {{ facts.sequenceCount }} sequences ·
-              {{ facts.eventCount }} peak events · <span class="math">𝜏 = {{ facts.tau }}</span> (P99)
+              Continuous video monitoring of the hive entrance. Where movement deviates from routine traffic, the system
+              isolates the region and inspects the swarm.
             </p>
             <span class="scroll-cue" aria-hidden="true">Scroll</span>
           </div>
@@ -460,13 +456,12 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.PERIPHERY)" class="act" :class="{ 'is-seen': isSeen(ACT.PERIPHERY) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.PERIPHERY)">
-            <p class="eyebrow">Act I · System 1</p>
+            <p class="eyebrow">Act I</p>
             <h2 class="act__title"><CalligraphyWord word="Periphery" :drawn="isSeen(ACT.PERIPHERY)" /></h2>
             <p class="body">
-              V-JEPA 2.1 (ViT-B/16) encodes the flight board recorded at {{ facts.fps }} fps on a 43×43 token grid. It does not label objects. It
-              measures frame-to-frame token persistence across adjacent windows.
+              The camera stream is encoded at {{ facts.fps }} fps into a spatial grid. Instead of labeling individual
+              insects, the model tracks how strongly regions change from frame to frame.
             </p>
-            <p class="data">{{ facts.measurementCount }} measurements of <span class="math">Token-Δ</span> · {{ facts.dataset }}</p>
           </div>
         </div>
       </section>
@@ -474,16 +469,13 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.SURPRISE)" class="act" :class="{ 'is-seen': isSeen(ACT.SURPRISE) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.SURPRISE)">
-            <p class="eyebrow">Act II · Token-delta persistence</p>
+            <p class="eyebrow">Act II</p>
             <h2 class="act__title"><CalligraphyWord word="Surprise" :drawn="isSeen(ACT.SURPRISE)" /></h2>
-            <p class="formula math">Token-Δ (43×43 ViT-B/16 grid) · P99 𝜏 = {{ facts.tau }}</p>
+            <p class="formula">Peak threshold <span class="math">𝜏 = {{ facts.tau }}</span></p>
             <p class="body">
-              The token-delta score rises when patch tokens change rapidly ({{ facts.eventCount }} peaks in
-              {{ facts.measurementCount }} windows). At 00:00 (<span class="math">{{ facts.maxSurprise }}</span>), camera placement shifts the
-              whole frame including the grass; at {{ facts.focusTime }} (<strong class="math">{{ facts.focusSurprise }}</strong>,
-              frame #{{ facts.focusFrame }}), the camera is stationary and token change localizes on the flight board.
+              The score rises when movement on the board accelerates. At 00:00, placing the camera shakes the entire
+              frame; by {{ facts.focusTime }}, the camera is steady and activity localizes on the flight board.
             </p>
-            <p class="data">Peak events glow ember · height = recorded <span class="math">Token-Δ</span></p>
           </div>
         </div>
       </section>
@@ -491,28 +483,24 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.SACCADE)" class="act act--tall" :class="{ 'is-seen': isSeen(ACT.SACCADE) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.SACCADE)">
-            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} (Token-Δ <span class="math">{{ facts.focusSurprise }}</span>)</p>
+            <p class="eyebrow">Act III · {{ facts.focusTime }}</p>
             <h2 class="act__title"><CalligraphyWord word="Saccade" :drawn="isSeen(ACT.SACCADE)" /></h2>
             <p class="body">
-              The view moves to the region marked by the V-JEPA overlay at {{ facts.focusTime }}. SAM 3.1
-              segments the bees on the landing board and isolates the active cluster inside the measured hotspot.
+              The view focuses on the active region at {{ facts.focusTime }} and segments the bees on the landing board
+              to isolate the cluster inside the hotspot.
             </p>
             <dl class="readout">
               <div>
-                <dt>SAM 3.1 · board</dt>
+                <dt>Landing board</dt>
                 <dd>{{ facts.boardBeesSam }} <small>bees</small></dd>
               </div>
               <div>
-                <dt>Hotspot · <span class="math">IoA ≥ {{ IOA_THRESHOLD }}</span></dt>
+                <dt>In hotspot</dt>
                 <dd>{{ facts.hotspotBeesSam }} <small>bees</small></dd>
               </div>
               <div>
-                <dt>V-JEPA board · tokens</dt>
+                <dt>Active tokens</dt>
                 <dd>{{ facts.boardBeesDetector }} <small>peaks</small></dd>
-              </div>
-              <div class="readout__wide">
-                <dt>Geometric classification</dt>
-                <dd class="readout__code">{{ facts.classification }}</dd>
               </div>
             </dl>
           </div>
@@ -522,13 +510,12 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.REPORT)" class="act" :class="{ 'is-seen': isSeen(ACT.REPORT) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.REPORT)">
-            <p class="eyebrow">Act IV · System 2</p>
+            <p class="eyebrow">Act IV</p>
             <h2 class="act__title"><CalligraphyWord word="Report" :drawn="isSeen(ACT.REPORT)" /></h2>
             <blockquote class="quote">
               <p>
                 <span v-for="(word, index) in facts.statementWords" :key="index" :style="{ '--i': index }">{{ word }}</span>
               </p>
-              <cite>Cached response · Meta Muse Spark Open · {{ facts.museModel }}</cite>
             </blockquote>
           </div>
         </div>
@@ -796,9 +783,26 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .landing__dots {
+    display: none;
+  }
+
+  .act__content {
+    padding: 4.5rem calc(env(safe-area-inset-right) + 1rem) calc(env(safe-area-inset-bottom) + 1.25rem)
+      calc(env(safe-area-inset-left) + 1rem);
+  }
+
+  .act__inner {
+    gap: 0.65rem;
+  }
+
+  .act:not(.act--enter) .act__inner {
+    padding: 0.95rem 1.05rem;
+  }
+
   .act--enter .act__content {
     justify-content: flex-start;
-    padding-top: calc(env(safe-area-inset-top) + 4.75rem);
+    padding-top: calc(env(safe-area-inset-top) + 4.5rem);
   }
 }
 
@@ -841,14 +845,14 @@ onBeforeUnmount(() => {
 
 .lead {
   font-family: var(--serif);
-  font-size: clamp(1.35rem, 4.8vw, 2rem);
-  line-height: 1.22;
+  font-size: clamp(1.2rem, 4.4vw, 1.85rem);
+  line-height: 1.26;
 }
 
 .body {
   font-family: var(--serif);
-  font-size: clamp(1.15rem, 3.9vw, 1.45rem);
-  line-height: 1.42;
+  font-size: clamp(1.06rem, 3.6vw, 1.38rem);
+  line-height: 1.4;
   color: rgba(234, 235, 237, 0.9);
 }
 
@@ -857,18 +861,14 @@ onBeforeUnmount(() => {
   color: var(--vermilion);
 }
 
-.data {
-  font-family: var(--mono);
-  font-size: 0.74rem;
-  line-height: 1.6;
-  color: var(--wax-muted);
-}
-
 .formula {
-  padding-left: 0.9rem;
+  padding-left: 0.85rem;
   border-left: 2px solid var(--vermilion);
-  font-size: clamp(1.15rem, 4vw, 1.4rem);
-  line-height: 1.5;
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 3.6vw, 1.3rem);
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .readout {
@@ -921,11 +921,11 @@ onBeforeUnmount(() => {
 }
 
 .quote p {
-  margin: 0 0 0.8rem;
+  margin: 0;
   font-family: var(--serif);
   font-style: italic;
-  font-size: clamp(1.5rem, 5.6vw, 2.4rem);
-  line-height: 1.2;
+  font-size: clamp(1.3rem, 5vw, 2.2rem);
+  line-height: 1.24;
 }
 
 .quote span {

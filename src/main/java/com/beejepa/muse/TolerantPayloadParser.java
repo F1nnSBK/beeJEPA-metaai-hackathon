@@ -21,37 +21,34 @@ public final class TolerantPayloadParser {
 
     private static final ObjectMapper MAPPER = JacksonFactory.createTolerantMapper();
 
-    private static final Pattern BOX_TOKEN_REGEX =
-            Pattern.compile("<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)(?:;w=(\\d+(?:\\.\\d+)?);h=(\\d+(?:\\.\\d+)?))?[^|]*\\|>");
+    private static final Pattern BOX_TOKEN_REGEX = Pattern.compile(
+            "<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)(?:;w=(\\d+(?:\\.\\d+)?);h=(\\d+(?:\\.\\d+)?))?[^|]*\\|>");
 
-    private static final Pattern REPORT_TAG_REGEX =
-            Pattern.compile("(?is)<report>\\s*(.*?)\\s*(?:</report>|(?=<spoken)|$)");
-    private static final Pattern SPOKEN_TAG_REGEX =
-            Pattern.compile("(?is)<spoken(?:_summary)?>\\s*(.*?)\\s*(?:</spoken(?:_summary)?>|$)");
-    private static final Pattern SPOKEN_HEADING_SPLIT_REGEX =
-            Pattern.compile("(?im)^(?:#+\\s*(?:spoken\\s+summary|natural\\s+spoken\\s+summary|voice\\s+briefing|audio\\s+narration)|---\\s*spoken\\s*---)\\s*:?\\s*$");
-    private static final Pattern MM_SS_TIMESTAMP_REGEX =
-            Pattern.compile("\\b(\\d{2}):(\\d{2})\\b");
+    private static final Pattern SPOKEN_TAG_REGEX = Pattern
+            .compile("(?is)<spoken(?:_summary)?>\\s*(.*?)\\s*(?:</spoken(?:_summary)?>|$)");
+    private static final Pattern SPOKEN_HEADING_SPLIT_REGEX = Pattern.compile(
+            "(?im)^(?:#+\\s*(?:spoken\\s+summary|natural\\s+spoken\\s+summary|voice\\s+briefing|audio\\s+narration)|---\\s*spoken\\s*---)\\s*:?\\s*$");
+    private static final Pattern MM_SS_TIMESTAMP_REGEX = Pattern.compile("\\b(\\d{2}):(\\d{2})\\b");
 
     private TolerantPayloadParser() {}
 
     public record DualMuseOutput(
             String displayReport,
-            String spokenSummary
-    ) {}
+            String spokenSummary) {
+    }
 
     public record ParsedFovealArgs(
             String resolvedEventId,
             int targetX,
             int targetY,
-            int foveaRadiusPx
-    ) {}
+            int foveaRadiusPx) {
+    }
 
     public record ParsedSamConceptArgs(
             String resolvedEventId,
             String conceptPrompt,
-            boolean includeBaselineBeeCount
-    ) {}
+            boolean includeBaselineBeeCount) {
+    }
 
     /**
      * Parses QueryFovealHotspot arguments tolerantly across snake_case, camelCase,
@@ -504,4 +501,3 @@ public final class TolerantPayloadParser {
         return text;
     }
 }
-
