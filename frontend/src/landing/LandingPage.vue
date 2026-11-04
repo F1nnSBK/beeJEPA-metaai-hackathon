@@ -45,14 +45,229 @@ const ACT_LABELS = [
 ]
 
 function actOpacity(act) {
-  if (reducedMotion) return 1
+  if (reducedMotion) return activeAct.value === act ? 1 : 0
   const dist = Math.abs(storyPosition.value - act)
-  return 1 - smoothstep(0.22, 0.72, dist)
+  return 1 - smoothstep(0.12, 0.46, dist)
+}
+
+function actStyle(act) {
+  const opacity = actOpacity(act)
+  const visible = opacity > 0.005
+  if (reducedMotion) {
+    return {
+      opacity,
+      visibility: visible ? 'visible' : 'hidden',
+      pointerEvents: activeAct.value === act ? 'auto' : 'none'
+    }
+  }
+  const delta = storyPosition.value - act
+  const shiftY = Math.max(-14, Math.min(14, -delta * 24))
+  return {
+    opacity,
+    transform: `translate3d(0, ${shiftY.toFixed(1)}px, 0)`,
+    visibility: visible ? 'visible' : 'hidden',
+    pointerEvents: activeAct.value === act ? 'auto' : 'none'
+  }
+}
+
+const MAX_ACT = ACT.ENTER
+const SNAP_DURATION_MS = 520
+const STEP_HOLD_MS = 640
+const WHEEL_GAP_RESET_MS = 110
+const MAX_GESTURE_LOCK_MS = 1050
+
+let currentTargetAct = ACT.ARRIVAL
+let scrollAnimFrame = null
+let snapIdleTimer = null
+let isProgrammaticScroll = false
+
+let gestureLockedUntil = 0
+let waitingForGestureEnd = false
+let lastWheelTime = 0
+let lastWheelAbsDelta = 0
+let wheelDeltaBuffer = 0
+
+let touchStartY = null
+let touchStartX = null
+let touchHandled = false
+
+function getActScrollTop(act) {
+  const el = sectionRefs.value[act]
+  if (el) return el.offsetTop
+  return act * window.innerHeight
+}
+
+function animateToAct(act, duration = SNAP_DURATION_MS) {
+  const clampedAct = Math.max(ACT.ARRIVAL, Math.min(MAX_ACT, act))
+  currentTargetAct = clampedAct
+  seenActs.value = new Set([...seenActs.value, clampedAct])
+
+  if (scrollAnimFrame !== null) {
+    cancelAnimationFrame(scrollAnimFrame)
+    scrollAnimFrame = null
+  }
+  if (snapIdleTimer !== null) {
+    clearTimeout(snapIdleTimer)
+    snapIdleTimer = null
+  }
+
+  const targetTop = getActScrollTop(clampedAct)
+  const startTop = window.scrollY
+  const distance = targetTop - startTop
+
+  if (reducedMotion || duration <= 0 || Math.abs(distance) < 1) {
+    isProgrammaticScroll = true
+    window.scrollTo({ top: targetTop, behavior: 'auto' })
+    requestAnimationFrame(() => {
+      isProgrammaticScroll = false
+    })
+    return
+  }
+
+  isProgrammaticScroll = true
+  const startTime = performance.now()
+
+  const tick = (now) => {
+    const elapsed = Math.min(1, (now - startTime) / duration)
+    const eased = 1 - Math.pow(1 - elapsed, 3)
+    const nextTop = startTop + distance * eased
+    window.scrollTo({ top: nextTop, behavior: 'auto' })
+
+    if (elapsed < 1) {
+      scrollAnimFrame = requestAnimationFrame(tick)
+    } else {
+      window.scrollTo({ top: targetTop, behavior: 'auto' })
+      scrollAnimFrame = null
+      requestAnimationFrame(() => {
+        isProgrammaticScroll = false
+      })
+    }
+  }
+
+  scrollAnimFrame = requestAnimationFrame(tick)
 }
 
 function scrollToAct(act) {
-  seenActs.value = new Set([...seenActs.value, act])
-  sectionRefs.value[act]?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })
+  gestureLockedUntil = performance.now() + STEP_HOLD_MS
+  waitingForGestureEnd = true
+  animateToAct(act)
+}
+
+function isInteractiveTarget(target) {
+  return target instanceof Element && Boolean(target.closest('input, button, a, textarea, select, label'))
+}
+
+function handleWheel(event) {
+  if (event.ctrlKey || event.metaKey) return
+  if (loadError.value || !facts.value) return
+
+  event.preventDefault()
+
+  let deltaY = event.deltaY
+  if (event.deltaMode === 1) deltaY *= 32
+  else if (event.deltaMode === 2) deltaY *= window.innerHeight
+
+  const now = performance.now()
+  const dt = now - lastWheelTime
+  const absDelta = Math.abs(deltaY)
+  lastWheelTime = now
+
+  if (dt > WHEEL_GAP_RESET_MS) {
+    waitingForGestureEnd = false
+    wheelDeltaBuffer = 0
+    lastWheelAbsDelta = 0
+  }
+
+  if (now < gestureLockedUntil) {
+    lastWheelAbsDelta = absDelta
+    return
+  }
+
+  if (waitingForGestureEnd) {
+    const isFreshPush = absDelta > Math.max(18, lastWheelAbsDelta * 1.55)
+    const lockExpired = now - (gestureLockedUntil - STEP_HOLD_MS) > MAX_GESTURE_LOCK_MS
+    if (!isFreshPush && !lockExpired) {
+      lastWheelAbsDelta = absDelta
+      return
+    }
+    waitingForGestureEnd = false
+    wheelDeltaBuffer = 0
+  }
+
+  lastWheelAbsDelta = absDelta
+  wheelDeltaBuffer += deltaY
+
+  if (Math.abs(wheelDeltaBuffer) < 16) return
+
+  const direction = wheelDeltaBuffer > 0 ? 1 : -1
+  wheelDeltaBuffer = 0
+
+  const baseAct = scrollAnimFrame !== null ? currentTargetAct : Math.round(storyPosition.value)
+  const nextAct = Math.max(ACT.ARRIVAL, Math.min(MAX_ACT, baseAct + direction))
+
+  if (nextAct !== baseAct || Math.abs(storyPosition.value - nextAct) > 0.02) {
+    gestureLockedUntil = now + STEP_HOLD_MS
+    waitingForGestureEnd = true
+    animateToAct(nextAct)
+  }
+}
+
+function handleTouchStart(event) {
+  if (event.touches.length !== 1 || isInteractiveTarget(event.target)) {
+    touchStartY = null
+    return
+  }
+  touchStartY = event.touches[0].clientY
+  touchStartX = event.touches[0].clientX
+  touchHandled = false
+}
+
+function handleTouchMove(event) {
+  if (touchStartY === null || event.touches.length !== 1) return
+  if (loadError.value || !facts.value) return
+  const dy = touchStartY - event.touches[0].clientY
+  const dx = touchStartX - event.touches[0].clientX
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+    event.preventDefault()
+  }
+  if (!touchHandled && Math.abs(dy) >= 34 && Math.abs(dy) > Math.abs(dx)) {
+    touchHandled = true
+    const direction = dy > 0 ? 1 : -1
+    const baseAct = scrollAnimFrame !== null ? currentTargetAct : Math.round(storyPosition.value)
+    const nextAct = Math.max(ACT.ARRIVAL, Math.min(MAX_ACT, baseAct + direction))
+    animateToAct(nextAct)
+  }
+}
+
+function handleKeyDown(event) {
+  if (loadError.value || !facts.value) return
+  if (isInteractiveTarget(event.target)) return
+  const baseAct = scrollAnimFrame !== null ? currentTargetAct : Math.round(storyPosition.value)
+  if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
+    event.preventDefault()
+    animateToAct(Math.min(MAX_ACT, baseAct + 1))
+  } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+    event.preventDefault()
+    animateToAct(Math.max(ACT.ARRIVAL, baseAct - 1))
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    animateToAct(ACT.ARRIVAL)
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    animateToAct(ACT.ENTER)
+  }
+}
+
+function handleNativeScroll() {
+  if (isProgrammaticScroll || scrollAnimFrame !== null) return
+  currentTargetAct = Math.round(storyPosition.value)
+  if (snapIdleTimer !== null) clearTimeout(snapIdleTimer)
+  snapIdleTimer = setTimeout(() => {
+    const nearestAct = Math.max(ACT.ARRIVAL, Math.min(MAX_ACT, Math.round(storyPosition.value)))
+    if (Math.abs(storyPosition.value - nearestAct) > 0.015) {
+      animateToAct(nearestAct, 320)
+    }
+  }, 140)
 }
 
 const facts = computed(() => {
@@ -138,6 +353,10 @@ watch(activeAct, (act) => {
 })
 
 watch(storyPosition, (position) => {
+  const nearestAct = Math.round(position)
+  if (Math.abs(position - nearestAct) < 0.48 && !seenActs.value.has(nearestAct)) {
+    seenActs.value = new Set([...seenActs.value, nearestAct])
+  }
   if (!hiveScene) return
   hiveScene.setStory(position)
   const fullyInsideHive = position > ACT.ENTER + 0.05
@@ -148,6 +367,11 @@ watch(storyPosition, (position) => {
 onMounted(async () => {
   document.documentElement.classList.add('landing-scroll-snap')
   window.addEventListener('pointermove', handlePointer, { passive: true })
+  window.addEventListener('wheel', handleWheel, { passive: false })
+  window.addEventListener('touchstart', handleTouchStart, { passive: true })
+  window.addEventListener('touchmove', handleTouchMove, { passive: false })
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('scroll', handleNativeScroll, { passive: true })
   try {
     snapshot.value = await loadSnapshot()
   } catch (error) {
@@ -156,12 +380,20 @@ onMounted(async () => {
     return
   }
   await nextTick()
+  currentTargetAct = Math.round(storyPosition.value)
   await startScene()
 })
 
 onBeforeUnmount(() => {
   document.documentElement.classList.remove('landing-scroll-snap')
   window.removeEventListener('pointermove', handlePointer)
+  window.removeEventListener('wheel', handleWheel)
+  window.removeEventListener('touchstart', handleTouchStart)
+  window.removeEventListener('touchmove', handleTouchMove)
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('scroll', handleNativeScroll)
+  if (scrollAnimFrame !== null) cancelAnimationFrame(scrollAnimFrame)
+  if (snapIdleTimer !== null) clearTimeout(snapIdleTimer)
   hiveScene?.dispose()
   hiveScene = null
 })
@@ -207,7 +439,7 @@ onBeforeUnmount(() => {
     <main v-if="facts" class="landing__story">
       <section :ref="bindSection(ACT.ARRIVAL)" class="act act--arrival" :class="{ 'is-seen': isSeen(ACT.ARRIVAL) }">
         <div class="act__content">
-          <div class="act__inner" :style="{ opacity: actOpacity(ACT.ARRIVAL) }">
+          <div class="act__inner" :style="actStyle(ACT.ARRIVAL)">
             <p class="eyebrow">Hive entrance monitoring</p>
             <h1 class="act__title act__title--hero">
               <CalligraphyWord word="beeJEPA" :drawn="sceneState !== 'loading'" />
@@ -227,7 +459,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.PERIPHERY)" class="act" :class="{ 'is-seen': isSeen(ACT.PERIPHERY) }">
         <div class="act__content">
-          <div class="act__inner" :style="{ opacity: actOpacity(ACT.PERIPHERY) }">
+          <div class="act__inner" :style="actStyle(ACT.PERIPHERY)">
             <p class="eyebrow">Act I · System 1</p>
             <h2 class="act__title"><CalligraphyWord word="Periphery" :drawn="isSeen(ACT.PERIPHERY)" /></h2>
             <p class="body">
@@ -241,7 +473,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.SURPRISE)" class="act" :class="{ 'is-seen': isSeen(ACT.SURPRISE) }">
         <div class="act__content">
-          <div class="act__inner" :style="{ opacity: actOpacity(ACT.SURPRISE) }">
+          <div class="act__inner" :style="actStyle(ACT.SURPRISE)">
             <p class="eyebrow">Act II · Latent prediction error</p>
             <h2 class="act__title"><CalligraphyWord word="Surprise" :drawn="isSeen(ACT.SURPRISE)" /></h2>
             <p class="formula math">𝑆(𝑡) = ‖𝑧<sub>pred</sub> − 𝑧<sub>target</sub>‖<sub>2</sub></p>
@@ -258,7 +490,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.SACCADE)" class="act act--tall" :class="{ 'is-seen': isSeen(ACT.SACCADE) }">
         <div class="act__content">
-          <div class="act__inner" :style="{ opacity: actOpacity(ACT.SACCADE) }">
+          <div class="act__inner" :style="actStyle(ACT.SACCADE)">
             <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} (<span class="math">{{ facts.focusSurprise }}𝜎</span>)</p>
             <h2 class="act__title"><CalligraphyWord word="Saccade" :drawn="isSeen(ACT.SACCADE)" /></h2>
             <p class="body">
@@ -289,7 +521,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.REPORT)" class="act" :class="{ 'is-seen': isSeen(ACT.REPORT) }">
         <div class="act__content">
-          <div class="act__inner" :style="{ opacity: actOpacity(ACT.REPORT) }">
+          <div class="act__inner" :style="actStyle(ACT.REPORT)">
             <p class="eyebrow">Act IV · System 2</p>
             <h2 class="act__title"><CalligraphyWord word="Report" :drawn="isSeen(ACT.REPORT)" /></h2>
             <blockquote class="quote">
@@ -304,7 +536,7 @@ onBeforeUnmount(() => {
 
       <section :ref="bindSection(ACT.ENTER)" class="act act--enter" :class="{ 'is-seen': isSeen(ACT.ENTER) }">
         <div class="act__content">
-          <div class="act__inner act__inner--centered">
+          <div class="act__inner act__inner--centered" :style="actStyle(ACT.ENTER)">
             <p class="eyebrow">Beekeeper console</p>
             <h2 class="enter-title">Inside the hive</h2>
             <LoginCard @authenticated="emit('authenticated', $event)" />
@@ -498,7 +730,7 @@ onBeforeUnmount(() => {
   padding: var(--gutter);
 }
 
-/* ---------- Acts: 100svh scroll-snap stops so each section locks cleanly in view ---------- */
+/* ---------- Acts: 100svh scroll-snap stops with viewport-pinned cards ---------- */
 .act {
   position: relative;
   height: 100svh;
@@ -513,19 +745,20 @@ onBeforeUnmount(() => {
 }
 
 .act--enter {
-  height: auto;
+  height: 100svh;
   min-height: 100svh;
 }
 
 .act__content {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   min-height: 100svh;
   padding: 5.5rem calc(env(safe-area-inset-right) + var(--gutter)) calc(env(safe-area-inset-bottom) + 2rem)
     calc(env(safe-area-inset-left) + var(--gutter));
+  pointer-events: none;
 }
 
 .act__inner {
@@ -534,6 +767,7 @@ onBeforeUnmount(() => {
   gap: 0.9rem;
   width: 100%;
   max-width: 34rem;
+  will-change: opacity, transform;
 }
 
 .act:not(.act--enter) .act__inner {
@@ -544,42 +778,13 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72);
-  transition:
-    opacity 0.45s ease,
-    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.act:not(.act--enter):not(.is-seen) .act__inner {
-  opacity: 0 !important;
-  transform: translateY(14px);
-  pointer-events: none;
 }
 
 .act__inner > * {
   margin: 0;
-  opacity: 0;
-  transform: translateY(10px);
-  transition:
-    opacity 0.5s ease,
-    transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.is-seen .act__inner > * {
-  opacity: 1;
-  transform: none;
-}
-
-.is-seen .act__inner > :nth-child(2) { transition-delay: 0.05s; }
-.is-seen .act__inner > :nth-child(3) { transition-delay: 0.14s; }
-.is-seen .act__inner > :nth-child(4) { transition-delay: 0.22s; }
-.is-seen .act__inner > :nth-child(5) { transition-delay: 0.3s; }
-
-.act--enter.is-seen .act__inner > :nth-child(3) {
-  transition-delay: 0.16s;
 }
 
 .act--enter .act__content {
-  position: relative;
   justify-content: center;
   align-items: center;
 }
@@ -728,11 +933,11 @@ onBeforeUnmount(() => {
   /* inline-block swallows trailing whitespace, so word spacing is applied as margin. */
   margin-right: 0.24em;
   opacity: 0;
-  transform: translateY(0.3em);
+  transform: translateY(0.2em);
   transition:
-    opacity 0.45s ease,
-    transform 0.45s ease;
-  transition-delay: calc(0.2s + var(--i) * 35ms);
+    opacity 0.35s ease,
+    transform 0.35s ease;
+  transition-delay: calc(var(--i) * 18ms);
 }
 
 .is-seen .quote span {
