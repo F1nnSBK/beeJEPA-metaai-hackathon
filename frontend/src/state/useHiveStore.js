@@ -366,7 +366,11 @@ function warmMusePipeline(eventId = null) {
 }
 
 function isGlobalCohortQuestion(questionText) {
-  return /\b(today|day|overall|summary|all events|timeline|recordings?|cohort|global)\b/i.test(questionText || '')
+  const q = questionText || ''
+  if (/\b(this|here|current|right now|at this|in this|clip|frame|moment|spot|hier|jetzt|diesem|dieser)\b/i.test(q)) {
+    return false
+  }
+  return /\b(all events|all clips|all recordings|across recordings|whole day|entire day|full timeline|overall summary|cohort|global summary|top events)\b/i.test(q)
 }
 
 async function askMuse(question = null, options = {}) {

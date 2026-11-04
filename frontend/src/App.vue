@@ -303,13 +303,13 @@ async function toggleMicrophoneListening() {
       const resampled = downsampleBuffer(allSamples, sampleRate, targetRate)
       const wavBytes = encodeWavBuffer(resampled, targetRate)
 
+      isTranscribing.value = true
       isProcessing.value = false
       museError.value = null
 
       let recognizedText = ''
 
       try {
-        isTranscribing.value = true
         const transRes = await apiFetch('/api/v1/muse/transcribe', {
           method: 'POST',
           headers: { 'Content-Type': 'audio/wav' },
@@ -328,13 +328,14 @@ async function toggleMicrophoneListening() {
       } catch (err) {
         museError.value = 'Voice transcription failed.'
         console.debug('Transcribe error:', err)
-      } finally {
-        isTranscribing.value = false
       }
 
       if (recognizedText) {
-        console.log('Voice input complete. Executing production pipeline:', recognizedText)
+        isAskingMuse.value = true
+        isTranscribing.value = false
         await askMuse(recognizedText)
+      } else {
+        isTranscribing.value = false
       }
     }
 
@@ -691,6 +692,8 @@ function syncTimelineToVideo(seek = true) {
   const closest = findClosestEvent(t)
   if (closest && closest.eventId !== selectedEvent.value?.eventId) {
     selectedEvent.value = closest
+    updateActiveSaccade()
+    warmMusePipeline(closest.eventId)
   }
 
   if (seek && (activeView.value === 'comparison' || activeView.value === 'sequence')) {
@@ -1406,13 +1409,14 @@ async function handleLogout() {
                     v-model="museQuestionInput"
                     @focus="warmMusePipeline()"
                     class="flex-1 min-w-0 px-2.5 py-1.5 bg-transparent text-ink-100 text-base sm:text-xs focus:outline-none font-sans placeholder:text-ink-500"
-                    placeholder="Ask a question..."
+                    :placeholder="isRecording ? 'Listening...' : ((isTranscribing || isProcessing) ? 'Transcribing voice...' : 'Ask a question...')"
                   />
 
                   <button
                     type="button"
                     @click="toggleVoiceInput"
-                    :class="isRecording ? 'bg-ember-500/20 text-ember-300' : 'text-ink-400 hover:text-ink-100 hover:bg-ink-900'"
+                    :disabled="isTranscribing || isProcessing"
+                    :class="isRecording ? 'bg-ember-500/20 text-ember-300' : 'text-ink-400 hover:text-ink-100 hover:bg-ink-900 disabled:opacity-40'"
                     class="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] rounded flex items-center justify-center transition-colors shrink-0 touch-manipulation"
                     :title="isRecording ? 'Listening...' : 'Voice input'"
                     aria-label="Voice input"
@@ -1425,11 +1429,11 @@ async function handleLogout() {
 
                   <button
                     type="submit"
-                    :disabled="isAskingMuse"
+                    :disabled="isAskingMuse || isTranscribing || isProcessing"
                     class="min-h-[36px] sm:min-h-[32px] px-3.5 bg-honey-400 hover:bg-honey-300 disabled:opacity-50 text-ink-950 font-semibold text-xs rounded transition-colors flex items-center justify-center gap-1.5 shrink-0 touch-manipulation"
                   >
-                    <span v-if="isAskingMuse" class="w-3 h-3 border-2 border-ink-950 border-t-transparent rounded-full animate-spin"></span> <!-- taste-skill-ignore -->
-                    <span>{{ isAskingMuse ? 'Asking...' : 'Ask' }}</span>
+                    <span v-if="isAskingMuse || isTranscribing || isProcessing" class="w-3 h-3 border-2 border-ink-950 border-t-transparent rounded-full animate-spin"></span> <!-- taste-skill-ignore -->
+                    <span>{{ (isAskingMuse || isTranscribing || isProcessing) ? 'Asking...' : 'Ask' }}</span>
                   </button>
                 </form>
               </div>
