@@ -111,6 +111,7 @@ const beeModeActive = ref(Boolean(initialPrefs.beeModeActive ?? false))
 const autoReadAloud = ref(Boolean(initialPrefs.autoReadAloud ?? true))
 const isBeeModePlaying = ref(false)
 const isPlayingBeeBuzz = ref(false)
+const isLoadingTts = ref(false)
 const isSpeakingAloud = ref(false)
 const isRecording = ref(false)
 const isProcessing = ref(false)
@@ -150,13 +151,14 @@ function stopAllAudio() {
     } catch (e) { }
     activeAudioElement = null
   }
+  isLoadingTts.value = false
   isSpeakingAloud.value = false
   isPlayingBeeBuzz.value = false
   isBeeModePlaying.value = false
 }
 
 async function readAloud(text = null) {
-  if (isSpeakingAloud.value) {
+  if (isSpeakingAloud.value || isLoadingTts.value) {
     stopAllAudio()
     return
   }
@@ -166,14 +168,21 @@ async function readAloud(text = null) {
 
   stopAllAudio()
   try {
-    isSpeakingAloud.value = true
+    isLoadingTts.value = true
     const url = '/api/v1/muse/tts?text=' + encodeURIComponent(content)
     const audio = new Audio(url)
     activeAudioElement = audio
+    audio.onplaying = () => {
+      if (activeAudioElement === audio) {
+        isLoadingTts.value = false
+        isSpeakingAloud.value = true
+      }
+    }
     audio.onended = () => {
       if (activeAudioElement === audio) {
         activeAudioElement = null
       }
+      isLoadingTts.value = false
       isSpeakingAloud.value = false
     }
     audio.onerror = (err) => {
@@ -181,9 +190,14 @@ async function readAloud(text = null) {
       if (activeAudioElement === audio) {
         activeAudioElement = null
       }
+      isLoadingTts.value = false
       isSpeakingAloud.value = false
     }
     await audio.play()
+    if (activeAudioElement === audio) {
+      isLoadingTts.value = false
+      isSpeakingAloud.value = true
+    }
   } catch (err) {
     console.warn('Failed to play TTS audio:', err)
     stopAllAudio()
@@ -400,6 +414,7 @@ async function prepareMusePayload(event = null, question = null) {
         retries: 1
       })
       if (res.ok && res.data) {
+        stagedSamQuery.value = null
         stagedMuseQuery.value = res.data
         stagedTab.value = 'prompt'
         stagedMuseModalOpen.value = true
@@ -412,7 +427,7 @@ async function prepareMusePayload(event = null, question = null) {
   async function prepareSamPayload(event = null, prompt = null) {
     const ev = event || selectedEvent.value
     if (!ev) return
-    const p = prompt || museQuestionInput.value
+    const p = prompt || 'bee'
 
     isPreparingMuse.value = true
     try {
@@ -434,6 +449,7 @@ async function prepareMusePayload(event = null, question = null) {
         retries: 1
       })
       if (res.ok && res.data) {
+        stagedMuseQuery.value = null
         stagedSamQuery.value = res.data
         stagedTab.value = 'payload'
         stagedMuseModalOpen.value = true
@@ -525,6 +541,7 @@ async function prepareMusePayload(event = null, question = null) {
       autoReadAloud,
       isBeeModePlaying,
       isPlayingBeeBuzz,
+      isLoadingTts,
       isSpeakingAloud,
       isRecording,
       isProcessing,

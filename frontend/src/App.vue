@@ -53,6 +53,7 @@ const {
   autoReadAloud,
   isBeeModePlaying,
   isPlayingBeeBuzz,
+  isLoadingTts,
   isSpeakingAloud,
   isRecording,
   isProcessing,
@@ -1312,13 +1313,14 @@ async function handleLogout() {
                   <div v-if="museDiagnosis" class="flex items-center gap-1.5">
                     <button
                       type="button"
-                      @click="isSpeakingAloud ? stopReadAloud() : readAloud()"
+                      @click="(isSpeakingAloud || isLoadingTts) ? stopReadAloud() : readAloud()"
                       class="px-2.5 min-h-[32px] bg-ink-950 hover:bg-ink-800 text-honey-300 rounded flex items-center gap-1.5 transition-colors text-[11px] font-medium touch-manipulation"
-                      :title="isSpeakingAloud ? 'Stop audio' : 'Read briefing aloud'"
+                      :title="isLoadingTts ? 'Synthesizing audio...' : (isSpeakingAloud ? 'Stop audio' : 'Read briefing aloud')"
                     >
-                      <svg v-if="isSpeakingAloud" class="w-3 h-3 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                      <span v-if="isLoadingTts" class="w-3 h-3 border-2 border-honey-300 border-t-transparent rounded-full animate-spin"></span> <!-- taste-skill-ignore -->
+                      <svg v-else-if="isSpeakingAloud" class="w-3 h-3 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                       <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5-2.23l-5 4H2v12h4.5l5 4V1zm4.5 11c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-                      <span>{{ isSpeakingAloud ? 'Stop' : 'Read' }}</span>
+                      <span>{{ isLoadingTts ? 'Loading...' : (isSpeakingAloud ? 'Stop' : 'Read') }}</span>
                     </button>
                     <button
                       type="button"

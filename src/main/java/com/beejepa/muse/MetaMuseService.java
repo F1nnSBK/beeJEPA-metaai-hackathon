@@ -785,12 +785,13 @@ public class MetaMuseService {
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
         EventSpatialSummary inMemory = spatialCache.get(evt.eventId());
         if (inMemory != null) {
-            return inMemory;
+            return alignSummaryTimestamp(inMemory, evt.formattedTime());
         }
         Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(evt.eventId());
         if (cachedOnDisk.isPresent()) {
-            spatialCache.put(evt.eventId(), cachedOnDisk.get());
-            return cachedOnDisk.get();
+            EventSpatialSummary aligned = alignSummaryTimestamp(cachedOnDisk.get(), evt.formattedTime());
+            spatialCache.put(evt.eventId(), aligned);
+            return aligned;
         }
 
         double score = Math.round(evt.surpriseScore() * 10000.0) / 10000.0;
@@ -860,6 +861,24 @@ public class MetaMuseService {
             }
         }
         return summary;
+    }
+
+    private static EventSpatialSummary alignSummaryTimestamp(EventSpatialSummary s, String formattedTime) {
+        if (formattedTime == null || formattedTime.isBlank() || formattedTime.equals(s.timestamp())) {
+            return s;
+        }
+        return new EventSpatialSummary(
+                s.eventId(),
+                formattedTime,
+                s.tokenDeltaScore(),
+                s.severity(),
+                s.landingBoardBeeCount(),
+                s.beesInsideHotspotCount(),
+                s.geometricPreClassification(),
+                s.containedBees(),
+                s.boardBees(),
+                s.frameBase64(),
+                s.cropBase64());
     }
 
     private static EventSpatialSummary unavailableSummary(ManifestEventInput evt, double score, String frameB64,

@@ -321,7 +321,7 @@ public class EventService {
         item.put("timestampSec", CatalogStatistics.round(e.timeSecAxis(), 3));
         item.put("timeSecLocal", CatalogStatistics.round(e.timeSecLocal(), 3));
         item.put("recordingTimeSec", CatalogStatistics.round(e.recordingTimeSec(), 3));
-        item.put("formattedTime", formatMmSs(e.recordingTimeSec()));
+        item.put("formattedTime", formatMmSs(e.timeSecAxis()));
         item.put("frameIndex", e.peakFrame());
         item.put("tokenDeltaScore", e.score());
         item.put("surpriseScoreL2", e.score());
