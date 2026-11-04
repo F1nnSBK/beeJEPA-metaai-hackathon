@@ -22,7 +22,7 @@ public final class TolerantPayloadParser {
     private static final ObjectMapper MAPPER = JacksonFactory.createTolerantMapper();
 
     private static final Pattern BOX_TOKEN_REGEX =
-            Pattern.compile("<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)[^|]*\\|>");
+            Pattern.compile("<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)(?:;w=(\\d+(?:\\.\\d+)?);h=(\\d+(?:\\.\\d+)?))?[^|]*\\|>");
 
     private static final Pattern REPORT_TAG_REGEX =
             Pattern.compile("(?is)<report>\\s*(.*?)\\s*</report>");
@@ -192,7 +192,9 @@ public final class TolerantPayloadParser {
                 double y1 = Double.parseDouble(matcher.group(2));
                 double x2 = Double.parseDouble(matcher.group(3));
                 double y2 = Double.parseDouble(matcher.group(4));
-                rawCoords.add(new double[]{x1, y1, x2, y2});
+                double tokenW = matcher.group(5) != null ? Double.parseDouble(matcher.group(5)) : -1.0;
+                double tokenH = matcher.group(6) != null ? Double.parseDouble(matcher.group(6)) : -1.0;
+                rawCoords.add(new double[]{x1, y1, x2, y2, tokenW, tokenH});
             } catch (NumberFormatException ignored) {
             }
         }
@@ -214,9 +216,18 @@ public final class TolerantPayloadParser {
             double ry1 = c[1];
             double rx2 = c[2];
             double ry2 = c[3];
+            double tokenW = c.length >= 6 ? c[4] : -1.0;
+            double tokenH = c.length >= 6 ? c[5] : -1.0;
 
             int x1, y1, x2, y2;
-            if (scaleFrom1000) {
+            if (tokenW > 0.0 && tokenH > 0.0) {
+                double scaleX = safeW / tokenW;
+                double scaleY = safeH / tokenH;
+                x1 = (int) Math.round(rx1 * scaleX);
+                y1 = (int) Math.round(ry1 * scaleY);
+                x2 = (int) Math.round(rx2 * scaleX);
+                y2 = (int) Math.round(ry2 * scaleY);
+            } else if (scaleFrom1000) {
                 // Normalized [0..1] vs [0..1000] detection
                 boolean isUnitNormalized = rx2 <= 1.0 && ry2 <= 1.0 && (rx2 > 0.0 || ry2 > 0.0);
                 double scaleX = isUnitNormalized ? safeW : (safeW / 1000.0);

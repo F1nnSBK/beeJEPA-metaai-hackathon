@@ -63,7 +63,13 @@ class TolerantPayloadParserTest {
         Assertions.assertEquals(1, scaledTokens.size());
         Assertions.assertEquals(new BoundingBox(344, 344, 688, 688), scaledTokens.get(0));
 
-        // 2. JSON array of boxes already in pixel coordinates (<= 688)
+        // 2. Live SAM 3.1 token with explicit ;w=688;h=688 preserves pixel coordinates and passes landing-board filter
+        String liveSamToken = "<0f>0<|box;x1=290;y1=385;x2=318;y2=415;w=688;h=688|><|mask;x=0;y=0;data=31,29|>";
+        List<BoundingBox> liveBoxes = TolerantPayloadParser.parseSamBoxes(liveSamToken, 688, 688, true, true);
+        Assertions.assertEquals(1, liveBoxes.size());
+        Assertions.assertEquals(new BoundingBox(290, 385, 318, 415), liveBoxes.get(0));
+
+        // 3. JSON array of boxes already in pixel coordinates (<= 688)
         String jsonArray = "{\"boxes\": [[180, 355, 220, 395], {\"x1\": 240, \"y1\": 380, \"x2\": 275, \"y2\": 420}]}";
         List<BoundingBox> jsonBoxes = TolerantPayloadParser.parseSamBoxes(jsonArray, 688, 688, false, false);
         Assertions.assertEquals(2, jsonBoxes.size());
