@@ -114,8 +114,11 @@ public class ActivePerceptionService {
                 x2 = hotspot.boundingBoxPx()[3];
             }
 
-            // Ingest real keyframe into FFM off-heap ring buffer if available
-            ingestFrameIntoRingBuffer(eventId, frameIndex, timestampSec, (float) surprise, focusX, focusY);
+            // Pre-ingest up to 4 initial keyframes into FFM off-heap ring buffer at startup;
+            // remaining events are ingested lazily on demand via getBufferedFrameBytes(eventId).
+            if (eventBufferSequences.size() < 4) {
+                ingestFrameIntoRingBuffer(eventId, frameIndex, timestampSec, (float) surprise, focusX, focusY);
+            }
 
             // Use real SAM 3.1 cached spatial summary if available, otherwise V-JEPA activeCells
             Optional<SamGeometry.EventSpatialSummary> cachedSam = museDiskCache != null
@@ -186,10 +189,12 @@ public class ActivePerceptionService {
     }
 
     private synchronized void syncMissingFramesIfPresent() {
-        if (trajectory.isEmpty() || eventBufferSequences.size() >= trajectory.size()) {
+        if (trajectory.isEmpty() || !eventBufferSequences.isEmpty()) {
             return;
         }
-        for (SaccadicTarget target : trajectory) {
+        int limit = Math.min(4, trajectory.size());
+        for (int i = 0; i < limit; i++) {
+            SaccadicTarget target = trajectory.get(i);
             if (!eventBufferSequences.containsKey(target.eventId())) {
                 ingestFrameIntoRingBuffer(
                         target.eventId(),
@@ -225,7 +230,19 @@ public class ActivePerceptionService {
             return Optional.empty();
         }
         if (!eventBufferSequences.containsKey(eventId)) {
-            syncMissingFramesIfPresent();
+            SaccadicTarget target = targetsCache.get(eventId);
+            if (target != null) {
+                ingestFrameIntoRingBuffer(
+                        target.eventId(),
+                        target.frameIndex(),
+                        target.timestampSec(),
+                        (float) target.surpriseScoreSigma(),
+                        target.focusCenterX(),
+                        target.focusCenterY()
+                );
+            } else {
+                syncMissingFramesIfPresent();
+            }
         }
         Long seq = eventBufferSequences.get(eventId);
         if (seq != null) {

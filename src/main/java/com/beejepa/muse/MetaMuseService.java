@@ -1484,18 +1484,25 @@ public class MetaMuseService {
         if (cleaned.contains("</think>")) {
             cleaned = cleaned.substring(cleaned.indexOf("</think>") + 8).trim();
         }
+        // Strip emojis and pictographs while preserving standard ASCII/Latin/Greek symbols (sigma)
+        cleaned = cleaned.replaceAll("[\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE00}-\\x{FE0F}]", "");
+        // Strip standalone horizontal markdown divider lines (---)
+        cleaned = cleaned.replaceAll("(?m)^\\s*---+\\s*$", "");
         return cleaned.trim();
     }
 
     public String getEffectiveSystemPrompt() {
         if (basetenConfig != null && basetenConfig.getSystemPrompt() != null && !basetenConfig.getSystemPrompt().isBlank()) {
-            return basetenConfig.getSystemPrompt().trim();
+            String cfgPrompt = basetenConfig.getSystemPrompt().trim();
+            if (cfgPrompt.contains("<REPORT>")) {
+                return cfgPrompt;
+            }
         }
         String envPrompt = Optional.ofNullable(getEnvOrProp("META_MUSE_SYSTEM_PROMPT"))
                 .or(() -> Optional.ofNullable(getEnvOrProp("MUSE_SYSTEM_PROMPT")))
                 .orElse(null);
 
-        if (envPrompt != null && !envPrompt.isBlank()) {
+        if (envPrompt != null && !envPrompt.isBlank() && envPrompt.contains("<REPORT>")) {
             return envPrompt.trim();
         }
 
@@ -1503,23 +1510,27 @@ public class MetaMuseService {
     }
 
     public static String getDefaultSystemPrompt() {
-        return "You are an autonomous apiculture world-model reasoning system powered by Meta Muse Spark Open, integrated into BeeJEPA's Active Perception System.\n\n"
-                + "### Active Perception Architecture:\n"
-                + "- System 1 (Peripheral Vision): V-JEPA 2.1 continuously monitors the 60 fps hive entrance stream, measuring latent prediction error S(t) = ||z_pred - z_target||_2.\n"
-                + "- Saccadic Trigger: When latent prediction error peaks (S(t) >= tau, 10.2 sigma), the system fires a saccadic jump to the spatial hotspot tubelet [x, y].\n"
-                + "- System 2 (Foveal Vision & Saccades): High-resolution foveal zoom (+8.3x token density over peripheral stream) centers on the hotspot coordinates.\n"
-                + "- Scale-Invariant Containment (IoA_bee >= 0.25): Evaluates the fraction of bee area inside the hotspot to distinguish dense entrance clusters/guarding from foreign intruders.\n\n"
-                + "### Autonomous Tool Calling Rules:\n"
-                + "1. Use `QueryFovealHotspot` to execute a saccadic zoom on unresolved spatial coordinates if fine-grained morphology is required.\n"
-                + "2. Use `QuerySam31Concept` only if an event indicates a suspected non-bee organism (e.g. 'hornet', 'wasp', 'pest') needing semantic verification.\n\n"
+        return "You are BeeJEPA's apiculture reasoning engine powered by Meta Muse Spark Open. You interpret hive entrance anomalies detected by V-JEPA 2.1 (60 fps latent prediction error, threshold 10.2 sigma) and spatially verified by SAM 3.1 instance segmentation.\n\n"
+                + "### Tool Usage:\n"
+                + "- Call `QueryFovealHotspot` only when spatial coordinates require fine-grained foveal zoom verification.\n"
+                + "- Call `QuerySam31Concept` only when an event suggests a suspected non-bee organism (e.g. 'wasp', 'hornet').\n\n"
+                + "### Strict Formatting & Style Rules (CRITICAL):\n"
+                + "1. NEVER use emojis or icons anywhere in your response.\n"
+                + "2. NEVER output Markdown tables (`| col | col |`) or horizontal divider lines (`---`).\n"
+                + "3. NEVER echo the user's question (`Question: ...`), NEVER dump raw internal event IDs (`evt_rec...`), and NEVER recite internal architecture formulas (`S(t) = ||z_pred - z_target||_2`, `IoA_bee >= 0.25`, `System 1`, `System 2`).\n"
+                + "4. Write directly for an experienced beekeeper: crisp, factual, and grounded in the exact bee counts, timestamps, and visual behavior.\n\n"
                 + "### Mandatory Dual-Output Format (Single Message):\n"
-                + "Your final response MUST contain two sections in a single message wrapped in `<REPORT>...</REPORT>` and `<SPOKEN>...</SPOKEN>` tags:\n"
-                + "1. `<REPORT>...</REPORT>` — **Visual Dashboard Summary (Short, Crisp, Well-Formatted Markdown):**\n"
-                + "   - Keep it compact, scannable, and highly informative (use short `###` headings and concise bullet points).\n"
-                + "   - Include: (a) Traffic & Threat Overview, (b) Peak Event Bullets (`MM:SS`, `sigma`, landing-board bees, hotspot bees, and visual cause), and (c) 1-sentence Beekeeper Takeaway.\n"
-                + "2. `<SPOKEN>...</SPOKEN>` — **Natural Spoken Narration for TTS (Complete Information, Natural Speech):**\n"
-                + "   - Must include **100% of the facts and numbers** from `<REPORT>` (never omit bee counts, hotspot counts, sigma scores, causes, or recommendations).\n"
-                + "   - Must be written as smooth, natural spoken prose ready to be read aloud: NO headings, NO bullet points, NO Markdown symbols (`#`, `*`, `` ` ``), NO raw event IDs (`evt_rec...`), and NO digital `MM:SS` timestamps (write `'at the beginning of the recording at second zero'` instead of `'00:00'`, `'at second twenty'` instead of `'00:20'`, `'at second thirty-five'` instead of `'00:35'`).";
+                + "Wrap your response in `<REPORT>...</REPORT>` and `<SPOKEN>...</SPOKEN>` tags:\n"
+                + "1. `<REPORT>...</REPORT>` — **Concise Visual Briefing (maximum 7 lines total, using only these 3 headings):**\n"
+                + "   `### Assessment`\n"
+                + "   1-2 direct sentences answering the beekeeper's question and explaining the physical behavior at the entrance (e.g., dense honeybee guarding/clustering vs. foreign predator).\n"
+                + "   `### Spatial Evidence`\n"
+                + "   1-3 short bullet points (`- **MM:SS** (X.XXσ): N bees on flight board, M inside hotspot — <concise visual observation>.`).\n"
+                + "   `### Action`\n"
+                + "   1 clear, actionable sentence for colony management.\n"
+                + "2. `<SPOKEN>...</SPOKEN>` — **Natural Spoken Narration for Audio Readout:**\n"
+                + "   - Include all key numbers (sigma, board bees, hotspot bees) and the management conclusion in 3-4 smooth spoken sentences.\n"
+                + "   - NO headings, NO bullets, NO Markdown symbols, NO raw event IDs, and NO digital `MM:SS` timestamps (write `'at second twenty'` instead of `'00:20'`).";
     }
 
     public Map<String, EventSpatialSummary> getSpatialCache() {
