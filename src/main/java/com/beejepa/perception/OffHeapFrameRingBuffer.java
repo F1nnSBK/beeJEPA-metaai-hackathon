@@ -15,9 +15,11 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * High-performance off-heap circular ring buffer for video frames and V-JEPA latent metadata
+ * High-performance off-heap circular ring buffer for video frames and V-JEPA
+ * latent metadata
  * using the Java 25 Foreign Function & Memory (FFM) API.
- * Eliminates garbage collection pauses and supports retrospective retrieval of historical frames
+ * Eliminates garbage collection pauses and supports retrospective retrieval of
+ * historical frames
  * during cloud API inference latencies.
  */
 @Singleton
@@ -26,16 +28,16 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(OffHeapFrameRingBuffer.class);
 
-    public static final int DEFAULT_CAPACITY = 600; // 10 seconds of 60 fps frames
-    public static final int MAX_PAYLOAD_BYTES = 1024 * 1024; // 1 MB per frame slot
+    public static final int DEFAULT_CAPACITY = 64;
+    public static final int MAX_PAYLOAD_BYTES = 393_216; // 384 KB per frame slot
 
     // Slot Header Layout (32 bytes total)
-    private static final long OFFSET_TIMESTAMP_NS = 0;       // JAVA_LONG (8 bytes)
-    private static final long OFFSET_FRAME_INDEX = 8;        // JAVA_LONG (8 bytes)
-    private static final long OFFSET_SURPRISE_SIGMA = 16;    // JAVA_FLOAT (4 bytes)
-    private static final long OFFSET_HOTSPOT_CX = 20;        // JAVA_FLOAT (4 bytes)
-    private static final long OFFSET_HOTSPOT_CY = 24;        // JAVA_FLOAT (4 bytes)
-    private static final long OFFSET_PAYLOAD_SIZE = 28;      // JAVA_INT (4 bytes)
+    private static final long OFFSET_TIMESTAMP_NS = 0; // JAVA_LONG (8 bytes)
+    private static final long OFFSET_FRAME_INDEX = 8; // JAVA_LONG (8 bytes)
+    private static final long OFFSET_SURPRISE_SIGMA = 16; // JAVA_FLOAT (4 bytes)
+    private static final long OFFSET_HOTSPOT_CX = 20; // JAVA_FLOAT (4 bytes)
+    private static final long OFFSET_HOTSPOT_CY = 24; // JAVA_FLOAT (4 bytes)
+    private static final long OFFSET_PAYLOAD_SIZE = 28; // JAVA_INT (4 bytes)
     public static final long HEADER_SIZE_BYTES = 32;
 
     public static final long SLOT_TOTAL_BYTES = HEADER_SIZE_BYTES + MAX_PAYLOAD_BYTES;
@@ -54,8 +56,8 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
             float surpriseSigma,
             float hotspotCenterX,
             float hotspotCenterY,
-            byte[] payload
-    ) {}
+            byte[] payload) {
+    }
 
     @Serdeable
     public record BufferTelemetry(
@@ -65,8 +67,8 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
             long totalAllocatedBytes,
             long memoryPerSlotBytes,
             boolean isOffHeap,
-            long droppedFrames
-    ) {}
+            long droppedFrames) {
+    }
 
     public OffHeapFrameRingBuffer() {
         this(DEFAULT_CAPACITY);
@@ -81,19 +83,20 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
         this.arena = Arena.ofShared();
         this.bufferSegment = arena.allocate(totalAllocatedBytes, 64);
 
-        LOG.info("🐝 Initialized FFM Off-Heap Ring Buffer: capacity={} slots, allocatedBytes={} ({} MB)",
+        LOG.info("Initialized FFM Off-Heap Ring Buffer: capacity={} slots, allocatedBytes={} ({} MB)",
                 capacity, totalAllocatedBytes, totalAllocatedBytes / (1024 * 1024));
     }
 
     /**
-     * Appends a frame and its V-JEPA latent metadata to the circular off-heap buffer.
+     * Appends a frame and its V-JEPA latent metadata to the circular off-heap
+     * buffer.
      *
-     * @param timestampNs Event timestamp in nanoseconds
-     * @param frameIndex Monotonic or sequence frame index
-     * @param surpriseSigma V-JEPA predictor surprise score in sigmas
+     * @param timestampNs    Event timestamp in nanoseconds
+     * @param frameIndex     Monotonic or sequence frame index
+     * @param surpriseSigma  V-JEPA token-delta score
      * @param hotspotCenterX Normalized or pixel hotspot X coordinate
      * @param hotspotCenterY Normalized or pixel hotspot Y coordinate
-     * @param frameBytes Raw compressed image payload (JPEG/PNG)
+     * @param frameBytes     Raw compressed image payload (JPEG/PNG)
      * @return Monotonic sequence number assigned to this frame
      */
     public long appendFrame(
@@ -102,14 +105,12 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
             float surpriseSigma,
             float hotspotCenterX,
             float hotspotCenterY,
-            byte[] frameBytes
-    ) {
+            byte[] frameBytes) {
         Objects.requireNonNull(frameBytes, "Frame payload must not be null");
         if (frameBytes.length > MAX_PAYLOAD_BYTES) {
             throw new IllegalArgumentException(
                     "Frame payload size (" + frameBytes.length + " bytes) exceeds maximum slot payload ("
-                            + MAX_PAYLOAD_BYTES + " bytes)"
-            );
+                            + MAX_PAYLOAD_BYTES + " bytes)");
         }
 
         long seq = sequenceHead.getAndIncrement();
@@ -131,8 +132,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
                     0,
                     bufferSegment,
                     slotOffset + HEADER_SIZE_BYTES,
-                    frameBytes.length
-            );
+                    frameBytes.length);
         }
 
         return seq;
@@ -154,7 +154,8 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
     }
 
     /**
-     * Retrospectively retrieves the frame closest to a target frame index within the buffered window.
+     * Retrospectively retrieves the frame closest to a target frame index within
+     * the buffered window.
      */
     public Optional<FrameEntry> getNearestFrame(long targetFrameIndex) {
         long currentHead = sequenceHead.get();
@@ -214,8 +215,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
                     slotOffset + HEADER_SIZE_BYTES,
                     MemorySegment.ofArray(payload),
                     0,
-                    payloadLen
-            );
+                    payloadLen);
         }
 
         return new FrameEntry(sequence, tsNs, fIdx, sigma, cx, cy, payload);
@@ -244,7 +244,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
     public void close() {
         if (arena.scope().isAlive()) {
             arena.close();
-            LOG.info("🐝 FFM Off-Heap Ring Buffer closed and native memory freed.");
+            LOG.info("FFM Off-Heap Ring Buffer closed and native memory freed.");
         }
     }
 }

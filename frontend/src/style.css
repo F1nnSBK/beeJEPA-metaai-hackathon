@@ -74,13 +74,6 @@ html, body, #app {
 
 html.landing-scroll-snap {
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.landing-scroll-snap {
-    scroll-behavior: auto;
-  }
 }
 
 .num,

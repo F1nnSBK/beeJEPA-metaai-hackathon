@@ -369,13 +369,13 @@ public final class TolerantPayloadParser {
      */
     public static DualMuseOutput parseDualMuseOutput(String rawOutput) {
         if (rawOutput == null || rawOutput.isBlank()) {
-            return new DualMuseOutput(
-                    "",
-                    "No anomalies requiring intervention were detected at the hive today."
-            );
+            return new DualMuseOutput("", "");
         }
 
-        String trimmed = rawOutput.trim();
+        String trimmed = rawOutput
+                .replaceAll("[\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE00}-\\x{FE0F}]", "")
+                .replaceAll("(?m)^\\s*---+\\s*$", "")
+                .trim();
 
         // 1. Check if the response is a JSON object {"report": "...", "spokenSummary": "..."}
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -445,20 +445,11 @@ public final class TolerantPayloadParser {
      */
     public static String sanitizeForNaturalSpeech(String input) {
         if (input == null || input.isBlank()) {
-            return "No anomalies requiring intervention were detected at the hive today.";
+            return "";
         }
 
         String text = input
-                .replaceAll("(?is)</?(?:report|spoken|spoken_summary)>", " ")
-                // Convert MM:SS timestamps into natural spoken phrases
-                .replaceAll("(?i)\\bat\\s+00:00\\b", "at the beginning of the recording")
-                .replaceAll("\\b00:00\\b", "second zero")
-                .replaceAll("(?i)\\bat\\s+00:20\\b", "at second twenty")
-                .replaceAll("\\b00:20\\b", "second twenty")
-                .replaceAll("(?i)\\bat\\s+00:35\\b", "at second thirty-five")
-                .replaceAll("\\b00:35\\b", "second thirty-five")
-                .replaceAll("(?i)\\bat\\s+00:39\\b", "at second thirty-nine")
-                .replaceAll("\\b00:39\\b", "second thirty-nine");
+                .replaceAll("(?is)</?(?:report|spoken|spoken_summary)>", " ");
 
         // Convert any remaining MM:SS timestamps into natural spoken words
         Matcher tsMatcher = MM_SS_TIMESTAMP_REGEX.matcher(text);
@@ -486,10 +477,10 @@ public final class TolerantPayloadParser {
                 .replaceAll("\\(\\s*`?evt_[a-zA-Z0-9_]+`?\\s*\\)", "")
                 .replaceAll("\\b`?evt_[a-zA-Z0-9_]+`?\\b", "")
                 .replaceAll("\\[\\d+(?:,\\s*\\d+)+\\]", "")
-                .replaceAll("(?i)\\bmulti_bee_interaction_cluster\\b", "multi-bee interaction cluster")
-                .replaceAll("(?i)\\bsingle_anomalous_honeybee\\b", "single honeybee activity")
-                .replaceAll("(?i)\\bpotential_non_bee_anomaly\\b", "potential non-bee anomaly")
-                .replaceAll("(\\d+(?:\\.\\d+)?)\\s*σ", "$1 sigma")
+                .replaceAll("(?i)\\bmulti_bee_cluster_in_hotspot\\b", "several bees inside the hotspot")
+                .replaceAll("(?i)\\bsingle_bee_in_hotspot\\b", "one bee inside the hotspot")
+                .replaceAll("(?i)\\bno_bee_in_hotspot\\b", "no segmented bee inside the hotspot")
+                .replaceAll("(\\d+(?:\\.\\d+)?)\\s*σ", "$1")
                 .replaceAll("(?<=\\d)\\s*[–-]\\s*(?=\\d)", " to ")
                 .replaceAll("->", ", ")
                 // Strip Markdown headings and turn list lines into clean sentences

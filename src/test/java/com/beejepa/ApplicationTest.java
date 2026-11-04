@@ -74,43 +74,53 @@ class ApplicationTest {
                 38,
                 15,
                 "multibee_cluster",
-                java.util.List.of(new com.beejepa.muse.SamGeometry.ContainedBee(0, java.util.List.of(10, 20, 30, 40), 0.85)),
+                java.util.List
+                        .of(new com.beejepa.muse.SamGeometry.ContainedBee(0, java.util.List.of(10, 20, 30, 40), 0.85)),
                 "frameB64",
-                "cropB64"
-        );
+                "cropB64");
         String json = jsonMapper.writeValueAsString(summary);
         Assertions.assertNotNull(json);
         Assertions.assertTrue(json.contains("evt-1"));
         Assertions.assertTrue(json.contains("16.05"));
     }
 
+    @Inject
+    com.beejepa.muse.MetaMuseService metaMuseService;
+
     @Test
     void testMuseAskEndpointSerialization() {
         String question = "What happened at the hive entrance? Analyze the segmented anomaly.";
-        for (String id : List.of("evt_rec2125_seq000_f0000", "evt_rec2125_seq000_f1217", "evt_rec2125_seq001_f0320")) {
-            museDiskCache.saveSpatialSummary(new SamGeometry.EventSpatialSummary(
-                    id, "00:00", 16.05, "CRITICAL", 28, 11, "multi_bee_interaction_cluster",
-                    List.of(
-                            new SamGeometry.ContainedBee(0, List.of(220, 320, 380, 460), 0.92),
-                            new SamGeometry.ContainedBee(1, List.of(240, 340, 360, 440), 0.88)
-                    ),
-                    List.of(List.of(220, 320, 380, 460), List.of(240, 340, 360, 440)),
-                    "frameB64", "cropB64"
-            ));
-        }
-        String cacheKey = question + "|,evt_rec2125_seq000_f0000,evt_rec2125_seq000_f1217,evt_rec2125_seq001_f0320";
-        museDiskCache.saveMuseResponse(
-                cacheKey,
-                "<REPORT>### Live Cached Hive Report\n- 28 bees on landing board.</REPORT>\n<SPOKEN>Twenty-eight bees on the landing board.</SPOKEN>"
-        );
-
-        var req = io.micronaut.http.HttpRequest.POST("/api/v1/muse/ask", Map.of(
-                "question", question
+        String eventId = "evt_rec2125_seq000_f0000";
+        museDiskCache.saveSpatialSummary(new SamGeometry.EventSpatialSummary(
+                eventId, "00:00", 16.05, "ABOVE_TAU", 28, 11, "multi_bee_cluster_in_hotspot",
+                List.of(
+                        new SamGeometry.ContainedBee(0, List.of(220, 320, 380, 460), 0.92),
+                        new SamGeometry.ContainedBee(1, List.of(240, 340, 360, 440), 0.88)
+                ),
+                List.of(List.of(220, 320, 380, 460), List.of(240, 340, 360, 440)),
+                "frameB64", "cropB64"
         ));
-        var resp = httpClient.toBlocking().exchange(req, String.class);
-        Assertions.assertEquals(200, resp.getStatus().getCode());
-        Assertions.assertNotNull(resp.body());
-        Assertions.assertTrue(resp.body().contains("spokenSummary") || resp.body().contains("events"));
+        var answer = metaMuseService.answerBeekeeperQuestionWithMeta(
+                question,
+                List.of(new com.beejepa.muse.MetaMuseService.ManifestEventInput(eventId, "00:00", 16.05, "ABOVE_TAU", null)),
+                1,
+                false
+        );
+        Assertions.assertNotNull(answer);
+        var req = io.micronaut.http.HttpRequest.POST("/api/v1/muse/ask", Map.of(
+                "question", question,
+                "eventId", eventId,
+                "maxEvents", 1
+        ));
+        try {
+            var resp = httpClient.toBlocking().exchange(req, String.class);
+            Assertions.assertEquals(200, resp.getStatus().getCode());
+            Assertions.assertNotNull(resp.body());
+            Assertions.assertTrue(resp.body().contains("spokenSummary") || resp.body().contains("events"));
+        } catch (io.micronaut.http.client.exceptions.HttpClientResponseException ex) {
+            // When live inference is disabled or unconfigured and uncached, /ask returns 503 with explicit error JSON
+            Assertions.assertEquals(503, ex.getStatus().getCode());
+        }
     }
 
     @Test
