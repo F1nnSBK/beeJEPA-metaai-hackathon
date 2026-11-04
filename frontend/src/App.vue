@@ -64,7 +64,7 @@ const {
 
 const videoPlayer = ref(null)
 const showAblationMatrix = ref(false)
-const mobilePanel = ref('causal')
+const rightTab = ref('briefing')
 let activeStopRecording = null
 
 const orderedPyramidTiersApexFirst = computed(() => {
@@ -804,142 +804,87 @@ async function handleLogout() {
     <!-- VIEW 2: AUTHENTICATED BEEJEPA OPERATIONAL CONSOLE                 -->
     <!-- ================================================================= -->
     <div v-else class="flex-1 flex flex-col min-h-svh lg:h-dvh lg:overflow-hidden bg-ink-950">
-      <!-- Top Command Bar (Sticky on Mobile) -->
-      <header class="sticky top-0 z-30 lg:static border-b border-ink-800 bg-ink-900 px-2.5 sm:px-5 pt-[calc(env(safe-area-inset-top)+0.4rem)] pb-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2 shrink-0">
-        <!-- Brand & Hardware Node -->
-        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-md bg-ink-950 border border-ink-800 p-1 flex items-center justify-center shrink-0">
-            <img :src="beeLogo" alt="beeJEPA" class="w-full h-full object-contain" />
+      <!-- Quiet Top Bar -->
+      <header class="sticky top-0 z-30 lg:static bg-ink-900 px-3 sm:px-5 pt-[calc(env(safe-area-inset-top)+0.4rem)] pb-2 sm:py-2.5 flex items-center justify-between gap-2 shrink-0">
+        <!-- Brand & Live Status -->
+        <div class="flex items-center gap-2.5 shrink-0">
+          <div class="w-7 h-7 rounded-md bg-ink-950 p-1 flex items-center justify-center shrink-0">
+            <img :src="beeLogo" alt="BeeJEPA" class="w-full h-full object-contain" />
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <h1 class="text-sm font-semibold text-ink-100 tracking-tight whitespace-nowrap">BeeJEPA</h1>
-          </div>
-        </div>
-
-        <!-- Right Telemetry & Operator Controls -->
-        <div class="flex items-center gap-1 sm:gap-2 text-xs shrink-0">
-          <!-- Storage Status -->
-          <div class="hidden sm:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 tabular-nums">
-            <span class="w-2 h-2 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
-            <span class="text-ink-400">Storage</span>
-            <span class="font-mono text-ink-200 text-[11px]">
-              {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted + ' free' : 'Offline' }}
-            </span>
-          </div>
-
-          <!-- Baseten Muse API Health -->
+          <h1 class="text-sm font-semibold text-ink-100 tracking-tight">BeeJEPA</h1>
           <button
             type="button"
             @click="checkMetaHealth"
-            :title="(metaHealth.message || 'Meta API status') + ' (Click to re-verify)'"
-            class="hidden md:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 hover:border-ink-700 transition-colors cursor-pointer text-left tabular-nums"
+            :title="metaHealth.message || 'Check connection status'"
+            class="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-200 transition-colors pl-1 tabular-nums"
           >
             <span
-              class="w-2 h-2 rounded-full shrink-0"
-              :class="metaHealth.liveConnection ? 'bg-clover-400' : (metaHealth.configured ? 'bg-honey-400' : 'bg-ink-500')"
+              class="w-1.5 h-1.5 rounded-full shrink-0"
+              :class="metaHealth.liveConnection ? 'bg-clover-400' : 'bg-honey-400'"
             ></span>
-            <span class="text-ink-400">Baseten Muse</span>
-            <span class="font-mono text-ink-200 text-[11px]">
-              {{ metaHealth.liveConnection ? 'Live (' + metaHealth.latencyMs + 'ms)' : (metaHealth.configured ? metaHealth.status : 'Cached') }}
-            </span>
+            <span>{{ metaHealth.liveConnection ? 'Live' : 'Cached' }}</span>
           </button>
+        </div>
 
-          <!-- Java 25 FFM Ring Buffer Telemetry -->
+        <!-- Quiet Operator Controls -->
+        <div class="flex items-center gap-1.5 text-xs shrink-0">
           <button
             type="button"
-            @click="fetchPerceptionTelemetry"
-            class="hidden xl:flex items-center gap-1.5 px-2.5 min-h-[34px] rounded-md bg-ink-950 border border-ink-800 hover:border-ink-700 transition-colors cursor-pointer tabular-nums"
-            title="Java 25 FFM Off-Heap Ring Buffer"
+            @click="toggleBeeMode"
+            :title="beeModeActive ? 'Bee Mode: ON' : 'Bee Mode: OFF'"
+            :class="beeModeActive
+              ? 'bg-honey-500/20 text-honey-300'
+              : 'text-ink-400 hover:text-ink-200 hover:bg-ink-800/60'"
+            class="min-h-[36px] sm:min-h-[32px] px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium transition-colors touch-manipulation"
           >
-            <span class="w-2 h-2 rounded-full bg-electric-400 shrink-0"></span>
-            <span class="text-ink-400">FFM Buffer</span>
-            <span class="font-mono text-electric-300 text-[11px]">
-              {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }} slots
-            </span>
+            <svg class="w-3.5 h-3.5 shrink-0 text-honey-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h3l2-5 4 10 3-7 2 2h4" />
+            </svg>
+            <span>{{ isBeeModePlaying ? 'Buzzing' : 'Bee Mode' }}</span>
           </button>
 
-          <!-- Calibration & Bioacoustic Mode Group -->
-          <div class="flex items-center gap-0.5 sm:gap-1 bg-ink-950 border border-ink-800 rounded-md p-0.5">
-            <button
-              type="button"
-              @click="stagedMuseModalOpen = true"
-              title="API Staging & Calibration Inspector"
-              aria-label="Open Meta Muse Staging Inspector"
-              class="min-h-[38px] min-w-[38px] sm:min-h-[32px] sm:min-w-0 px-2 text-ink-300 hover:text-honey-400 hover:bg-ink-900 rounded flex items-center justify-center gap-1.5 transition-colors touch-manipulation"
-            >
-              <svg class="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h10M4 17h7" />
-              </svg>
-              <span class="hidden sm:inline font-mono text-[11px]">Staging</span>
-            </button>
+          <button
+            type="button"
+            @click="prepareMusePayload(selectedEvent)"
+            title="Inspect API payloads & system status"
+            class="min-h-[36px] sm:min-h-[32px] px-2.5 text-ink-400 hover:text-ink-100 hover:bg-ink-800/60 rounded-md flex items-center gap-1.5 transition-colors touch-manipulation text-xs"
+          >
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h10M4 17h7" />
+            </svg>
+            <span class="hidden sm:inline">Inspector</span>
+          </button>
 
-            <button
-              type="button"
-              @click="toggleBeeMode"
-              :title="beeModeActive ? 'Bee Mode: ON (Responses synthesized as bioacoustic bee buzzing)' : 'Bee Mode: OFF (Click to enable bioacoustic buzzing)'"
-              :class="beeModeActive ? 'bg-honey-500/20 text-honey-300 border border-honey-500/40' : 'text-ink-400 hover:text-ink-200 hover:bg-ink-900 border border-transparent'"
-              class="min-h-[38px] sm:min-h-[32px] flex items-center gap-1.5 px-2 sm:px-2.5 rounded text-xs transition-colors touch-manipulation"
-            >
-              <svg class="w-3.5 h-3.5 shrink-0 text-honey-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h3l2-5 4 10 3-7 2 2h4" />
-              </svg>
-              <span class="font-mono text-[11px] font-medium whitespace-nowrap">
-                <span class="sm:hidden">{{ isBeeModePlaying ? 'Buzz' : (beeModeActive ? 'Bee ON' : 'Bee OFF') }}</span>
-                <span class="hidden sm:inline">{{ isBeeModePlaying ? 'Buzzing...' : (beeModeActive ? 'Bee Mode: ON' : 'Bee Mode: OFF') }}</span>
-              </span>
-            </button>
-          </div>
-
-          <!-- Operator Session & Sign Out -->
-          <div class="flex items-center gap-1.5 sm:gap-2 pl-1 sm:pl-2 border-l border-ink-800">
-            <span class="hidden sm:inline text-xs font-mono text-honey-400">{{ currentUser?.username || 'beekeeper' }}</span>
-            <button
-              type="button"
-              @click="handleLogout"
-              class="min-h-[38px] sm:min-h-[34px] px-2 sm:px-2.5 text-xs text-ink-300 hover:text-ink-100 bg-ink-950 hover:bg-ink-800 border border-ink-800 rounded-md transition-colors touch-manipulation"
-            >
-              Logout
-            </button>
-          </div>
+          <button
+            type="button"
+            @click="handleLogout"
+            class="min-h-[36px] sm:min-h-[32px] px-2.5 text-xs text-ink-400 hover:text-ink-100 hover:bg-ink-800/60 rounded-md transition-colors touch-manipulation"
+          >
+            Logout
+          </button>
         </div>
       </header>
 
-      <!-- Mobile Compact Telemetry Bar -->
-      <div class="sm:hidden border-b border-ink-800 bg-ink-950 px-3 min-h-[38px] flex items-center justify-between gap-2 text-[11px] font-mono text-ink-400 tabular-nums shrink-0">
-        <div class="flex items-center gap-1.5 truncate">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="storageStatus.isMounted ? 'bg-clover-400' : 'bg-ink-600'"></span>
-          <span class="truncate">Storage {{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted : 'Offline' }}</span>
-        </div>
-        <button type="button" @click="checkMetaHealth" class="min-h-[38px] px-1 flex items-center gap-1.5 text-ink-300 shrink-0 touch-manipulation">
-          <span class="w-1.5 h-1.5 rounded-full" :class="metaHealth.liveConnection ? 'bg-clover-400' : 'bg-honey-400'"></span>
-          <span>Muse {{ metaHealth.liveConnection ? metaHealth.latencyMs + 'ms' : 'Cached' }}</span>
-        </button>
-        <button type="button" @click="fetchPerceptionTelemetry" class="min-h-[38px] px-1 flex items-center gap-1 text-electric-300 shrink-0 touch-manipulation">
-          <span>FFM {{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }}</span>
-        </button>
-      </div>
-
-      <!-- Main Operational Workspace: 12-Col Grid on Desktop, Mobile-First Coupled Stage on Phone -->
-      <main class="flex-1 p-2 sm:p-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-4 flex flex-col lg:grid lg:grid-cols-12 gap-3 sm:gap-4 lg:overflow-hidden">
+      <!-- Main Operational Workspace -->
+      <main class="flex-1 p-2.5 sm:p-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-4 flex flex-col lg:grid lg:grid-cols-12 gap-3 sm:gap-4 lg:overflow-hidden">
         <!-- =============================================================== -->
         <!-- LEFT PANE (7 Cols): VISUAL STAGE + COUPLED SURPRISE TIMELINE     -->
         <!-- =============================================================== -->
-        <section class="lg:col-span-7 flex flex-col bg-ink-900 rounded-lg border border-ink-800 overflow-hidden shrink-0 lg:shrink lg:min-h-0">
-          <!-- View Mode Bar (3-Col Equal Touch Tabs on Mobile, Flex Row on Desktop) -->
-          <div class="px-1 sm:px-4 border-b border-ink-800 bg-ink-900 flex items-center justify-between gap-2 shrink-0">
-            <div class="grid grid-cols-3 w-full sm:w-auto sm:flex sm:items-center sm:gap-1" role="tablist" aria-label="Stage view mode">
+        <section class="lg:col-span-7 flex flex-col bg-ink-900 rounded-lg overflow-hidden shrink-0 lg:shrink lg:min-h-0">
+          <!-- View Mode Bar -->
+          <div class="px-2.5 sm:px-4 py-1.5 bg-ink-900 flex items-center justify-between gap-2 shrink-0">
+            <div class="grid grid-cols-3 w-full sm:w-auto sm:flex sm:items-center sm:gap-1 bg-ink-950 p-1 rounded-md" role="tablist" aria-label="Stage view mode">
               <button
                 type="button"
                 role="tab"
                 :aria-selected="activeView === 'comparison'"
                 @click="activeView = 'comparison'"
                 :class="activeView === 'comparison'
-                  ? 'border-b-2 border-honey-400 text-ink-100 font-semibold'
-                  : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
-                class="px-1.5 sm:px-3 min-h-[44px] text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
+                  ? 'bg-ink-800 text-ink-100 font-semibold'
+                  : 'text-ink-400 hover:text-ink-200'"
+                class="px-2.5 sm:px-3 min-h-[36px] sm:min-h-[30px] rounded text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
               >
-                <span class="sm:hidden">Sequence (5m)</span>
-                <span class="hidden sm:inline">Sequence Stream (5m)</span>
+                Sequence
               </button>
               <button
                 type="button"
@@ -947,9 +892,9 @@ async function handleLogout() {
                 :aria-selected="activeView === 'raw'"
                 @click="activeView = 'raw'"
                 :class="activeView === 'raw'
-                  ? 'border-b-2 border-honey-400 text-ink-100 font-semibold'
-                  : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
-                class="px-1.5 sm:px-3 min-h-[44px] text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
+                  ? 'bg-ink-800 text-ink-100 font-semibold'
+                  : 'text-ink-400 hover:text-ink-200'"
+                class="px-2.5 sm:px-3 min-h-[36px] sm:min-h-[30px] rounded text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
               >
                 Event Clip
               </button>
@@ -959,26 +904,24 @@ async function handleLogout() {
                 :aria-selected="activeView === 'sam'"
                 @click="activeView = 'sam'"
                 :class="activeView === 'sam'
-                  ? 'border-b-2 border-honey-400 text-ink-100 font-semibold'
-                  : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
-                class="px-1.5 sm:px-3 min-h-[44px] text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
+                  ? 'bg-ink-800 text-ink-100 font-semibold'
+                  : 'text-ink-400 hover:text-ink-200'"
+                class="px-2.5 sm:px-3 min-h-[36px] sm:min-h-[30px] rounded text-xs transition-colors whitespace-nowrap flex items-center justify-center touch-manipulation"
               >
-                <span class="sm:hidden">{{ selectedEvent?.hasSamSpatial ? 'SAM 3.1' : 'Peak Frame' }}</span>
-                <span class="hidden sm:inline">{{ selectedEvent?.hasSamSpatial ? 'SAM 3.1 Segmentation' : 'V-JEPA Peak Frame' }}</span>
+                {{ selectedEvent?.hasSamSpatial ? 'SAM 3.1' : 'Peak Frame' }}
               </button>
             </div>
 
-            <!-- Active Event Coordinate Readout (Desktop/Tablet right side) -->
-            <div v-if="selectedEvent" class="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-ink-400 tabular-nums py-1.5 shrink-0">
-              <span class="text-honey-400 font-semibold">{{ selectedEvent.eventId }}</span>
-              <span>·</span>
-              <span class="text-ink-200">{{ formatTime(selectedEvent.timestampSec) }}</span>
-              <span class="text-ink-500">(f{{ selectedEvent.frameIndex }})</span>
+            <!-- Active Event Timestamp Readout -->
+            <div v-if="selectedEvent" class="hidden sm:flex items-center gap-1.5 text-xs text-ink-400 tabular-nums shrink-0">
+              <span class="text-ink-200 font-medium">{{ formatTime(selectedEvent.timestampSec) }}</span>
+              <span class="text-ink-600">·</span>
+              <span>Frame {{ selectedEvent.frameIndex }}</span>
             </div>
           </div>
 
           <!-- Aspect-Locked 1080x960 (9:8) Video & Peak Frame Stage -->
-          <div class="relative w-full h-[210px] sm:h-auto sm:aspect-video lg:aspect-auto lg:flex-1 bg-ink-950 flex items-center justify-center overflow-hidden sm:min-h-[260px] lg:min-h-0">
+          <div class="relative w-full h-[220px] sm:h-auto sm:aspect-video lg:aspect-auto lg:flex-1 bg-ink-950 flex items-center justify-center overflow-hidden sm:min-h-[260px] lg:min-h-0">
             <div v-if="(activeView !== 'sam' && activeMediaSource) || (activeView === 'sam' && peakFrameUrl)" class="relative aspect-[9/8] max-h-full max-w-full flex items-center justify-center">
               <!-- Video Mode: Sequence Stream or Event Clip -->
               <video
@@ -1001,7 +944,7 @@ async function handleLogout() {
               <div v-else-if="activeView === 'sam' && peakFrameUrl" class="relative w-full h-full flex items-center justify-center">
                 <img :src="peakFrameUrl" :alt="selectedEvent?.eventId || 'Peak Frame'" class="w-full h-full block" />
                 <svg viewBox="0 0 1080 960" class="absolute inset-0 w-full h-full pointer-events-none">
-                  <!-- Real SAM 3.1 Board Bees (only when sam_spatial_*.json exists for this event) -->
+                  <!-- Real SAM 3.1 Board Bees -->
                   <template v-if="selectedEvent?.hasSamSpatial">
                     <rect
                       v-for="(b, idx) in samBoardBoxes"
@@ -1048,39 +991,31 @@ async function handleLogout() {
                     stroke-dasharray="6 5"
                   />
                 </svg>
-                <div class="absolute bottom-2 left-2 right-2 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
+                <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1.5 pointer-events-none">
                   <span
                     v-if="selectedEvent?.hasSamSpatial && selectedEvent?.samSpatial"
-                    class="bg-ink-950/90 border border-clover-500/40 text-clover-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums"
+                    class="bg-ink-950/90 text-clover-300 text-[11px] font-medium px-2.5 py-1 rounded tabular-nums"
                   >
-                    SAM 3.1: {{ selectedEvent.samSpatial.landingBoardBeeCount }} board bees · {{ selectedEvent.samSpatial.beesInsideHotspotCount }} in V-JEPA hotspot
+                    SAM 3.1 · {{ selectedEvent.samSpatial.landingBoardBeeCount }} board · {{ selectedEvent.samSpatial.beesInsideHotspotCount }} in hotspot
                   </span>
                   <span
                     v-else
-                    class="bg-ink-950/90 border border-ink-700 text-ink-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums"
+                    class="bg-ink-950/90 text-ink-300 text-[11px] font-medium px-2.5 py-1 rounded tabular-nums"
                   >
-                    V-JEPA 2.1 Hotspot · No SAM 3.1 mask cached for this event
-                  </span>
-                  <span class="bg-ink-950/90 border border-electric-500/40 text-electric-300 font-mono text-[10px] px-2 py-0.5 rounded tabular-nums">
-                    GRID [{{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }}]
+                    V-JEPA 2.1 hotspot
                   </span>
                 </div>
               </div>
 
-              <!-- Saccadic Reticle HUD (Foveal Focus Crosshair at Peak Anomaly in Video Modes) -->
+              <!-- Saccadic Reticle HUD (Video Modes) -->
               <div
                 v-if="selectedEvent && saccadicReticleStyle && isNearPeakAnomaly && activeView !== 'sam'"
                 class="absolute pointer-events-none transition-transform duration-300 ease-out z-20"
                 :style="saccadicReticleStyle"
               >
                 <div class="relative -translate-x-1/2 -translate-y-1/2">
-                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-electric-400/80 bg-electric-500/10 flex items-center justify-center">
-                    <div class="w-2.5 h-2.5 rounded-full border border-electric-300 bg-electric-400/40"></div>
-                    <div class="absolute w-full h-[1px] bg-electric-400/40"></div>
-                    <div class="absolute h-full w-[1px] bg-electric-400/40"></div>
-                  </div>
-                  <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-ink-950/95 border border-electric-500/50 rounded text-[10px] font-mono text-electric-300 whitespace-nowrap tabular-nums">
-                    FOVEA [{{ activeSaccade ? activeSaccade.focusCenterX : Math.round((selectedEvent?.hotspot?.normCenterX ?? 0.456) * 540) }}, {{ activeSaccade ? activeSaccade.focusCenterY : Math.round((selectedEvent?.hotspot?.normCenterY ?? 0.436) * 960) }}] · GRID [{{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }}]
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-electric-400/80 bg-electric-500/10 flex items-center justify-center"> <!-- taste-skill-ignore -->
+                    <div class="w-2.5 h-2.5 rounded-full bg-electric-400/60"></div>
                   </div>
                 </div>
               </div>
@@ -1088,80 +1023,82 @@ async function handleLogout() {
 
             <!-- Empty Media State -->
             <div v-else class="text-center p-6 text-ink-400">
-              <svg class="w-8 h-8 mx-auto mb-2 text-ink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <p class="text-xs font-mono">No event media loaded.</p>
+              <p class="text-xs">No event media loaded.</p>
             </div>
           </div>
 
-          <!-- Coupled Latent Surprise Timeline & Scrubber (Mobile-First: Directly Below Video Stage) -->
-          <div class="border-t border-ink-800 bg-ink-900 px-3 sm:px-4 py-2 sm:py-2.5 shrink-0">
-            <div class="flex items-center justify-between gap-2 mb-1.5 sm:mb-2 text-xs">
-              <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                <span class="font-medium text-ink-100 truncate">
-                  <span class="sm:hidden">Surprise Timeline</span>
-                  <span class="hidden sm:inline">
-                    {{ timelineData && timelineData.length > 0
-                      ? `${Math.round((timelineMeta?.totalDurationSec || 300) / 60 * 10) / 10}-Minute Latent Surprise Timeline (${timelineMeta?.recordingId || 'rec2125'})`
-                      : 'Latent Surprise Timeline' }}
-                  </span>
-                </span>
+          <!-- Coupled Latent Surprise Timeline & Stepper -->
+          <div class="bg-ink-900 px-3 sm:px-4 py-3 shrink-0">
+            <div class="flex items-center justify-between gap-2 mb-2 text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-medium text-ink-200 truncate">Surprise Timeline</span>
                 <span
                   v-if="timelineData && timelineData.length > 0"
-                  class="text-[11px] font-mono text-ember-300 bg-ember-500/10 border border-ember-500/30 px-1.5 py-0.5 rounded tabular-nums shrink-0"
+                  class="text-[11px] text-ink-400 tabular-nums shrink-0"
                 >
-                  <span class="hidden sm:inline">Threshold </span><span class="math">𝜏 = {{ timelineMeta?.decisionThreshold || timelineMeta?.thresholdSigma || '10.2' }}𝜎</span>
-                </span>
-                <span
-                  v-else
-                  class="text-[11px] font-mono text-ink-400 bg-ink-950 border border-ink-800 px-1.5 py-0.5 rounded shrink-0"
-                >
-                  Awaiting data
+                  · <span class="math">𝜏 = {{ timelineMeta?.decisionThreshold || timelineMeta?.thresholdSigma || '10.2' }}𝜎</span>
                 </span>
               </div>
 
-              <div v-if="timelineData && timelineData.length > 0" class="text-[11px] text-ink-400 font-mono flex items-center gap-1.5 sm:gap-2 tabular-nums shrink-0">
-                <span class="sm:hidden text-honey-400 font-semibold">{{ selectedEvent?.eventId || 'evt_01' }}</span>
-                <span class="sm:hidden text-ink-700">·</span>
-                <span class="sm:hidden">{{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }}/{{ sortedEvents.length }}</span>
-                <span class="hidden sm:inline">Scrubber: <strong class="text-honey-400 font-semibold">{{ formatTime(currentTimelineSec) }}</strong> / {{ formatTime(maxDuration) }}</span>
-                <span class="hidden sm:inline text-ink-700">·</span>
-                <span class="hidden sm:inline">Anomaly {{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }} of {{ sortedEvents.length }}</span>
+              <!-- Compact Anomaly Stepper -->
+              <div v-if="timelineData && timelineData.length > 0" class="flex items-center gap-1.5 text-[11px] tabular-nums shrink-0">
+                <button
+                  type="button"
+                  @click="goToPrevAnomaly"
+                  :disabled="isFirstAnomaly"
+                  class="min-h-[34px] sm:min-h-[28px] px-2.5 rounded bg-ink-950 hover:bg-ink-800 text-ink-200 disabled:opacity-35 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 touch-manipulation"
+                  title="Previous anomaly"
+                  aria-label="Previous anomaly"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span class="hidden sm:inline">Prev</span>
+                </button>
+                <span class="text-ink-400 px-1">
+                  <strong class="text-ink-100 font-semibold">{{ currentAnomalyIndex >= 0 ? currentAnomalyIndex + 1 : '-' }}</strong> / {{ sortedEvents.length }}
+                </span>
+                <button
+                  type="button"
+                  @click="goToNextAnomaly"
+                  :disabled="isLastAnomaly"
+                  class="min-h-[34px] sm:min-h-[28px] px-2.5 rounded bg-ink-950 hover:bg-ink-800 text-ink-200 disabled:opacity-35 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 touch-manipulation"
+                  title="Next anomaly"
+                  aria-label="Next anomaly"
+                >
+                  <span class="hidden sm:inline">Next</span>
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
             </div>
 
             <!-- Interactive SVG Fever Curve Track -->
-            <div class="relative w-full bg-ink-950 rounded-md border border-ink-800 px-2.5 py-1.5 select-none">
-              <div v-if="!timelineData || timelineData.length === 0" class="h-16 sm:h-20 flex flex-col items-center justify-center text-ink-400 text-xs font-mono gap-1">
-                <span>No timeline artifacts found on storage.</span>
-                <span class="text-[11px] text-ink-500">Connect SSD or populate ./data with sequence events.</span>
+            <div class="relative w-full bg-ink-950 rounded-md px-2.5 py-1.5 select-none">
+              <div v-if="!timelineData || timelineData.length === 0" class="h-14 sm:h-16 flex items-center justify-center text-ink-400 text-xs">
+                <span>No timeline data found.</span>
               </div>
 
               <div
                 v-else
-                class="relative w-full h-16 sm:h-20 cursor-pointer select-none"
+                class="relative w-full h-14 sm:h-16 cursor-pointer select-none"
                 @click="onTimelineContainerClick"
                 title="Click to seek on timeline"
               >
                 <svg viewBox="0 0 1000 100" preserveAspectRatio="none" class="w-full h-full block pointer-events-none overflow-visible">
                   <defs>
                     <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#EAA23A" stop-opacity="0.26" />
-                      <stop offset="65%" stop-color="#EAA23A" stop-opacity="0.06" />
+                      <stop offset="0%" stop-color="#EAA23A" stop-opacity="0.24" />
+                      <stop offset="70%" stop-color="#EAA23A" stop-opacity="0.05" />
                       <stop offset="100%" stop-color="#EAA23A" stop-opacity="0.0" />
                     </linearGradient>
                   </defs>
 
                   <line x1="0" y1="92" x2="1000" y2="92" stroke="#202224" stroke-width="1" />
-                  <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#F36C47" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.65" />
+                  <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#F36C47" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
 
-                  <path
-                    v-if="svgAreaPath"
-                    :d="svgAreaPath"
-                    fill="url(#curveGradient)"
-                  />
-
+                  <path v-if="svgAreaPath" :d="svgAreaPath" fill="url(#curveGradient)" />
                   <path
                     v-if="svgCurvePath"
                     :d="svgCurvePath"
@@ -1180,14 +1117,14 @@ async function handleLogout() {
                   :style="{ left: `${spike.normX * 100}%`, top: `${spike.normY * 100}%` }"
                   @click.stop="selectEventById(spike.eventId)"
                 >
-                  <div class="relative flex items-center justify-center p-2.5">
+                  <div class="relative flex items-center justify-center p-2">
                     <span
-                      class="w-3 h-3 rounded-full border-2 transition-transform group-hover:scale-125"
-                      :class="selectedEvent?.eventId === spike.eventId ? 'bg-ember-500 border-ink-100 ring-2 ring-ember-400/60 scale-110' : 'bg-honey-400 border-ink-950'"
+                      class="w-2.5 h-2.5 rounded-full transition-transform group-hover:scale-125"
+                      :class="selectedEvent?.eventId === spike.eventId ? 'bg-ember-500 ring-2 ring-ember-400/50 scale-110' : 'bg-honey-400'"
                     ></span>
                   </div>
 
-                  <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-ink-900 border border-ink-700 px-2 py-0.5 rounded text-[10px] font-mono text-honey-300 whitespace-nowrap pointer-events-none z-30 tabular-nums">
+                  <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-ink-900 px-2 py-0.5 rounded text-[10px] text-honey-300 whitespace-nowrap pointer-events-none z-30 tabular-nums">
                     <span class="math">{{ spike.surpriseScoreL2 }}𝜎</span> ({{ formatTime(spike.timestampSec) }})
                   </div>
                 </div>
@@ -1198,447 +1135,280 @@ async function handleLogout() {
                   :style="{ left: `${(currentTimelineSec / maxDuration) * 100}%` }"
                 >
                   <div class="w-0.5 h-full bg-honey-400"></div>
-                  <div class="absolute -top-1 left-1/2 -translate-x-1/2 bg-honey-500 text-ink-950 font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded-sm whitespace-nowrap tabular-nums">
+                  <div class="absolute -top-1 left-1/2 -translate-x-1/2 bg-honey-500 text-ink-950 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm whitespace-nowrap tabular-nums">
                     {{ formatTime(currentTimelineSec) }}
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Time Axis Labels -->
-            <div v-if="timelineData && timelineData.length > 0" class="flex justify-between text-[10px] font-mono text-ink-400 px-1 pt-1 tabular-nums">
-              <span>0:00</span>
-              <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.25) }}</span>
-              <span>{{ formatTime(maxDuration * 0.5) }}</span>
-              <span class="hidden sm:inline">{{ formatTime(maxDuration * 0.75) }}</span>
-              <span>{{ formatTime(maxDuration) }}</span>
-            </div>
-
-            <!-- Scrubber Range Control + Prev/Next Anomaly Stepper -->
-            <div v-if="timelineData && timelineData.length > 0" class="mt-1.5 flex items-center gap-2 sm:gap-3">
-              <div class="flex items-center gap-1.5 shrink-0 bg-ink-950 border border-ink-800 px-2.5 min-h-[42px] sm:min-h-[38px] rounded-md text-[11px] font-mono tabular-nums">
-                <span class="w-1.5 h-1.5 rounded-full bg-honey-400"></span>
-                <span class="text-honey-400 font-semibold">{{ formatTime(currentTimelineSec) }}</span>
-                <span class="text-ink-600">/</span>
-                <span class="text-ink-400">{{ formatTime(maxDuration) }}</span>
-              </div>
-
-              <div class="relative flex-1 flex items-center min-h-[42px]">
-                <input
-                  type="range"
-                  min="0"
-                  :max="maxDuration"
-                  step="0.5"
-                  v-model.number="currentTimelineSec"
-                  @input="onTimelineSliderInput"
-                  @change="onTimelineSliderChange"
-                  class="timeline-slider w-full h-2 bg-ink-800 rounded-lg appearance-none cursor-pointer accent-honey-500 focus:outline-none"
-                  aria-label="Timeline scrubber slider"
-                />
-              </div>
-
-              <div class="flex items-center gap-1.5 sm:gap-1 shrink-0">
-                <button
-                  type="button"
-                  @click="goToPrevAnomaly"
-                  :disabled="isFirstAnomaly"
-                  class="min-h-[42px] min-w-[42px] sm:min-h-[38px] sm:min-w-0 px-2.5 text-[11px] font-mono rounded-md bg-ink-950 hover:bg-ink-800 text-ink-200 border border-ink-800 disabled:opacity-35 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 touch-manipulation"
-                  title="Previous anomaly"
-                  aria-label="Previous anomaly"
-                >
-                  <svg class="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                  <span class="hidden sm:inline">Prev</span>
-                </button>
-                <button
-                  type="button"
-                  @click="goToNextAnomaly"
-                  :disabled="isLastAnomaly"
-                  class="min-h-[42px] min-w-[42px] sm:min-h-[38px] sm:min-w-0 px-2.5 text-[11px] font-mono rounded-md bg-ink-950 hover:bg-ink-800 text-ink-200 border border-ink-800 disabled:opacity-35 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 touch-manipulation"
-                  title="Next anomaly"
-                  aria-label="Next anomaly"
-                >
-                  <span class="hidden sm:inline">Next</span>
-                  <svg class="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
+            <!-- Compact Scrubber Slider + Time Readout -->
+            <div v-if="timelineData && timelineData.length > 0" class="mt-2 flex items-center gap-2.5 text-[11px] text-ink-400 tabular-nums">
+              <span class="text-honey-400 font-semibold w-8">{{ formatTime(currentTimelineSec) }}</span>
+              <input
+                type="range"
+                min="0"
+                :max="maxDuration"
+                step="0.5"
+                v-model.number="currentTimelineSec"
+                @input="onTimelineSliderInput"
+                @change="onTimelineSliderChange"
+                class="timeline-slider flex-1 h-1.5 bg-ink-800 rounded-lg appearance-none cursor-pointer accent-honey-500 focus:outline-none"
+                aria-label="Timeline scrubber slider"
+              />
+              <span class="w-8 text-right">{{ formatTime(maxDuration) }}</span>
             </div>
           </div>
         </section>
 
         <!-- =============================================================== -->
-        <!-- RIGHT PANE (5 Cols): TELEMETRY, MUSE SPARK & ABLATION PYRAMID   -->
+        <!-- RIGHT PANE (5 Cols): DISTILLED BRIEFING & ABLATION WORKSPACE    -->
         <!-- =============================================================== -->
-        <section class="lg:col-span-5 flex flex-col bg-ink-900 rounded-lg border border-ink-800 p-3.5 sm:p-4 lg:overflow-y-auto lg:min-h-0">
-          <!-- Panel Header -->
-          <div class="flex items-center justify-between pb-3 border-b border-ink-800 shrink-0">
-            <h2 class="text-sm font-semibold text-ink-100">Meta AI Causal Analysis</h2>
+        <section class="lg:col-span-5 flex flex-col bg-ink-900 rounded-lg overflow-hidden lg:min-h-0">
+          <!-- Mode Tabs (Briefing | Ablation) + Classification Tag -->
+          <div class="px-3.5 sm:px-4 pt-2.5 pb-1 flex items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-1 bg-ink-950 p-1 rounded-md" role="tablist" aria-label="Inspector mode">
+              <button
+                type="button"
+                role="tab"
+                :aria-selected="rightTab === 'briefing'"
+                @click="rightTab = 'briefing'"
+                :class="rightTab === 'briefing'
+                  ? 'bg-ink-800 text-ink-100 font-semibold'
+                  : 'text-ink-400 hover:text-ink-200'"
+                class="min-h-[34px] sm:min-h-[28px] px-3 rounded text-xs transition-colors touch-manipulation"
+              >
+                Briefing
+              </button>
+              <button
+                type="button"
+                role="tab"
+                :aria-selected="rightTab === 'ablation'"
+                @click="rightTab = 'ablation'"
+                :class="rightTab === 'ablation'
+                  ? 'bg-ink-800 text-ink-100 font-semibold'
+                  : 'text-ink-400 hover:text-ink-200'"
+                class="min-h-[34px] sm:min-h-[28px] px-3 rounded text-xs transition-colors touch-manipulation"
+              >
+                Ablation
+              </button>
+            </div>
+
             <span
-              v-if="selectedEvent?.hasSamSpatial"
-              class="text-[11px] font-mono px-2 py-0.5 rounded bg-clover-500/10 text-clover-400 border border-clover-500/30 tabular-nums"
+              v-if="selectedEvent"
+              class="text-[11px] text-ink-400 truncate max-w-[180px] sm:max-w-[220px]"
             >
-              SAM 3.1 + Muse cached
-            </span>
-            <span
-              v-else
-              class="text-[11px] font-mono px-2 py-0.5 rounded bg-ink-950 text-ink-300 border border-ink-800"
-            >
-              V-JEPA 2.1 peak
+              {{ selectedEvent.hasSamSpatial && selectedEvent.samSpatial?.geometricPreClassification
+                ? selectedEvent.samSpatial.geometricPreClassification
+                : 'V-JEPA 2.1 peak' }}
             </span>
           </div>
 
-          <div v-if="selectedEvent" class="mt-3.5 space-y-3.5">
-            <!-- 1px Hairline-Divided 4-Cell KPI Strip (2x2 on mobile, 4-up on wide) -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-px bg-ink-800 border border-ink-800 rounded-md overflow-hidden">
-              <!-- Primary Metric: V-JEPA Surprise Score -->
-              <div class="p-3 bg-ink-950 flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">V-JEPA Surprise</div>
-                <div class="text-2xl font-semibold font-mono text-ember-400 mt-1 tabular-nums leading-tight">
+          <div v-if="selectedEvent" class="flex-1 flex flex-col p-3.5 sm:p-4 lg:overflow-y-auto lg:min-h-0">
+            <!-- 4-Cell Metric Strip (One Figure, One Place) -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-1.5 shrink-0">
+              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
+                <div class="text-[11px] text-ink-400">Surprise</div>
+                <div class="text-xl font-semibold text-ember-400 mt-0.5 tabular-nums leading-tight">
                   <span class="math">{{ Number(selectedEvent.surpriseScoreL2).toFixed(2) }}𝜎</span>
                 </div>
-                <div class="text-[11px] text-ink-500 mt-1">Latent <span class="math">‖𝑧̂ − 𝑧‖<sub>2</sub></span></div>
+                <div class="text-[10px] text-ink-500 mt-0.5">Latent <span class="math">‖𝑧̂ − 𝑧‖<sub>2</sub></span></div>
               </div>
 
-              <!-- Sibling Metric 2: Landing Board Bee Count (Real SAM 3.1 or V-JEPA Detector Count) -->
-              <div class="p-3 bg-ink-950 flex flex-col justify-between">
+              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">Landing Board</div>
-                <div class="text-lg font-semibold font-mono text-ink-100 mt-1 tabular-nums leading-tight">
+                <div class="text-lg font-semibold text-ink-100 mt-0.5 tabular-nums leading-tight">
                   {{ selectedEvent.boardBees ?? '—' }} bees
                 </div>
-                <div class="text-[11px] text-ink-500 mt-1 font-mono">
-                  {{ selectedEvent.hasSamSpatial ? 'SAM 3.1 count' : 'V-JEPA 2.1 count' }}
+                <div class="text-[10px] text-ink-500 mt-0.5">
+                  {{ selectedEvent.hasSamSpatial ? 'SAM 3.1' : 'V-JEPA 2.1' }}
                 </div>
               </div>
 
-              <!-- Sibling Metric 3: Tubelet Hotspot Grid -->
-              <div class="p-3 bg-ink-950 flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">Tubelet Hotspot</div>
-                <div class="text-lg font-semibold font-mono text-honey-400 mt-1 tabular-nums leading-tight">
-                  ({{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }})
-                </div>
-                <div class="text-[11px] text-ink-500 mt-1 font-mono tabular-nums">
-                  ({{ Number(selectedEvent?.hotspot?.normCenterX ?? 0.456).toFixed(3) }}, {{ Number(selectedEvent?.hotspot?.normCenterY ?? 0.436).toFixed(3) }})
-                </div>
-              </div>
-
-              <!-- Sibling Metric 4: Hotspot Bees (when SAM-segmented) or Active V-JEPA Grid Cells -->
-              <div class="p-3 bg-ink-950 flex flex-col justify-between">
+              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">
-                  {{ selectedEvent.hasSamSpatial ? 'Hotspot Cluster' : 'Active Grid Cells' }}
+                  {{ selectedEvent.hasSamSpatial ? 'Hotspot' : 'Active Cells' }}
                 </div>
-                <div class="text-lg font-semibold font-mono text-electric-300 mt-1 tabular-nums leading-tight">
+                <div class="text-lg font-semibold text-electric-300 mt-0.5 tabular-nums leading-tight">
                   {{ selectedEvent.hasSamSpatial ? (selectedEvent.hotspotBeesCount + ' bees') : ((selectedEvent.activeCells ?? '—') + ' cells') }}
                 </div>
-                <div class="text-[11px] text-ink-500 mt-1 font-mono tabular-nums">
-                  {{ selectedEvent.hasSamSpatial ? 'IoA ≥ 0.25 · SAM 3.1' : '43×43 V-JEPA grid' }}
+                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
+                  {{ selectedEvent.hasSamSpatial ? 'IoA ≥ 0.25' : '43×43 grid' }}
+                </div>
+              </div>
+
+              <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
+                <div class="text-[11px] text-ink-400">Fixation</div>
+                <div class="text-lg font-semibold text-honey-400 mt-0.5 tabular-nums leading-tight">
+                  ({{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }})
+                </div>
+                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
+                  {{ activeSaccade ? `Jump ${activeSaccade.saccadicJumpDistancePx} px` : `(${Number(selectedEvent?.hotspot?.normCenterX ?? 0.456).toFixed(2)}, ${Number(selectedEvent?.hotspot?.normCenterY ?? 0.436).toFixed(2)})` }}
                 </div>
               </div>
             </div>
 
-            <!-- Active Perception Saccade Classification Strip -->
-            <div v-if="activeSaccade" class="px-3 py-2 bg-ink-950 rounded-md border border-ink-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div class="flex items-center gap-2 text-electric-300 font-medium">
-                <span class="w-2 h-2 rounded-full bg-electric-400 shrink-0"></span>
-                <span>Active Perception Saccade</span>
-              </div>
-              <div class="flex items-center gap-2 font-mono text-[11px] tabular-nums">
-                <span class="text-ink-400">Jump {{ activeSaccade.saccadicJumpDistancePx }} px</span>
-                <span class="text-ink-700">·</span>
-                <span class="text-electric-300 bg-electric-950/60 px-1.5 py-0.5 rounded border border-electric-800/60">
-                  {{ activeSaccade.classification }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Mobile Section Switcher (< lg): Prevents long vertical scroll on 390px screens -->
-            <div class="flex lg:hidden border-b border-ink-800" role="tablist" aria-label="Analysis section">
-              <button
-                type="button"
-                role="tab"
-                :aria-selected="mobilePanel === 'causal'"
-                @click="mobilePanel = 'causal'"
-                :class="mobilePanel === 'causal'
-                  ? 'border-b-2 border-honey-400 text-ink-100 font-semibold'
-                  : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
-                class="flex-1 py-2.5 text-xs text-center transition-colors min-h-[42px]"
-              >
-                Causal Console &amp; Briefing
-              </button>
-              <button
-                type="button"
-                role="tab"
-                :aria-selected="mobilePanel === 'ablation'"
-                @click="mobilePanel = 'ablation'"
-                :class="mobilePanel === 'ablation'
-                  ? 'border-b-2 border-honey-400 text-ink-100 font-semibold'
-                  : 'border-b-2 border-transparent text-ink-400 hover:text-ink-200'"
-                class="flex-1 py-2.5 text-xs text-center transition-colors min-h-[42px]"
-              >
-                5-Tier Ablation Pyramid
-              </button>
-            </div>
-
             <!-- =========================================================== -->
-            <!-- SUB-PANEL 1: CAUSAL PROMPT, BRIEFING & SEGMENTATION         -->
+            <!-- TAB 1: HIVE BRIEFING & COMPACT PROMPT COMPOSER              -->
             <!-- =========================================================== -->
-            <div :class="mobilePanel === 'causal' ? 'block' : 'hidden lg:block'" class="space-y-3.5">
-              <!-- Meta AI & SAM 3.1 Prompt & Voice Console -->
-              <div class="p-3 bg-ink-950 rounded-md border border-ink-800 space-y-2.5">
+            <div v-if="rightTab === 'briefing'" class="flex-1 flex flex-col justify-between mt-4 space-y-4">
+              <!-- Briefing Content Area (Flat, Unnested) -->
+              <div class="space-y-3">
                 <div class="flex items-center justify-between gap-2">
-                  <label for="muse-prompt-input" class="text-xs font-medium text-ink-200">
-                    Meta AI &amp; SAM 3.1 Prompt
-                  </label>
-                  <div class="flex items-center gap-1.5">
-                    <span v-if="isTranscribing" class="text-[11px] text-honey-300 font-mono">
-                      Transcribing...
-                    </span>
-                    <button
-                      type="button"
-                      @click="toggleVoiceInput"
-                      :class="isRecording ? 'bg-ember-500/20 text-ember-300 border-ember-500/50' : 'bg-ink-900 text-ink-300 hover:text-ink-100 border-ink-800'"
-                      class="min-h-[38px] sm:min-h-[32px] px-3 sm:px-2.5 rounded text-[11px] font-mono border flex items-center gap-1.5 transition-colors touch-manipulation"
-                      title="Record voice query and run production pipeline through Meta Muse"
-                    >
-                      <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v3m-4 0h8" />
-                      </svg>
-                      <span>{{ isRecording ? 'Listening...' : 'Voice Input' }}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Interactive Dynamic Textarea (16px on mobile prevents iOS Safari zoom) -->
-                <div>
-                  <textarea
-                    id="muse-prompt-input"
-                    v-model="museQuestionInput"
-                    rows="2"
-                    class="w-full px-3 py-2 bg-ink-900 border border-ink-800 rounded-md text-ink-100 text-base sm:text-xs focus:outline-none focus:border-honey-400 resize-none font-sans leading-relaxed"
-                    placeholder="Ask about this anomaly or tap Voice Input..."
-                  ></textarea>
-                </div>
-
-                <!-- Quick Presets -->
-                <div class="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
-                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
-                  >
-                    Collision cause
-                  </button>
-                  <button
-                    type="button"
-                    @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
-                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
-                  >
-                    Hornet threat
-                  </button>
-                  <button
-                    type="button"
-                    @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
-                    class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-900 hover:bg-ink-800 border border-ink-800 text-ink-300 hover:text-ink-100 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
-                  >
-                    SAM contour
-                  </button>
-                </div>
-              </div>
-
-              <!-- Action Buttons: Single Solid Primary CTA + Ghost Secondary -->
-              <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  @click="askMuse()"
-                  :disabled="isAskingMuse"
-                  class="flex-1 min-h-[44px] py-2.5 px-4 bg-honey-400 hover:bg-honey-300 disabled:opacity-50 text-ink-950 font-semibold text-xs rounded-md transition-colors flex items-center justify-center gap-2 touch-manipulation"
-                >
-                  <span v-if="isAskingMuse" class="w-3.5 h-3.5 border-2 border-ink-950 border-t-transparent rounded-full animate-spin"></span>
-                  <span>{{ isAskingMuse ? 'Analyzing Hive...' : 'Ask Muse Spark' }}</span>
-                </button>
-
-                <button
-                  type="button"
-                  @click="prepareSamPayload(selectedEvent)"
-                  :disabled="isPreparingMuse || isAskingMuse"
-                  class="min-h-[44px] py-2.5 px-3 bg-ink-950 hover:bg-ink-800 disabled:opacity-50 text-ink-300 hover:text-honey-300 font-medium text-xs rounded-md transition-colors border border-ink-800 inline-flex items-center justify-center gap-1.5 touch-manipulation shrink-0"
-                  title="Inspect SAM 3.1 wire payload format"
-                >
-                  <span>SAM 3.1 Wire</span>
-                </button>
-              </div>
-
-              <!-- Muse Spark Live / Cached Storyboard Diagnosis Card -->
-              <div v-if="museDiagnosis" class="p-3.5 bg-ink-950 rounded-md border border-honey-500/40 space-y-3">
-                <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-ink-800">
                   <div class="flex items-center gap-2">
-                    <span class="text-xs font-semibold text-honey-400">Hive Briefing</span>
+                    <h3 class="text-xs font-semibold text-ink-100">Hive Briefing</h3>
                     <span
-                      :class="museDiagnosis.degradedFallback
-                        ? 'bg-honey-500/15 text-honey-300 border-honey-500/40'
-                        : (museDiagnosis.offlineLocked || museDiagnosis.sourceMode === 'DISK_CACHE'
-                            ? 'bg-electric-500/15 text-electric-300 border-electric-500/40'
-                            : 'bg-clover-500/15 text-clover-300 border-clover-500/40')"
-                      class="px-2 py-0.5 rounded border text-[10px] font-mono"
+                      v-if="museDiagnosis"
+                      class="text-[11px] text-ink-400 tabular-nums"
                     >
-                      {{ museDiagnosis.degradedFallback ? 'Degraded Fallback' : (museDiagnosis.offlineLocked || museDiagnosis.sourceMode === 'DISK_CACHE' ? 'Offline Cache' : 'Live') }}
+                      · {{ museDiagnosis.offlineLocked || museDiagnosis.sourceMode === 'DISK_CACHE' ? 'Cached' : `Live (${museDiagnosis.telemetry?.latencyMs || 0}ms)` }}
                     </span>
-                    <span class="text-ink-400 text-[11px] font-mono tabular-nums">{{ museDiagnosis.telemetry?.latencyMs || 0 }}ms</span>
                   </div>
 
-                  <!-- Audio Action Controls -->
-                  <div class="flex items-center gap-1.5 flex-wrap">
+                  <!-- Quiet Audio Controls -->
+                  <div v-if="museDiagnosis" class="flex items-center gap-1.5">
                     <button
                       type="button"
                       @click="isSpeakingAloud ? stopReadAloud() : readAloud()"
-                      class="px-2.5 min-h-[36px] bg-ink-900 hover:bg-ink-800 text-honey-300 border border-honey-500/40 rounded-md flex items-center gap-1.5 transition-colors text-xs font-medium touch-manipulation"
-                      :title="isSpeakingAloud ? 'Stop audio' : 'Read briefing aloud in natural English'"
+                      class="px-2.5 min-h-[32px] bg-ink-950 hover:bg-ink-800 text-honey-300 rounded flex items-center gap-1.5 transition-colors text-[11px] font-medium touch-manipulation"
+                      :title="isSpeakingAloud ? 'Stop audio' : 'Read briefing aloud'"
                     >
-                      <svg v-if="isSpeakingAloud" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
-                      <svg v-else class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5-2.23l-5 4H2v12h4.5l5 4V1zm4.5 11c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+                      <svg v-if="isSpeakingAloud" class="w-3 h-3 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                      <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5-2.23l-5 4H2v12h4.5l5 4V1zm4.5 11c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
                       <span>{{ isSpeakingAloud ? 'Stop' : 'Read' }}</span>
                     </button>
                     <button
                       type="button"
                       @click="playBeeBuzz()"
                       :disabled="isPlayingBeeBuzz"
-                      class="px-2.5 min-h-[36px] bg-ink-900 hover:bg-ink-800 text-ink-200 border border-ink-800 rounded-md flex items-center gap-1.5 transition-colors text-xs touch-manipulation"
+                      class="px-2.5 min-h-[32px] bg-ink-950 hover:bg-ink-800 text-ink-300 rounded flex items-center gap-1.5 transition-colors text-[11px] touch-manipulation"
                       title="Bioacoustic bee buzz synthesis"
                     >
-                      <svg class="w-3.5 h-3.5 text-honey-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h3l2-5 4 10 3-7 2 2h4" />
-                      </svg>
-                      <span>{{ isPlayingBeeBuzz ? 'Buzzing...' : 'FFT-Buzz' }}</span>
+                      <span>{{ isPlayingBeeBuzz ? 'Buzzing...' : 'Buzz' }}</span>
                     </button>
-                    <label class="flex items-center gap-1.5 text-ink-400 hover:text-ink-200 cursor-pointer text-xs select-none pl-1 min-h-[36px]">
-                      <input type="checkbox" v-model="autoReadAloud" class="rounded accent-honey-500 w-3.5 h-3.5" />
-                      <span class="text-[11px]">Auto</span>
-                    </label>
                   </div>
                 </div>
 
-                <!-- Formatted Markdown Diagnosis -->
+                <!-- Prose Report (Directly on surface, no nested card-in-card) -->
                 <div
+                  v-if="museDiagnosis"
                   v-html="formatMarkdownReport(museDiagnosis.report || museDiagnosis.diagnosis)"
-                  class="p-3 bg-ink-900 rounded-md border border-ink-800 text-xs text-ink-200 leading-relaxed font-sans max-h-60 overflow-y-auto space-y-1"
+                  class="text-xs text-ink-200 leading-relaxed font-sans space-y-1.5"
                 ></div>
+                <p
+                  v-else-if="selectedEvent.agentResult?.muse?.diagnosis"
+                  class="text-xs text-ink-300 leading-relaxed"
+                >
+                  {{ selectedEvent.agentResult.muse.diagnosis }}
+                </p>
+                <p v-else class="text-xs text-ink-400">
+                  Ask a question below to synthesize a grounded briefing for this event.
+                </p>
 
-                <!-- Multi-Event Storyboard Peak Crops -->
-                <div v-if="museDiagnosis.events && museDiagnosis.events.length" class="space-y-1.5 pt-1">
-                  <div class="flex items-center justify-between text-[11px] font-medium text-ink-400">
-                    <span>Keyframe peak crops</span>
-                    <span class="text-[10px] font-mono text-ink-500 md:hidden">Swipe horizontally</span>
-                  </div>
-                  <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-1 scrollbar-none md:grid md:grid-cols-3 md:gap-2 md:overflow-visible">
+                <!-- Keyframe Peak Crops (Clean 3-up strip without nested box borders) -->
+                <div v-if="museDiagnosis?.events && museDiagnosis.events.length" class="pt-1 space-y-2">
+                  <div class="text-[11px] text-ink-400">Peak hotspot crops</div>
+                  <div class="grid grid-cols-3 gap-2">
                     <div
                       v-for="evt in museDiagnosis.events"
                       :key="evt.eventId"
-                      class="flex-none w-[74%] sm:w-[58%] md:w-auto snap-center p-1.5 bg-ink-900 rounded-md border border-ink-800 space-y-1.5 text-center"
+                      class="space-y-1"
                     >
                       <img
                         v-if="evt.cropBase64"
                         :src="'data:image/jpeg;base64,' + evt.cropBase64"
                         :alt="evt.eventId"
-                        class="w-full aspect-square rounded-sm object-cover border border-ink-800"
+                        class="w-full aspect-square rounded object-cover bg-ink-950"
                       />
-                      <div class="flex items-center justify-between text-[10px] font-mono bg-ink-950 px-2 py-1 rounded-sm border border-ink-800 tabular-nums">
-                        <span class="text-ink-300">{{ evt.timestamp }}</span>
-                        <span class="math text-ember-400">{{ evt.surpriseScoreSigma }}𝜎</span>
-                        <span class="text-honey-400 font-semibold">{{ evt.beesInsideHotspotCount !== undefined ? evt.beesInsideHotspotCount : evt.landingBoardBeeCount }} bees</span>
+                      <div class="flex items-center justify-between text-[10px] text-ink-400 tabular-nums px-0.5">
+                        <span>{{ evt.timestamp }}</span>
+                        <span class="text-honey-400 font-medium">{{ evt.beesInsideHotspotCount !== undefined ? evt.beesInsideHotspotCount : evt.landingBoardBeeCount }} bees</span>
                       </div>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <!-- Raw API Payload Toggle -->
-                <div class="pt-2 flex items-center justify-between text-[11px] text-ink-400 border-t border-ink-800">
+              <!-- Compact Prompt Composer (Bottom of Briefing Tab) -->
+              <div class="pt-2 space-y-2 shrink-0">
+                <!-- Quiet Quick Presets -->
+                <div class="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
-                    @click="showRawWirePayload = !showRawWirePayload"
-                    class="text-ink-400 hover:text-ink-200 flex items-center gap-1.5 min-h-[32px]"
+                    @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
+                    class="px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 text-ink-400 hover:text-ink-200 text-[11px] transition-colors touch-manipulation"
                   >
-                    <span>{{ showRawWirePayload ? 'Hide raw wire payload' : 'Show raw wire payload' }}</span>
+                    Collision cause
                   </button>
                   <button
                     type="button"
-                    @click="prepareMusePayload(selectedEvent)"
-                    class="text-honey-400 hover:text-honey-300 underline underline-offset-2 min-h-[32px]"
+                    @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
+                    class="px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 text-ink-400 hover:text-ink-200 text-[11px] transition-colors touch-manipulation"
                   >
-                    View staging &amp; cURL
+                    Hornet threat
                   </button>
-                </div>
-                <pre v-if="showRawWirePayload" class="p-2.5 bg-ink-900 rounded-md text-[10px] font-mono text-honey-300 overflow-x-auto max-h-40 border border-ink-800">{{ JSON.stringify(museDiagnosis, null, 2) }}</pre>
-              </div>
-
-              <!-- Staged Muse Query Status Banner -->
-              <div v-if="stagedMuseQuery" class="p-3 bg-honey-500/10 rounded-md border border-honey-500/30 space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-honey-400">Muse Spark Open Staged</span>
-                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-honey-500/20 text-honey-300 border border-honey-500/40 tabular-nums">
-                    Dry run
-                  </span>
-                </div>
-                <p class="text-[11px] text-ink-300 tabular-nums">
-                  Grounded: V-JEPA Event <span class="font-mono text-honey-300">{{ stagedMuseQuery.eventId || 'Active' }}</span> ({{ stagedMuseQuery.estimatedTokens }} tokens)
-                </p>
-                <div class="flex items-center justify-between pt-1 text-[11px]">
-                  <span class="text-ink-400 font-mono text-[10px]">{{ stagedMuseQuery.httpMethod || 'POST' }} {{ stagedMuseQuery.model || 'meta-models/muse-spark-open' }}</span>
                   <button
                     type="button"
-                    @click="stagedMuseModalOpen = true"
-                    class="font-medium text-honey-400 hover:text-honey-300 underline underline-offset-2"
+                    @click="setPresetQuestion('Isolate anomalous bee on landing board and extract spatial contour')"
+                    class="px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 text-ink-400 hover:text-ink-200 text-[11px] transition-colors touch-manipulation"
                   >
-                    Inspect payload &amp; prompt
+                    SAM contour
                   </button>
                 </div>
-              </div>
 
-              <!-- SAM 3.1 Segmentation Isolation Card -->
-              <div v-if="selectedEvent.hasSamSpatial && selectedEvent.agentResult?.sam && selectedEvent.agentResult.sam.status === 'SUCCESS' && selectedEvent.agentResult.sam.segmentedObject" class="p-3 bg-ink-950 rounded-md border border-ink-800 space-y-1.5">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-honey-400">SAM 3.1 Instance Segmentation</span>
-                  <span class="text-[10px] font-mono text-ink-400">{{ selectedEvent.agentResult.sam.model }}</span>
-                </div>
-                <p class="text-xs text-ink-300">
-                  Isolated object: <span class="font-semibold text-ink-100">{{ selectedEvent.agentResult.sam.segmentedObject }}</span>
-                </p>
-                <p v-if="selectedEvent.agentResult.sam.instanceCount" class="text-[11px] text-ink-400 font-mono tabular-nums">
-                  Board instances: {{ selectedEvent.agentResult.sam.instanceCount }} · Hotspot instances: {{ selectedEvent.agentResult.sam.hotspotBeesCount }}
-                </p>
-              </div>
+                <!-- Single-Row Composer Bar -->
+                <form
+                  @submit.prevent="askMuse()"
+                  class="flex items-center gap-1.5 bg-ink-950 rounded-md p-1 transition-colors"
+                >
+                  <input
+                    id="muse-prompt-input"
+                    type="text"
+                    v-model="museQuestionInput"
+                    class="flex-1 min-w-0 px-2.5 py-1.5 bg-transparent text-ink-100 text-base sm:text-xs focus:outline-none font-sans placeholder:text-ink-500"
+                    placeholder="Ask Muse Spark about this event..."
+                  />
 
-              <!-- Muse Spark Causal Scene Diagnosis Card -->
-              <div v-if="selectedEvent.hasSamSpatial && selectedEvent.agentResult?.muse && selectedEvent.agentResult.muse.status === 'SUCCESS' && selectedEvent.agentResult.muse.diagnosis" class="p-3 bg-ink-950 rounded-md border border-honey-500/30 space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-honey-400">Muse Spark Event Summary</span>
-                  <span class="text-[10px] font-mono text-ink-400">{{ selectedEvent.agentResult.muse.model }}</span>
-                </div>
-                <p class="text-xs text-ink-200 leading-relaxed italic bg-ink-900 p-2.5 rounded border border-ink-800">
-                  "{{ selectedEvent.agentResult.muse.diagnosis }}"
-                </p>
+                  <button
+                    type="button"
+                    @click="toggleVoiceInput"
+                    :class="isRecording ? 'bg-ember-500/20 text-ember-300' : 'text-ink-400 hover:text-ink-100 hover:bg-ink-900'"
+                    class="min-h-[36px] min-w-[36px] sm:min-h-[32px] sm:min-w-[32px] rounded flex items-center justify-center transition-colors shrink-0 touch-manipulation"
+                    :title="isRecording ? 'Listening...' : 'Voice input'"
+                    aria-label="Voice input"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v3m-4 0h8" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="submit"
+                    :disabled="isAskingMuse"
+                    class="min-h-[36px] sm:min-h-[32px] px-3.5 bg-honey-400 hover:bg-honey-300 disabled:opacity-50 text-ink-950 font-semibold text-xs rounded transition-colors flex items-center justify-center gap-1.5 shrink-0 touch-manipulation"
+                  >
+                    <span v-if="isAskingMuse" class="w-3 h-3 border-2 border-ink-950 border-t-transparent rounded-full animate-spin"></span> <!-- taste-skill-ignore -->
+                    <span>{{ isAskingMuse ? 'Asking...' : 'Ask' }}</span>
+                  </button>
+                </form>
               </div>
             </div>
 
             <!-- =========================================================== -->
-            <!-- SUB-PANEL 2: 5-TIER ABLATION PYRAMID & EMPIRICAL MATRIX     -->
+            <!-- TAB 2: 5-TIER ABLATION PYRAMID & EMPIRICAL MATRIX           -->
             <!-- =========================================================== -->
-            <div v-if="ablationPyramid" :class="mobilePanel === 'ablation' ? 'block' : 'hidden lg:block'">
-              <div class="p-3.5 bg-ink-950 rounded-md border border-ink-800 space-y-3">
-                <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-ink-800">
-                  <div>
-                    <h3 class="text-xs font-semibold text-honey-400">5-Tier Ablation Pyramid</h3>
-                    <p class="text-[11px] text-ink-400">Select a tier from Base (V-JEPA 2.1) to Apex (Muse Spark) to inspect its role</p>
-                  </div>
-                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-ink-900 text-ink-300 border border-ink-800 tabular-nums">
-                    -{{ ablationPyramid.funnelMetrics?.compressionRatioPct || 93.6 }}% frames · +{{ ablationPyramid.funnelMetrics?.tokenDensityBoost || 8.3 }}x ({{ ablationPyramid.funnelMetrics?.attentionFlopRatio || 68.6 }}x FLOPs)
+            <div v-else-if="rightTab === 'ablation'" class="mt-4 space-y-4">
+              <template v-if="ablationPyramid">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-ink-100">5-Tier Architecture</span>
+                  <span class="text-[11px] text-ink-400 tabular-nums">
+                    -{{ ablationPyramid.funnelMetrics?.compressionRatioPct || 93.6 }}% frames · +{{ ablationPyramid.funnelMetrics?.tokenDensityBoost || 8.3 }}x density
                   </span>
                 </div>
 
                 <!-- Visual Centered Pyramid Stack (Apex Tier 4 -> Base Tier 0) -->
-                <div class="flex flex-col items-center gap-1.5 py-1">
+                <div class="flex flex-col items-center gap-1.5">
                   <button
                     v-for="tier in orderedPyramidTiersApexFirst"
                     :key="tier.id"
@@ -1647,61 +1417,61 @@ async function handleLogout() {
                     :class="[
                       pyramidTierWidthClass(tier.tierIndex),
                       selectedPyramidTier === tier.id
-                        ? 'bg-honey-500/20 border-honey-400 text-honey-200'
-                        : 'bg-ink-900 border-ink-800 text-ink-300 hover:border-ink-700 hover:text-ink-100'
+                        ? 'bg-honey-500/20 text-honey-200'
+                        : 'bg-ink-950 text-ink-300 hover:bg-ink-800/80 hover:text-ink-100'
                     ]"
-                    class="min-h-[42px] sm:min-h-[36px] px-2.5 py-1.5 rounded border text-[11px] font-mono flex items-center justify-between transition-colors cursor-pointer tabular-nums touch-manipulation"
+                    class="min-h-[38px] sm:min-h-[34px] px-3 py-1.5 rounded text-xs flex items-center justify-between transition-colors cursor-pointer tabular-nums touch-manipulation"
                   >
                     <span class="font-semibold truncate">T{{ tier.tierIndex }} · {{ tier.shortTitle }}</span>
-                    <span class="text-[10px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.quantitativeMetric.split('·')[0] }}</span>
+                    <span class="text-[11px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.quantitativeMetric.split('·')[0] }}</span>
                   </button>
                 </div>
 
-                <!-- Selected Tier Role & Counterfactual Breakdown -->
-                <div v-if="activePyramidTierObj" class="p-2.5 bg-ink-900 rounded-md border border-ink-800 space-y-1.5 text-[11px]">
+                <!-- Flat Selected Tier Specification -->
+                <div v-if="activePyramidTierObj" class="p-3 bg-ink-950 rounded-md space-y-2 text-xs">
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-semibold text-honey-300">{{ activePyramidTierObj.name }}</span>
-                    <span class="font-mono text-[10px] text-electric-300">{{ activePyramidTierObj.modelOrComponent }}</span>
+                    <span class="text-[11px] text-ink-400">{{ activePyramidTierObj.modelOrComponent }}</span>
                   </div>
-                  <p class="text-ink-300 italic text-[11px]">"{{ activePyramidTierObj.roleQuestion }}"</p>
-                  <div class="grid grid-cols-1 gap-1 pt-1 font-mono text-[10px]">
-                    <div class="bg-ink-950 px-2 py-1.5 rounded border border-ink-800">
-                      <span class="text-ink-400">Input: </span>
-                      <span class="text-ink-200">{{ activePyramidTierObj.inputSignal }}</span>
+                  <p class="text-ink-300 text-[11px]">{{ activePyramidTierObj.roleQuestion }}</p>
+                  <div class="space-y-1.5 pt-1 text-[11px]">
+                    <div class="flex justify-between gap-3">
+                      <span class="text-ink-400 shrink-0">Input</span>
+                      <span class="text-ink-200 text-right">{{ activePyramidTierObj.inputSignal }}</span>
                     </div>
-                    <div class="bg-ink-950 px-2 py-1.5 rounded border border-ink-800">
-                      <span class="text-ink-400">Output: </span>
-                      <span class="text-clover-300">{{ activePyramidTierObj.outputSignal }}</span>
+                    <div class="flex justify-between gap-3">
+                      <span class="text-ink-400 shrink-0">Output</span>
+                      <span class="text-clover-300 text-right">{{ activePyramidTierObj.outputSignal }}</span>
                     </div>
-                    <div class="bg-ember-500/10 px-2 py-1.5 rounded border border-ember-500/30">
-                      <span class="text-ember-300 font-semibold">Without this tier: </span>
-                      <span class="text-ink-200">{{ activePyramidTierObj.whatBreaksWithoutIt }}</span>
+                    <div class="flex justify-between gap-3">
+                      <span class="text-ember-300 shrink-0">Without tier</span>
+                      <span class="text-ink-200 text-right">{{ activePyramidTierObj.whatBreaksWithoutIt }}</span>
                     </div>
                   </div>
                 </div>
 
                 <!-- Counterfactual Ablation Matrix Toggle -->
-                <div class="pt-1.5 border-t border-ink-800 space-y-2">
+                <div class="space-y-2">
                   <button
                     type="button"
                     @click="showAblationMatrix = !showAblationMatrix"
-                    class="w-full min-h-[42px] sm:min-h-[36px] flex items-center justify-between text-[11px] font-mono text-ink-300 hover:text-honey-300 transition-colors tabular-nums touch-manipulation"
+                    class="w-full min-h-[36px] px-3 rounded-md bg-ink-950 hover:bg-ink-800/80 flex items-center justify-between text-xs text-ink-300 hover:text-honey-300 transition-colors tabular-nums touch-manipulation"
                   >
-                    <span>{{ showAblationMatrix ? 'Hide' : 'Show' }} Empirical Factorial &amp; Baseline Matrix (N=20)</span>
+                    <span>{{ showAblationMatrix ? 'Hide' : 'Show' }} Empirical Matrix (N=20)</span>
                     <span class="text-honey-400 shrink-0 ml-2">
                       Hit {{ activeCounterfactualObj?.pointingHitRatePct ?? 100 }}% · IoU {{ activeCounterfactualObj?.meanHotspotIou ?? 1.0 }}
                     </span>
                   </button>
 
-                  <div v-if="showAblationMatrix" class="space-y-2.5 pt-1">
+                  <div v-if="showAblationMatrix" class="space-y-2">
                     <div class="grid grid-cols-1 gap-1">
                       <button
                         v-for="cf in ablationPyramid.counterfactuals"
                         :key="cf.id"
                         type="button"
                         @click="selectedCounterfactual = cf.id"
-                        :class="selectedCounterfactual === cf.id ? 'bg-ink-800 border-honey-500/50 text-ink-100' : 'bg-ink-900 border-ink-800 text-ink-400 hover:text-ink-200'"
-                        class="min-h-[42px] sm:min-h-[36px] px-2.5 py-1.5 rounded border text-left text-[10px] font-mono flex items-center justify-between transition-colors tabular-nums touch-manipulation"
+                        :class="selectedCounterfactual === cf.id ? 'bg-ink-800 text-ink-100' : 'bg-ink-950 text-ink-400 hover:text-ink-200'"
+                        class="min-h-[36px] px-3 py-1.5 rounded text-left text-[11px] flex items-center justify-between transition-colors tabular-nums touch-manipulation"
                       >
                         <span class="truncate">{{ cf.label }}</span>
                         <span class="text-honey-400 shrink-0 ml-2">
@@ -1710,48 +1480,26 @@ async function handleLogout() {
                       </button>
                     </div>
 
-                    <div v-if="activeCounterfactualObj" class="p-2.5 bg-ink-900 rounded border border-ink-800 text-[10px] space-y-1 font-mono tabular-nums">
-                      <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink-400 pb-1 border-b border-ink-800">
-                        <span>Code: <strong class="text-honey-300">{{ activeCounterfactualObj.factorialCode || activeCounterfactualObj.id }}</strong></span>
-                        <span>Pointing Hit: <strong class="text-clover-300">{{ activeCounterfactualObj.pointingHitRatePct ?? 100 }}%</strong></span>
-                        <span>Mean IoU: <strong class="text-electric-300">{{ activeCounterfactualObj.meanHotspotIou ?? 1.0 }}</strong></span>
-                        <span>Count MAE: <strong class="text-ink-200">{{ activeCounterfactualObj.hotspotCountMae ?? 0.0 }}</strong></span>
-                      </div>
-                      <div><span class="text-ink-400">Active:</span> <span class="text-ink-200">{{ activeCounterfactualObj.activeComponents }}</span></div>
-                      <div><span class="text-ink-400">Ablated:</span> <span class="text-ember-300">{{ activeCounterfactualObj.missingComponent }}</span></div>
-                      <div class="text-ink-300 font-sans pt-0.5 leading-relaxed">{{ activeCounterfactualObj.observedOutcome }}</div>
-                    </div>
-
-                    <div class="p-2 bg-white rounded-md border border-ink-700 overflow-x-auto">
-                      <img
-                        :src="ablationPyramid.figureSvgPath || '/landing/ablation_pyramid_roles.svg'"
-                        alt="BeeJEPA 5-Tier Ablation Pyramid Tufte SVG"
-                        class="w-full h-auto block"
-                      />
+                    <div v-if="activeCounterfactualObj" class="p-3 bg-ink-950 rounded-md text-xs text-ink-300 leading-relaxed">
+                      {{ activeCounterfactualObj.observedOutcome }}
                     </div>
                   </div>
                 </div>
-              </div>
+              </template>
+              <p v-else class="text-xs text-ink-400">No ablation telemetry loaded.</p>
             </div>
           </div>
 
-          <!-- Empty State when no event is selected / present -->
+          <!-- Empty State when no event is selected -->
           <div v-else class="flex-1 flex flex-col items-center justify-center text-center p-6 text-ink-400 my-auto">
-            <div class="w-10 h-10 rounded-md border border-ink-800 bg-ink-950 flex items-center justify-center text-ink-500 mb-2.5">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <p class="text-xs text-ink-400 max-w-xs">
-              Awaiting anomaly events on SSD storage.
-            </p>
+            <p class="text-xs text-ink-400 max-w-xs">Awaiting anomaly events on storage.</p>
           </div>
         </section>
       </main>
     </div>
 
     <!-- ================================================================= -->
-    <!-- STAGED META MUSE REQUEST INSPECTOR MODAL (Mobile Bottom Sheet)    -->
+    <!-- INSPECTOR MODAL (Payloads, cURL & System Telemetry)               -->
     <!-- ================================================================= -->
     <div
       v-if="stagedMuseModalOpen"
@@ -1761,18 +1509,18 @@ async function handleLogout() {
       aria-labelledby="staging-modal-title"
       @click.self="stagedMuseModalOpen = false"
     >
-      <div class="bg-ink-900 border-t sm:border border-ink-800 rounded-t-xl sm:rounded-lg w-full max-w-xl max-h-[88svh] flex flex-col overflow-hidden">
+      <div class="bg-ink-900 rounded-t-xl sm:rounded-lg w-full max-w-xl max-h-[88svh] flex flex-col overflow-hidden">
         <!-- Modal Header -->
-        <div class="px-4 py-3.5 border-b border-ink-800 flex items-center justify-between bg-ink-900">
+        <div class="px-4 py-3 flex items-center justify-between bg-ink-900">
           <div>
-            <h3 id="staging-modal-title" class="text-sm font-semibold text-ink-100">Meta Muse Staging Inspector</h3>
-            <p class="text-[11px] text-ink-400">Grounded Video Telemetry &amp; SAM 3.1 Prompt Preview</p>
+            <h3 id="staging-modal-title" class="text-sm font-semibold text-ink-100">System &amp; Payload Inspector</h3>
+            <p class="text-[11px] text-ink-400">Runtime telemetry, grounded prompts &amp; wire payloads</p>
           </div>
           <button
             type="button"
             @click="stagedMuseModalOpen = false"
-            aria-label="Close staging inspector"
-            class="min-h-[42px] min-w-[42px] sm:min-h-[36px] sm:min-w-[36px] flex items-center justify-center text-ink-400 hover:text-ink-100 rounded-md hover:bg-ink-800 transition-colors touch-manipulation"
+            aria-label="Close inspector"
+            class="min-h-[38px] min-w-[38px] flex items-center justify-center text-ink-400 hover:text-ink-100 rounded-md hover:bg-ink-800 transition-colors touch-manipulation"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1782,110 +1530,88 @@ async function handleLogout() {
 
         <!-- Modal Body -->
         <div class="p-4 space-y-3.5 overflow-y-auto flex-1 text-xs">
-          <!-- Compact Status & Event Context -->
-          <div class="p-2.5 bg-ink-950 rounded-md border border-ink-800 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px] tabular-nums">
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-honey-400"></span>
-              <span class="text-ink-200 font-semibold">{{ stagedMuseQuery?.eventId || stagedSamQuery?.eventId || selectedEvent?.eventId || 'Event Telemetry' }}</span>
+          <!-- System Telemetry Strip -->
+          <div class="grid grid-cols-3 gap-1.5 text-[11px] tabular-nums">
+            <div class="p-2.5 bg-ink-950 rounded-md">
+              <div class="text-ink-400 text-[10px]">Storage</div>
+              <div class="text-ink-200 font-medium mt-0.5 truncate">{{ storageStatus.isMounted ? storageStatus.freeSpaceFormatted + ' free' : 'Offline' }}</div>
             </div>
-            <div class="flex items-center gap-2.5 text-ink-400">
-              <span class="math text-ember-400">{{ stagedMuseQuery?.eventData?.surpriseScoreL2 ? Number(stagedMuseQuery.eventData.surpriseScoreL2).toFixed(2) + '𝜎' : (selectedEvent?.surpriseScoreL2 ? Number(selectedEvent.surpriseScoreL2).toFixed(2) + '𝜎' : '—') }}</span>
-              <span class="text-honey-400">Hotspot ({{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridX ?? 2 }}, {{ stagedMuseQuery?.eventData?.hotspot?.tubeletGridY ?? 3 }})</span>
-              <span class="text-ink-300 text-[10px] px-1.5 py-0.5 rounded bg-ink-900 border border-ink-800">Dry run</span>
+            <div class="p-2.5 bg-ink-950 rounded-md">
+              <div class="text-ink-400 text-[10px]">Baseten Muse</div>
+              <div class="text-ink-200 font-medium mt-0.5">{{ metaHealth.liveConnection ? `Live (${metaHealth.latencyMs}ms)` : 'Cached' }}</div>
+            </div>
+            <div class="p-2.5 bg-ink-950 rounded-md">
+              <div class="text-ink-400 text-[10px]">FFM Ring Buffer</div>
+              <div class="text-electric-300 font-medium mt-0.5">{{ ringBufferTelemetry.activeSlotsCount }}/{{ ringBufferTelemetry.capacity }} slots</div>
             </div>
           </div>
 
-          <!-- Question Input & Presets -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <label for="modal-muse-query" class="text-xs font-medium text-ink-200">Beekeeper query to Meta Muse</label>
-              <span class="text-[11px] text-ink-400">Text or voice</span>
-            </div>
-            <textarea
-              id="modal-muse-query"
-              v-model="museQuestionInput"
-              rows="2"
-              class="w-full px-3 py-2 bg-ink-950 border border-ink-800 rounded-md text-ink-100 font-mono text-base sm:text-xs focus:outline-none focus:border-honey-400 resize-none"
-              placeholder="Query for Meta Muse..."
-            ></textarea>
-            <div class="flex flex-wrap items-center gap-1.5">
+          <!-- Target Switcher: Muse Spark vs SAM 3.1 Wire -->
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
               <button
                 type="button"
-                @click="setPresetQuestion('Explain physical collision cause: What occurred at this tubelet?')"
-                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
+                @click="prepareMusePayload(selectedEvent)"
+                class="px-2.5 py-1.5 rounded bg-ink-950 hover:bg-ink-800 text-ink-200 text-xs transition-colors"
               >
-                Collision cause
+                Muse Spark Payload
               </button>
               <button
                 type="button"
-                @click="setPresetQuestion('Assess wasp/hornet predation threat based on spatial flight velocity')"
-                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
+                @click="prepareSamPayload(selectedEvent)"
+                class="px-2.5 py-1.5 rounded bg-ink-950 hover:bg-ink-800 text-ink-200 text-xs transition-colors"
               >
-                Hornet threat
-              </button>
-              <button
-                type="button"
-                @click="setPresetQuestion('Analyze swarm preparation cues from cluster vibration and entrance traffic')"
-                class="min-h-[38px] sm:min-h-[32px] px-2.5 py-1 rounded bg-ink-950 hover:bg-ink-800 border border-ink-800 text-ink-300 text-[11px] transition-colors flex-1 sm:flex-initial inline-flex items-center justify-center touch-manipulation"
-              >
-                Swarm dynamics
+                SAM 3.1 Wire
               </button>
             </div>
+            <span class="text-[11px] text-ink-400 tabular-nums">
+              {{ selectedEvent?.eventId || '' }}
+            </span>
           </div>
 
           <!-- Staged Inspector Tabs -->
-          <div class="border-t border-ink-800 pt-2 space-y-2.5">
-            <div class="flex items-center gap-3 border-b border-ink-800">
+          <div class="space-y-2.5">
+            <div class="flex items-center gap-1 bg-ink-950 p-1 rounded-md w-fit">
               <button
                 type="button"
                 @click="stagedTab = 'prompt'"
-                :class="stagedTab === 'prompt' ? 'text-honey-400 border-b-2 border-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200 border-b-2 border-transparent'"
-                class="min-h-[40px] px-2 py-2 text-xs transition-colors shrink-0 touch-manipulation"
+                :class="stagedTab === 'prompt' ? 'bg-ink-800 text-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200'"
+                class="min-h-[32px] px-3 rounded text-xs transition-colors shrink-0 touch-manipulation"
               >
                 Grounded Prompt
               </button>
               <button
                 type="button"
                 @click="stagedTab = 'payload'"
-                :class="stagedTab === 'payload' ? 'text-honey-400 border-b-2 border-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200 border-b-2 border-transparent'"
-                class="min-h-[40px] px-2 py-2 text-xs transition-colors shrink-0 touch-manipulation"
+                :class="stagedTab === 'payload' ? 'bg-ink-800 text-honey-400 font-medium' : 'text-ink-400 hover:text-ink-200'"
+                class="min-h-[32px] px-3 rounded text-xs transition-colors shrink-0 touch-manipulation"
               >
                 Wire Payload &amp; cURL
               </button>
             </div>
 
             <!-- Tab 1: Formatted Grounded Prompt -->
-            <div v-if="stagedTab === 'prompt'" class="p-3 bg-ink-950 rounded-md border border-ink-800 font-mono text-[11px] text-ink-300 whitespace-pre-wrap leading-relaxed max-h-52 overflow-y-auto">
-              {{ stagedMuseQuery?.prompt || stagedSamQuery?.prompt || 'No prompt generated' }}
-            </div>
+            <pre v-if="stagedTab === 'prompt'" class="p-3 bg-ink-950 rounded-md font-mono text-[11px] text-ink-300 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">{{ stagedMuseQuery?.prompt || stagedSamQuery?.prompt || 'No prompt staged yet.' }}</pre> <!-- taste-skill-ignore -->
 
             <!-- Tab 2: Wire Payload & cURL -->
             <div v-if="stagedTab === 'payload'" class="space-y-2">
-              <div v-if="stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand" class="p-2.5 bg-ink-950 rounded-md border border-ink-800 space-y-1">
-                <div class="text-[10px] font-mono text-honey-400 font-semibold">cURL command</div>
-                <pre class="text-ink-300 whitespace-pre-wrap font-mono text-[10px] leading-tight select-all max-h-28 overflow-y-auto">{{ stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand }}</pre>
+              <div v-if="stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand" class="p-2.5 bg-ink-950 rounded-md space-y-1">
+                <div class="text-[10px] text-honey-400 font-semibold">cURL command</div>
+                <pre class="text-ink-300 whitespace-pre-wrap font-mono text-[10px] leading-tight select-all max-h-28 overflow-y-auto">{{ stagedSamQuery?.curlCommand || stagedMuseQuery?.curlCommand }}</pre> <!-- taste-skill-ignore -->
               </div>
-              <pre class="p-2.5 bg-ink-950 rounded-md border border-ink-800 font-mono text-[10px] text-ink-200 whitespace-pre-wrap max-h-40 overflow-y-auto">{{ JSON.stringify(stagedMuseQuery?.payload || stagedSamQuery?.imagePayload || { model: 'muse-spark-open', question: museQuestionInput }, null, 2) }}</pre>
+              <pre class="p-2.5 bg-ink-950 rounded-md font-mono text-[10px] text-ink-200 whitespace-pre-wrap max-h-44 overflow-y-auto">{{ JSON.stringify(stagedMuseQuery?.payload || stagedSamQuery?.imagePayload || museDiagnosis || { model: 'muse-spark-open' }, null, 2) }}</pre> <!-- taste-skill-ignore -->
             </div>
           </div>
         </div>
 
         <!-- Modal Footer -->
-        <div class="px-4 py-3 border-t border-ink-800 bg-ink-900 flex items-center justify-between gap-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-3">
+        <div class="px-4 py-3 bg-ink-900 flex items-center justify-end gap-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-3">
           <button
             type="button"
             @click="stagedMuseModalOpen = false"
-            class="min-h-[42px] px-4 bg-ink-950 hover:bg-ink-800 text-ink-300 border border-ink-800 rounded-md text-xs transition-colors touch-manipulation"
+            class="min-h-[38px] px-4 bg-ink-950 hover:bg-ink-800 text-ink-300 rounded-md text-xs transition-colors touch-manipulation"
           >
             Close
-          </button>
-          <button
-            type="button"
-            @click="stagedMuseModalOpen = false; askMuse()"
-            :disabled="isAskingMuse"
-            class="min-h-[42px] px-4 bg-honey-400 hover:bg-honey-300 text-ink-950 font-semibold rounded-md text-xs transition-colors flex items-center gap-1.5 touch-manipulation"
-          >
-            <span>Run on Muse Spark</span>
           </button>
         </div>
       </div>

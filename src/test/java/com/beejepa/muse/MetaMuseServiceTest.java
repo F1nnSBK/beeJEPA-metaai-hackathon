@@ -1,6 +1,7 @@
 package com.beejepa.muse;
 
 import com.beejepa.config.BasetenConfig;
+import com.beejepa.config.JacksonFactory;
 import com.beejepa.config.MetaMuseConfig;
 import com.beejepa.muse.dto.MuseInferenceRequest;
 import com.beejepa.muse.dto.MuseInferenceResponse;
@@ -8,7 +9,9 @@ import com.beejepa.muse.dto.PrepareMuseQueryRequest;
 import com.beejepa.muse.dto.StagedMuseRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -50,7 +53,6 @@ class MetaMuseServiceTest {
 
         StagedMuseRequest staged = service.prepareMuseQuery(request);
 
-        // Verification: MUST be staged and NOT sent
         Assertions.assertTrue(staged.staged());
         Assertions.assertFalse(staged.sent());
         Assertions.assertEquals(0L, staged.creditsConsumed());
@@ -58,7 +60,6 @@ class MetaMuseServiceTest {
         Assertions.assertEquals("POST", staged.httpMethod());
         Assertions.assertEquals("meta-models/muse-spark-open", staged.model());
 
-        // Verify Grounded Prompt contains V-JEPA latents, SAM inputs, and SAM mask output
         String prompt = staged.prompt();
         Assertions.assertTrue(prompt.contains("evt_seq015_f0720"));
         Assertions.assertTrue(prompt.contains("4.82 sigma"));
@@ -69,20 +70,17 @@ class MetaMuseServiceTest {
         Assertions.assertTrue(prompt.contains("compact_rle_instance_0"));
         Assertions.assertTrue(prompt.contains("Did a collision happen here?"));
 
-        // Verify OpenAI-compatible payload format for Baseten Model API
         Assertions.assertEquals("meta-models/muse-spark-open", staged.payload().get("model"));
         Assertions.assertTrue(staged.payload().containsKey("messages"));
         List<Map<String, Object>> messages = (List<Map<String, Object>>) staged.payload().get("messages");
         Assertions.assertEquals(2, messages.size());
 
-        // Verify Meta Responses API payload format
         Assertions.assertNotNull(staged.responsesPayload());
         Assertions.assertEquals("meta-models/muse-spark-open", staged.responsesPayload().get("model"));
         Assertions.assertEquals(prompt, staged.responsesPayload().get("input"));
         Assertions.assertEquals("system", messages.get(0).get("role"));
         Assertions.assertEquals("user", messages.get(1).get("role"));
 
-        // Multimodal user content: text, overview image with scale reference, and anomaly crop
         Object userContent = messages.get(1).get("content");
         Assertions.assertTrue(userContent instanceof List<?>);
         List<Map<String, Object>> contentParts = (List<Map<String, Object>>) userContent;
@@ -92,13 +90,11 @@ class MetaMuseServiceTest {
         Assertions.assertEquals("image_url", contentParts.get(1).get("type"));
         Assertions.assertEquals("image_url", contentParts.get(2).get("type"));
 
-        // Verify tool calling and reasoning configuration
         Assertions.assertEquals(4096, staged.payload().get("max_tokens"));
         Assertions.assertEquals(0.8, staged.payload().get("temperature"));
         Assertions.assertEquals("high", staged.payload().get("reasoning_effort"));
         Assertions.assertTrue(staged.payload().containsKey("tools"));
 
-        // Verify masked authorization header
         String authHeader = staged.headers().get("Authorization");
         Assertions.assertNotNull(authHeader);
         Assertions.assertTrue(authHeader.contains("STAGED: NOT TRANSMITTED"));
@@ -106,23 +102,30 @@ class MetaMuseServiceTest {
     }
 
     @Test
-    void testInferenceCallsHeldInStandby() {
+    void testCallInferenceUsesCacheAndRejectsUnconfiguredWithoutMock(@TempDir Path tempDir) {
         MetaMuseConfig metaConfig = new MetaMuseConfig();
         BasetenConfig basetenConfig = new BasetenConfig();
-        basetenConfig.setApiKey("b10_test_key");
-        basetenConfig.setAllowInferenceCalls(false); // Safety policy
+        basetenConfig.setApiKey("");
 
-        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null);
+        MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
+        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null, JacksonFactory.createTolerantMapper(), cache);
 
-        MuseInferenceResponse response = service.callInference(new MuseInferenceRequest("Diagnose collision"));
+        // Unconfigured service without cache entry must throw IllegalStateException (no mock responses)
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                service.callInference(new MuseInferenceRequest("Uncached prompt"))
+        );
 
-        Assertions.assertEquals(basetenConfig.getModel(), response.model());
-        Assertions.assertEquals("standby_zero_credits", response.metadata().get("status"));
-        Assertions.assertEquals("baseten", response.metadata().get("provider"));
+        // When cached in SQLite/Redis, callInference returns the cached response
+        MuseInferenceRequest cachedReq = new MuseInferenceRequest("Diagnose collision");
+        String promptKey = "infer:" + cachedReq.model() + ":" + cachedReq.prompt();
+        cache.saveMuseResponse(promptKey, "Live cached diagnosis");
+        MuseInferenceResponse response = service.callInference(cachedReq);
+        Assertions.assertEquals("Live cached diagnosis", response.outputText());
+        Assertions.assertEquals("cache_hit", response.metadata().get("status"));
     }
 
     @Test
-    void testMockHealthCheckWhenUnconfigured() {
+    void testUnconfiguredHealthCheckReturnsUnconfiguredNotMock() {
         MetaMuseConfig metaConfig = new MetaMuseConfig();
         BasetenConfig basetenConfig = new BasetenConfig();
         basetenConfig.setApiKey("");
@@ -132,41 +135,13 @@ class MetaMuseServiceTest {
 
         Assertions.assertFalse(health.configured());
         Assertions.assertFalse(health.liveConnection());
-        Assertions.assertEquals("MOCK_OFFLINE", health.status());
+        Assertions.assertEquals("UNCONFIGURED", health.status());
+        Assertions.assertTrue(health.availableModels().isEmpty());
     }
 
     @Test
     void testLiveBasetenHealthCheckIfKeyPresent() {
-        String sysProp = System.getProperty("BASETEN_API_KEY");
-        // If explicitly specified via system property (e.g. -DBASETEN_API_KEY="" or -DBASETEN_API_KEY="offline"),
-        // suppress fallback to reading .env and run completely offline
-        if (sysProp != null && (sysProp.isBlank() || "offline".equalsIgnoreCase(sysProp.trim()) || sysProp.contains("your_baseten"))) {
-            return;
-        }
-
-        String key = sysProp;
-        if (key == null || key.isBlank()) {
-            String envVar = System.getenv("BASETEN_API_KEY");
-            if (envVar != null && (envVar.isBlank() || "offline".equalsIgnoreCase(envVar.trim()) || envVar.contains("your_baseten"))) {
-                return;
-            }
-            key = envVar;
-        }
-
-        if (key == null || key.isBlank()) {
-            try {
-                java.nio.file.Path envFile = java.nio.file.Path.of(".env");
-                if (java.nio.file.Files.exists(envFile)) {
-                    for (String line : java.nio.file.Files.readAllLines(envFile)) {
-                        if (line.startsWith("BASETEN_API_KEY=")) {
-                            key = line.substring("BASETEN_API_KEY=".length()).trim();
-                            break;
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
+        String key = Sam31Client.getEnvOrDotEnv("BASETEN_API_KEY");
         if (key != null && !key.isBlank() && !key.contains("your_baseten") && !"offline".equalsIgnoreCase(key)) {
             MetaMuseConfig metaConfig = new MetaMuseConfig();
             BasetenConfig basetenConfig = new BasetenConfig();
@@ -191,7 +166,6 @@ class MetaMuseServiceTest {
 
         MetaMuseService service = new MetaMuseService(null, metaConfig, null, null, null);
 
-        // 1. Dynamic prompt from user (e.g. from Web App Text Input or Voice Transcript)
         String userPrompt = "Was ist das für eine Wespe am Flugloch?";
         com.beejepa.muse.dto.PrepareSamQueryRequest req = new com.beejepa.muse.dto.PrepareSamQueryRequest(
                 "evt_test_123",
@@ -214,7 +188,6 @@ class MetaMuseServiceTest {
         Assertions.assertTrue(stagedSam.curlCommand().contains("baseline_bees"));
         Assertions.assertTrue(stagedSam.curlCommand().contains("vjepa_anomaly_target"));
 
-        // Verify Kanal 1 (PCS) & Kanal 2 (PVS) in videoPayload
         var videoPayload = stagedSam.videoPayload();
         Assertions.assertNotNull(videoPayload);
         Assertions.assertEquals(Boolean.TRUE, videoPayload.get("multiplex_tracking"));
@@ -228,7 +201,6 @@ class MetaMuseServiceTest {
         Assertions.assertEquals("visual_geometry", prompts.get(1).get("mode"));
         Assertions.assertEquals(64, prompts.get(1).get("frame_idx"));
 
-        // Verify Kanal 3 (Agentic SAM Tool) in videoPayload
         @SuppressWarnings("unchecked")
         var tools = (List<Map<String, Object>>) videoPayload.get("agentic_tools");
         Assertions.assertEquals(1, tools.size());
@@ -236,10 +208,9 @@ class MetaMuseServiceTest {
         var fn = (Map<String, Object>) tools.get(0).get("function");
         Assertions.assertEquals("query_sam31_concept", fn.get("name"));
 
-        // 2. Dynamic Audio Transcribe (Zero Credits Safe)
         var trans = service.transcribeVoice(new byte[]{1, 2, 3, 4});
         Assertions.assertEquals("SUCCESS", trans.get("status"));
-        Assertions.assertEquals(0, ((Number) trans.get("creditsConsumed")).intValue());
+        Assertions.assertEquals("LIVE_AUDIO_INGEST", trans.get("mode"));
         Assertions.assertNotNull(trans.get("transcript"));
     }
 
@@ -257,17 +228,17 @@ class MetaMuseServiceTest {
     }
 
     @Test
-    void testAnswerBeekeeperQuestionOfflineFallback() {
+    void testAnswerBeekeeperQuestionUsesCacheAndDeterministicSynthesis(@TempDir Path tempDir) {
         MetaMuseConfig metaConfig = new MetaMuseConfig();
         BasetenConfig basetenConfig = new BasetenConfig();
-        basetenConfig.setAllowInferenceCalls(false); // Locked offline mode
+        basetenConfig.setAllowInferenceCalls(false);
 
-        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null);
+        MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
+        MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null, JacksonFactory.createTolerantMapper(), cache);
 
-        // When offline, answerBeekeeperQuestion should immediately return fallback summary
         String response = service.answerBeekeeperQuestion("What happened at my hive today?", List.of());
         Assertions.assertNotNull(response);
-        Assertions.assertTrue(response.contains("Hive") || response.contains("Summary"));
+        Assertions.assertTrue(response.contains("Hive Status"));
     }
 
     @Test

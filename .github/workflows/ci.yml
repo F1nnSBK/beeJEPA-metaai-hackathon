@@ -1,29 +1,36 @@
-name: CI/CD Pipeline
+name: CI Pipeline (Build UI, JUnit 5 Suite & Raspberry Pi ARM64 Bundle)
 
 on:
   push:
     branches:
       - main
+      - feat/java25-sam-muse-pipeline
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    name: Build UI, Run JUnit 5 Tests & Package Shadow JAR
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Set up JDK 25
+      - name: Set up Temurin JDK 25
         uses: actions/setup-java@v5
         with:
           java-version: '25'
@@ -40,11 +47,32 @@ jobs:
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci
 
-      - name: Build UI
+      - name: Build Vue 3 SPA & Sync to Micronaut Public Resources
         run: ./build_ui.sh
 
-      - name: Run Tests
+      - name: Bootstrap Real Hugging Face Video Clips for JUnit 5 Suite
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+          mkdir -p data/hackathon_sample/event_clips data/hackathon_sample/sequences
+          cp deploy/manifest.json data/hackathon_sample/manifest.json
+          curl -fsSL "https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies/resolve/main/events/peaks/evt_rec2125_seq000_f0000.mp4" \
+            -o data/hackathon_sample/event_clips/evt_rec2125_seq000_f0000.mp4
+          curl -fsSL "https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies/resolve/main/stitched_sequences/full_rec2125_seq000_9x9_stitched_30s.mp4" \
+            -o data/hackathon_sample/sequences/clip_00_rec2125_seq000_00_00_to_00_30.mp4
+
+      - name: Run JUnit 5 Verification Suite
         run: ./gradlew test
 
-      - name: Build Project
-        run: ./gradlew build -x test
+      - name: Build Executable Shadow JAR for Raspberry Pi
+        run: ./gradlew shadowJar -x test
+
+      - name: Upload Raspberry Pi Release JAR Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beejepa-raspi-release
+          path: |
+            build/libs/*-all.jar
+            Dockerfile
+            docker-compose.yml
+            deploy/
+          retention-days: 7

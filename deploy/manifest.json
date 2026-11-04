@@ -1,0 +1,3353 @@
+{
+  "project": "BeeJEPA",
+  "title": "Selbst\u00fcberwachte Flugloch-Anomalieerkennung mit V-JEPA 2.1 (9x9 Mean-Bee)",
+  "sample_type": "5-Minute Hackathon Demo Kit",
+  "dataset": "thehiveisreal - Recording 2125 (Zero-Shot Transfer / Validation)",
+  "fps": 60,
+  "total_duration_sec": 300.0,
+  "formatted_duration": "05:00",
+  "decision_threshold_tau": 10.2,
+  "summary": {
+    "sequences_count": 10,
+    "events_count": 20,
+    "timeline_points_count": 280,
+    "mean_surprise_overall": 11.435,
+    "max_surprise_overall": 16.052
+  },
+  "sequences": [
+    {
+      "index": 0,
+      "sequence_id": "rec2125_seq000",
+      "filename": "clip_00_rec2125_seq000_00_00_to_00_30.mp4",
+      "path": "sequences/clip_00_rec2125_seq000_00_00_to_00_30.mp4",
+      "start_sec_global": 0.0,
+      "end_sec_global": 30.0,
+      "duration_sec": 30.0,
+      "formatted_range": "00:00 - 00:30",
+      "mean_surprise": 12.014,
+      "max_surprise": 16.052,
+      "mean_board_bees": 24.2
+    },
+    {
+      "index": 1,
+      "sequence_id": "rec2125_seq001",
+      "filename": "clip_01_rec2125_seq001_00_30_to_01_00.mp4",
+      "path": "sequences/clip_01_rec2125_seq001_00_30_to_01_00.mp4",
+      "start_sec_global": 30.0,
+      "end_sec_global": 60.0,
+      "duration_sec": 30.0,
+      "formatted_range": "00:30 - 01:00",
+      "mean_surprise": 11.661,
+      "max_surprise": 12.856,
+      "mean_board_bees": 23.1
+    },
+    {
+      "index": 2,
+      "sequence_id": "rec2125_seq002",
+      "filename": "clip_02_rec2125_seq002_01_00_to_01_30.mp4",
+      "path": "sequences/clip_02_rec2125_seq002_01_00_to_01_30.mp4",
+      "start_sec_global": 60.0,
+      "end_sec_global": 90.0,
+      "duration_sec": 30.0,
+      "formatted_range": "01:00 - 01:30",
+      "mean_surprise": 11.33,
+      "max_surprise": 12.156,
+      "mean_board_bees": 23.7
+    },
+    {
+      "index": 3,
+      "sequence_id": "rec2125_seq003",
+      "filename": "clip_03_rec2125_seq003_01_30_to_02_00.mp4",
+      "path": "sequences/clip_03_rec2125_seq003_01_30_to_02_00.mp4",
+      "start_sec_global": 90.0,
+      "end_sec_global": 120.0,
+      "duration_sec": 30.0,
+      "formatted_range": "01:30 - 02:00",
+      "mean_surprise": 11.385,
+      "max_surprise": 11.873,
+      "mean_board_bees": 24.4
+    },
+    {
+      "index": 4,
+      "sequence_id": "rec2125_seq004",
+      "filename": "clip_04_rec2125_seq004_02_00_to_02_30.mp4",
+      "path": "sequences/clip_04_rec2125_seq004_02_00_to_02_30.mp4",
+      "start_sec_global": 120.0,
+      "end_sec_global": 150.0,
+      "duration_sec": 30.0,
+      "formatted_range": "02:00 - 02:30",
+      "mean_surprise": 11.331,
+      "max_surprise": 11.925,
+      "mean_board_bees": 24.3
+    },
+    {
+      "index": 5,
+      "sequence_id": "rec2125_seq005",
+      "filename": "clip_05_rec2125_seq005_02_30_to_03_00.mp4",
+      "path": "sequences/clip_05_rec2125_seq005_02_30_to_03_00.mp4",
+      "start_sec_global": 150.0,
+      "end_sec_global": 180.0,
+      "duration_sec": 30.0,
+      "formatted_range": "02:30 - 03:00",
+      "mean_surprise": 11.321,
+      "max_surprise": 12.08,
+      "mean_board_bees": 23.6
+    },
+    {
+      "index": 6,
+      "sequence_id": "rec2125_seq006",
+      "filename": "clip_06_rec2125_seq006_03_00_to_03_30.mp4",
+      "path": "sequences/clip_06_rec2125_seq006_03_00_to_03_30.mp4",
+      "start_sec_global": 180.0,
+      "end_sec_global": 210.0,
+      "duration_sec": 30.0,
+      "formatted_range": "03:00 - 03:30",
+      "mean_surprise": 11.366,
+      "max_surprise": 11.978,
+      "mean_board_bees": 23.8
+    },
+    {
+      "index": 7,
+      "sequence_id": "rec2125_seq007",
+      "filename": "clip_07_rec2125_seq007_03_30_to_04_00.mp4",
+      "path": "sequences/clip_07_rec2125_seq007_03_30_to_04_00.mp4",
+      "start_sec_global": 210.0,
+      "end_sec_global": 240.0,
+      "duration_sec": 30.0,
+      "formatted_range": "03:30 - 04:00",
+      "mean_surprise": 11.314,
+      "max_surprise": 12.28,
+      "mean_board_bees": 23.9
+    },
+    {
+      "index": 8,
+      "sequence_id": "rec2125_seq008",
+      "filename": "clip_08_rec2125_seq008_04_00_to_04_30.mp4",
+      "path": "sequences/clip_08_rec2125_seq008_04_00_to_04_30.mp4",
+      "start_sec_global": 240.0,
+      "end_sec_global": 270.0,
+      "duration_sec": 30.0,
+      "formatted_range": "04:00 - 04:30",
+      "mean_surprise": 11.3,
+      "max_surprise": 11.919,
+      "mean_board_bees": 25.1
+    },
+    {
+      "index": 9,
+      "sequence_id": "rec2125_seq009",
+      "filename": "clip_09_rec2125_seq009_04_30_to_05_00.mp4",
+      "path": "sequences/clip_09_rec2125_seq009_04_30_to_05_00.mp4",
+      "start_sec_global": 270.0,
+      "end_sec_global": 300.0,
+      "duration_sec": 30.0,
+      "formatted_range": "04:30 - 05:00",
+      "mean_surprise": 11.325,
+      "max_surprise": 11.811,
+      "mean_board_bees": 23.7
+    }
+  ],
+  "events": [
+    {
+      "event_id": "evt_rec2125_seq000_f0000",
+      "sequence_id": "rec2125_seq000",
+      "sequence_index": 0,
+      "sequence_clip": "clip_00_rec2125_seq000_00_00_to_00_30.mp4",
+      "time_sec_global": 0.0,
+      "time_sec_local": 0.0,
+      "formatted_time": "00:00",
+      "frame_approx": 0,
+      "surprise_score": 16.052,
+      "severity": "CRITICAL",
+      "board_bees": 29,
+      "description": "Extremer Zustandswechsel / Ungew\u00f6hnliche Massenaktivit\u00e4t am Flugloch",
+      "clip_path": "event_clips/evt_rec2125_seq000_f0000.mp4",
+      "hotspot": {
+        "grid_x": 25,
+        "grid_y": 21,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 324,
+        "panel_y": 463,
+        "focus_x": 324,
+        "focus_y": 498,
+        "norm_center_x": 0.6,
+        "norm_center_y": 0.5188,
+        "box_px": [
+          430,
+          256,
+          566,
+          392
+        ],
+        "active_cells": 8
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq000_f1217",
+      "sequence_id": "rec2125_seq000",
+      "sequence_index": 0,
+      "sequence_clip": "clip_00_rec2125_seq000_00_00_to_00_30.mp4",
+      "time_sec_global": 20.29,
+      "time_sec_local": 20.29,
+      "formatted_time": "00:20",
+      "frame_approx": 1217,
+      "surprise_score": 13.716,
+      "severity": "CRITICAL",
+      "board_bees": 26,
+      "description": "Extremer Zustandswechsel / Ungew\u00f6hnliche Massenaktivit\u00e4t am Flugloch",
+      "clip_path": "event_clips/evt_rec2125_seq000_f1217.mp4",
+      "hotspot": {
+        "grid_x": 20,
+        "grid_y": 18,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 246,
+        "panel_y": 384,
+        "focus_x": 246,
+        "focus_y": 419,
+        "norm_center_x": 0.4556,
+        "norm_center_y": 0.4365,
+        "box_px": [
+          351,
+          178,
+          487,
+          314
+        ],
+        "active_cells": 15
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq001_f0320",
+      "sequence_id": "rec2125_seq001",
+      "sequence_index": 1,
+      "sequence_clip": "clip_01_rec2125_seq001_00_30_to_01_00.mp4",
+      "time_sec_global": 35.34,
+      "time_sec_local": 5.34,
+      "formatted_time": "00:35",
+      "frame_approx": 320,
+      "surprise_score": 12.604,
+      "severity": "HIGH",
+      "board_bees": 19,
+      "description": "Starker Bienen-Anflug / Clusterbildung am Landebrett",
+      "clip_path": "event_clips/evt_rec2125_seq001_f0320.mp4",
+      "hotspot": {
+        "grid_x": 19,
+        "grid_y": 17,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 244,
+        "panel_y": 369,
+        "focus_x": 244,
+        "focus_y": 404,
+        "norm_center_x": 0.4519,
+        "norm_center_y": 0.4208,
+        "box_px": [
+          336,
+          176,
+          472,
+          312
+        ],
+        "active_cells": 18
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq001_f0577",
+      "sequence_id": "rec2125_seq001",
+      "sequence_index": 1,
+      "sequence_clip": "clip_01_rec2125_seq001_00_30_to_01_00.mp4",
+      "time_sec_global": 39.61,
+      "time_sec_local": 9.61,
+      "formatted_time": "00:39",
+      "frame_approx": 577,
+      "surprise_score": 12.856,
+      "severity": "HIGH",
+      "board_bees": 20,
+      "description": "Starker Bienen-Anflug / Clusterbildung am Landebrett",
+      "clip_path": "event_clips/evt_rec2125_seq001_f0577.mp4",
+      "hotspot": {
+        "grid_x": 32,
+        "grid_y": 18,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 410,
+        "panel_y": 399,
+        "focus_x": 410,
+        "focus_y": 434,
+        "norm_center_x": 0.7593,
+        "norm_center_y": 0.4521,
+        "box_px": [
+          366,
+          342,
+          502,
+          478
+        ],
+        "active_cells": 20
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq002_f0064",
+      "sequence_id": "rec2125_seq002",
+      "sequence_index": 2,
+      "sequence_clip": "clip_02_rec2125_seq002_01_00_to_01_30.mp4",
+      "time_sec_global": 61.07,
+      "time_sec_local": 1.07,
+      "formatted_time": "01:01",
+      "frame_approx": 64,
+      "surprise_score": 12.156,
+      "severity": "HIGH",
+      "board_bees": 24,
+      "description": "Starker Bienen-Anflug / Clusterbildung am Landebrett",
+      "clip_path": "event_clips/evt_rec2125_seq002_f0064.mp4",
+      "hotspot": {
+        "grid_x": 29,
+        "grid_y": 18,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 367,
+        "panel_y": 393,
+        "focus_x": 367,
+        "focus_y": 428,
+        "norm_center_x": 0.6796,
+        "norm_center_y": 0.4458,
+        "box_px": [
+          360,
+          299,
+          496,
+          435
+        ],
+        "active_cells": 14
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq002_f1281",
+      "sequence_id": "rec2125_seq002",
+      "sequence_index": 2,
+      "sequence_clip": "clip_02_rec2125_seq002_01_00_to_01_30.mp4",
+      "time_sec_global": 81.36,
+      "time_sec_local": 21.36,
+      "formatted_time": "01:21",
+      "frame_approx": 1281,
+      "surprise_score": 11.594,
+      "severity": "MODERATE",
+      "board_bees": 22,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq002_f1281.mp4",
+      "hotspot": {
+        "grid_x": 12,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 159,
+        "panel_y": 358,
+        "focus_x": 159,
+        "focus_y": 393,
+        "norm_center_x": 0.2944,
+        "norm_center_y": 0.4094,
+        "box_px": [
+          325,
+          91,
+          461,
+          227
+        ],
+        "active_cells": 13
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq003_f0769",
+      "sequence_id": "rec2125_seq003",
+      "sequence_index": 3,
+      "sequence_clip": "clip_03_rec2125_seq003_01_30_to_02_00.mp4",
+      "time_sec_global": 102.81,
+      "time_sec_local": 12.81,
+      "formatted_time": "01:42",
+      "frame_approx": 769,
+      "surprise_score": 11.713,
+      "severity": "MODERATE",
+      "board_bees": 25,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq003_f0769.mp4",
+      "hotspot": {
+        "grid_x": 29,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 378,
+        "panel_y": 366,
+        "focus_x": 378,
+        "focus_y": 401,
+        "norm_center_x": 0.7,
+        "norm_center_y": 0.4177,
+        "box_px": [
+          333,
+          310,
+          469,
+          446
+        ],
+        "active_cells": 18
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq003_f1666",
+      "sequence_id": "rec2125_seq003",
+      "sequence_index": 3,
+      "sequence_clip": "clip_03_rec2125_seq003_01_30_to_02_00.mp4",
+      "time_sec_global": 117.76,
+      "time_sec_local": 27.76,
+      "formatted_time": "01:57",
+      "frame_approx": 1666,
+      "surprise_score": 11.873,
+      "severity": "MODERATE",
+      "board_bees": 25,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq003_f1666.mp4",
+      "hotspot": {
+        "grid_x": 12,
+        "grid_y": 25,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 159,
+        "panel_y": 549,
+        "focus_x": 159,
+        "focus_y": 584,
+        "norm_center_x": 0.2944,
+        "norm_center_y": 0.6083,
+        "box_px": [
+          516,
+          91,
+          652,
+          227
+        ],
+        "active_cells": 9
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq004_f0128",
+      "sequence_id": "rec2125_seq004",
+      "sequence_index": 4,
+      "sequence_clip": "clip_04_rec2125_seq004_02_00_to_02_30.mp4",
+      "time_sec_global": 122.14,
+      "time_sec_local": 2.13,
+      "formatted_time": "02:02",
+      "frame_approx": 128,
+      "surprise_score": 11.925,
+      "severity": "MODERATE",
+      "board_bees": 22,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq004_f0128.mp4",
+      "hotspot": {
+        "grid_x": 28,
+        "grid_y": 37,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 368,
+        "panel_y": 806,
+        "focus_x": 368,
+        "focus_y": 841,
+        "norm_center_x": 0.6815,
+        "norm_center_y": 0.876,
+        "box_px": [
+          773,
+          300,
+          909,
+          436
+        ],
+        "active_cells": 7
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq004_f0769",
+      "sequence_id": "rec2125_seq004",
+      "sequence_index": 4,
+      "sequence_clip": "clip_04_rec2125_seq004_02_00_to_02_30.mp4",
+      "time_sec_global": 132.81,
+      "time_sec_local": 12.81,
+      "formatted_time": "02:12",
+      "frame_approx": 769,
+      "surprise_score": 11.68,
+      "severity": "MODERATE",
+      "board_bees": 26,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq004_f0769.mp4",
+      "hotspot": {
+        "grid_x": 36,
+        "grid_y": 22,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 458,
+        "panel_y": 483,
+        "focus_x": 458,
+        "focus_y": 518,
+        "norm_center_x": 0.8481,
+        "norm_center_y": 0.5396,
+        "box_px": [
+          450,
+          390,
+          586,
+          526
+        ],
+        "active_cells": 11
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq005_f0769",
+      "sequence_id": "rec2125_seq005",
+      "sequence_index": 5,
+      "sequence_clip": "clip_05_rec2125_seq005_02_30_to_03_00.mp4",
+      "time_sec_global": 162.81,
+      "time_sec_local": 12.81,
+      "formatted_time": "02:42",
+      "frame_approx": 769,
+      "surprise_score": 11.572,
+      "severity": "MODERATE",
+      "board_bees": 28,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq005_f0769.mp4",
+      "hotspot": {
+        "grid_x": 26,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 342,
+        "panel_y": 383,
+        "focus_x": 342,
+        "focus_y": 418,
+        "norm_center_x": 0.6333,
+        "norm_center_y": 0.4354,
+        "box_px": [
+          350,
+          274,
+          486,
+          410
+        ],
+        "active_cells": 19
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq005_f1602",
+      "sequence_id": "rec2125_seq005",
+      "sequence_index": 5,
+      "sequence_clip": "clip_05_rec2125_seq005_02_30_to_03_00.mp4",
+      "time_sec_global": 176.69,
+      "time_sec_local": 26.69,
+      "formatted_time": "02:56",
+      "frame_approx": 1602,
+      "surprise_score": 12.08,
+      "severity": "HIGH",
+      "board_bees": 23,
+      "description": "Starker Bienen-Anflug / Clusterbildung am Landebrett",
+      "clip_path": "event_clips/evt_rec2125_seq005_f1602.mp4",
+      "hotspot": {
+        "grid_x": 35,
+        "grid_y": 18,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 442,
+        "panel_y": 404,
+        "focus_x": 442,
+        "focus_y": 439,
+        "norm_center_x": 0.8185,
+        "norm_center_y": 0.4573,
+        "box_px": [
+          371,
+          374,
+          507,
+          510
+        ],
+        "active_cells": 19
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq006_f0833",
+      "sequence_id": "rec2125_seq006",
+      "sequence_index": 6,
+      "sequence_clip": "clip_06_rec2125_seq006_03_00_to_03_30.mp4",
+      "time_sec_global": 193.88,
+      "time_sec_local": 13.88,
+      "formatted_time": "03:13",
+      "frame_approx": 833,
+      "surprise_score": 11.52,
+      "severity": "MODERATE",
+      "board_bees": 25,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq006_f0833.mp4",
+      "hotspot": {
+        "grid_x": 6,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 92,
+        "panel_y": 361,
+        "focus_x": 92,
+        "focus_y": 396,
+        "norm_center_x": 0.1704,
+        "norm_center_y": 0.4125,
+        "box_px": [
+          328,
+          24,
+          464,
+          160
+        ],
+        "active_cells": 13
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq006_f1666",
+      "sequence_id": "rec2125_seq006",
+      "sequence_index": 6,
+      "sequence_clip": "clip_06_rec2125_seq006_03_00_to_03_30.mp4",
+      "time_sec_global": 207.76,
+      "time_sec_local": 27.76,
+      "formatted_time": "03:27",
+      "frame_approx": 1666,
+      "surprise_score": 11.978,
+      "severity": "MODERATE",
+      "board_bees": 25,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq006_f1666.mp4",
+      "hotspot": {
+        "grid_x": 14,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 186,
+        "panel_y": 363,
+        "focus_x": 186,
+        "focus_y": 398,
+        "norm_center_x": 0.3444,
+        "norm_center_y": 0.4146,
+        "box_px": [
+          330,
+          118,
+          466,
+          254
+        ],
+        "active_cells": 17
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq007_f0000",
+      "sequence_id": "rec2125_seq007",
+      "sequence_index": 7,
+      "sequence_clip": "clip_07_rec2125_seq007_03_30_to_04_00.mp4",
+      "time_sec_global": 210.0,
+      "time_sec_local": 0.0,
+      "formatted_time": "03:30",
+      "frame_approx": 0,
+      "surprise_score": 11.643,
+      "severity": "MODERATE",
+      "board_bees": 25,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq007_f0000.mp4",
+      "hotspot": {
+        "grid_x": 35,
+        "grid_y": 23,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 444,
+        "panel_y": 508,
+        "focus_x": 444,
+        "focus_y": 543,
+        "norm_center_x": 0.8222,
+        "norm_center_y": 0.5656,
+        "box_px": [
+          475,
+          376,
+          611,
+          512
+        ],
+        "active_cells": 25
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq007_f0256",
+      "sequence_id": "rec2125_seq007",
+      "sequence_index": 7,
+      "sequence_clip": "clip_07_rec2125_seq007_03_30_to_04_00.mp4",
+      "time_sec_global": 214.27,
+      "time_sec_local": 4.27,
+      "formatted_time": "03:34",
+      "frame_approx": 256,
+      "surprise_score": 12.28,
+      "severity": "HIGH",
+      "board_bees": 22,
+      "description": "Starker Bienen-Anflug / Clusterbildung am Landebrett",
+      "clip_path": "event_clips/evt_rec2125_seq007_f0256.mp4",
+      "hotspot": {
+        "grid_x": 14,
+        "grid_y": 26,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 184,
+        "panel_y": 566,
+        "focus_x": 184,
+        "focus_y": 601,
+        "norm_center_x": 0.3407,
+        "norm_center_y": 0.626,
+        "box_px": [
+          533,
+          116,
+          669,
+          252
+        ],
+        "active_cells": 20
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq008_f0833",
+      "sequence_id": "rec2125_seq008",
+      "sequence_index": 8,
+      "sequence_clip": "clip_08_rec2125_seq008_04_00_to_04_30.mp4",
+      "time_sec_global": 253.88,
+      "time_sec_local": 13.88,
+      "formatted_time": "04:13",
+      "frame_approx": 833,
+      "surprise_score": 11.82,
+      "severity": "MODERATE",
+      "board_bees": 28,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq008_f0833.mp4",
+      "hotspot": {
+        "grid_x": 22,
+        "grid_y": 34,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 295,
+        "panel_y": 769,
+        "focus_x": 295,
+        "focus_y": 804,
+        "norm_center_x": 0.5463,
+        "norm_center_y": 0.8375,
+        "box_px": [
+          736,
+          227,
+          872,
+          363
+        ],
+        "active_cells": 18
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq008_f1089",
+      "sequence_id": "rec2125_seq008",
+      "sequence_index": 8,
+      "sequence_clip": "clip_08_rec2125_seq008_04_00_to_04_30.mp4",
+      "time_sec_global": 258.15,
+      "time_sec_local": 18.15,
+      "formatted_time": "04:18",
+      "frame_approx": 1089,
+      "surprise_score": 11.919,
+      "severity": "MODERATE",
+      "board_bees": 22,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq008_f1089.mp4",
+      "hotspot": {
+        "grid_x": 32,
+        "grid_y": 23,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 414,
+        "panel_y": 506,
+        "focus_x": 414,
+        "focus_y": 541,
+        "norm_center_x": 0.7667,
+        "norm_center_y": 0.5635,
+        "box_px": [
+          473,
+          346,
+          609,
+          482
+        ],
+        "active_cells": 12
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq009_f0384",
+      "sequence_id": "rec2125_seq009",
+      "sequence_index": 9,
+      "sequence_clip": "clip_09_rec2125_seq009_04_30_to_05_00.mp4",
+      "time_sec_global": 276.41,
+      "time_sec_local": 6.41,
+      "formatted_time": "04:36",
+      "frame_approx": 384,
+      "surprise_score": 11.811,
+      "severity": "MODERATE",
+      "board_bees": 26,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq009_f0384.mp4",
+      "hotspot": {
+        "grid_x": 28,
+        "grid_y": 16,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 360,
+        "panel_y": 363,
+        "focus_x": 360,
+        "focus_y": 398,
+        "norm_center_x": 0.6667,
+        "norm_center_y": 0.4146,
+        "box_px": [
+          330,
+          292,
+          466,
+          428
+        ],
+        "active_cells": 14
+      }
+    },
+    {
+      "event_id": "evt_rec2125_seq009_f1666",
+      "sequence_id": "rec2125_seq009",
+      "sequence_index": 9,
+      "sequence_clip": "clip_09_rec2125_seq009_04_30_to_05_00.mp4",
+      "time_sec_global": 297.76,
+      "time_sec_local": 27.76,
+      "formatted_time": "04:57",
+      "frame_approx": 1666,
+      "surprise_score": 11.778,
+      "severity": "MODERATE",
+      "board_bees": 20,
+      "description": "Signifikante Flugloch-Aktivit\u00e4tsspitze",
+      "clip_path": "event_clips/evt_rec2125_seq009_f1666.mp4",
+      "hotspot": {
+        "grid_x": 7,
+        "grid_y": 27,
+        "grid_size": 43,
+        "header_height_px": 35,
+        "panel_x": 80,
+        "panel_y": 571,
+        "focus_x": 80,
+        "focus_y": 606,
+        "norm_center_x": 0.1481,
+        "norm_center_y": 0.6312,
+        "box_px": [
+          538,
+          12,
+          674,
+          148
+        ],
+        "active_cells": 15
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "time_sec": 0.0,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 0.0,
+      "surprise_score": 16.052,
+      "board_bees": 29,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq000_f0000"
+    },
+    {
+      "time_sec": 1.07,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 1.07,
+      "surprise_score": 14.328,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 2.13,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 2.13,
+      "surprise_score": 12.905,
+      "board_bees": 30,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 3.2,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 3.2,
+      "surprise_score": 12.406,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 4.27,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.649,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 5.34,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.191,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 6.41,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.773,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 7.47,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.767,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 8.54,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 8.54,
+      "surprise_score": 12.008,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 9.61,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 9.61,
+      "surprise_score": 12.1,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 10.68,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.545,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 11.74,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.369,
+      "board_bees": 18,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 12.81,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.37,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 13.88,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.109,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 14.95,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.613,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 16.02,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.254,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 17.08,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.62,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 18.15,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.653,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 19.22,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.34,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 20.29,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 20.29,
+      "surprise_score": 13.716,
+      "board_bees": 26,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq000_f1217"
+    },
+    {
+      "time_sec": 21.36,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 21.36,
+      "surprise_score": 12.572,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 22.42,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 22.42,
+      "surprise_score": 12.037,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 23.49,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.457,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 24.56,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.174,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 25.63,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.301,
+      "board_bees": 18,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 26.69,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.41,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 27.76,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.447,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 28.83,
+      "sequence_id": "rec2125_seq000",
+      "local_time_sec": 28.83,
+      "surprise_score": 12.238,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 30.0,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.363,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 31.07,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.214,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 32.13,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.375,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 33.2,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 3.2,
+      "surprise_score": 12.551,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 34.27,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 4.27,
+      "surprise_score": 12.564,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 35.34,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 5.34,
+      "surprise_score": 12.604,
+      "board_bees": 19,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq001_f0320"
+    },
+    {
+      "time_sec": 36.41,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.7,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 37.47,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.11,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 38.54,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.334,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 39.61,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 9.61,
+      "surprise_score": 12.856,
+      "board_bees": 20,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq001_f0577"
+    },
+    {
+      "time_sec": 40.68,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.49,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 41.74,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.28,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 42.81,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.33,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 43.88,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.159,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 44.95,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.192,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 46.02,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 16.02,
+      "surprise_score": 12.009,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 47.08,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.385,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 48.15,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.284,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 49.22,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.738,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 50.29,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 20.29,
+      "surprise_score": 12.044,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 51.35,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.53,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 52.42,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.664,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 53.49,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.059,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 54.56,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.279,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 55.63,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 25.63,
+      "surprise_score": 12.063,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 56.69,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.893,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 57.76,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.673,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 58.83,
+      "sequence_id": "rec2125_seq001",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.759,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 60.0,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.387,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 61.07,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 1.07,
+      "surprise_score": 12.156,
+      "board_bees": 24,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq002_f0064"
+    },
+    {
+      "time_sec": 62.13,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.451,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 63.2,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.538,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 64.27,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.32,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 65.34,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.168,
+      "board_bees": 31,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 66.41,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.2,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 67.47,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.268,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 68.54,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.25,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 69.61,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.127,
+      "board_bees": 18,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 70.68,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.203,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 71.75,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.193,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 72.81,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.311,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 73.88,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.176,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 74.95,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.174,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 76.02,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.08,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 77.08,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.232,
+      "board_bees": 17,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 78.15,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.506,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 79.22,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.479,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 80.29,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.177,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 81.36,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.594,
+      "board_bees": 22,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq002_f1281"
+    },
+    {
+      "time_sec": 82.42,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.146,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 83.49,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.156,
+      "board_bees": 31,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 84.56,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.571,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 85.63,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.047,
+      "board_bees": 30,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 86.69,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.497,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 87.76,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.273,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 88.83,
+      "sequence_id": "rec2125_seq002",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.553,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 90.0,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.412,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 91.07,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.225,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 92.14,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.39,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 93.2,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.315,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 94.27,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.187,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 95.34,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.231,
+      "board_bees": 31,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 96.41,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.347,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 97.47,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.246,
+      "board_bees": 17,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 98.54,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.373,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 99.61,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.15,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 100.68,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.458,
+      "board_bees": 17,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 101.75,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.256,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 102.81,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.713,
+      "board_bees": 25,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq003_f0769"
+    },
+    {
+      "time_sec": 103.88,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.642,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 104.95,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.216,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 106.02,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.298,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 107.08,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.393,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 108.15,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.3,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 109.22,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.507,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 110.29,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.212,
+      "board_bees": 16,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 111.36,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.276,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 112.42,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.46,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 113.49,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.447,
+      "board_bees": 30,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 114.56,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.366,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 115.63,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.039,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 116.69,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.626,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 117.76,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.873,
+      "board_bees": 25,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq003_f1666"
+    },
+    {
+      "time_sec": 118.83,
+      "sequence_id": "rec2125_seq003",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.825,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 120.0,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.347,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 121.07,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.333,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 122.14,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.925,
+      "board_bees": 22,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq004_f0128"
+    },
+    {
+      "time_sec": 123.2,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.467,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 124.27,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.425,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 125.34,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.252,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 126.41,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.193,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 127.47,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.187,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 128.54,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.322,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 129.61,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.2,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 130.68,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.305,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 131.75,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.139,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 132.81,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.68,
+      "board_bees": 26,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq004_f0769"
+    },
+    {
+      "time_sec": 133.88,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.075,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 134.95,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.267,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 136.02,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.198,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 137.08,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.283,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 138.15,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.396,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 139.22,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.315,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 140.29,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.209,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 141.35,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.459,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 142.42,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.382,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 143.49,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.254,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 144.56,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.575,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 145.63,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.262,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 146.69,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.432,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 147.76,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.134,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 148.83,
+      "sequence_id": "rec2125_seq004",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.257,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 150.0,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.397,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 151.07,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.345,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 152.13,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.339,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 153.2,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.221,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 154.27,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.346,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 155.34,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.322,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 156.41,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.211,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 157.47,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.171,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 158.54,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.273,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 159.61,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.074,
+      "board_bees": 30,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 160.68,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.534,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 161.75,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.347,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 162.81,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.572,
+      "board_bees": 28,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq005_f0769"
+    },
+    {
+      "time_sec": 163.88,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.045,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 164.95,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.097,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 166.02,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.01,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 167.08,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.191,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 168.15,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.246,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 169.22,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.056,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 170.29,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.505,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 171.35,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.167,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 172.42,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.225,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 173.49,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.197,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 174.56,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.396,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 175.63,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.461,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 176.69,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 26.69,
+      "surprise_score": 12.08,
+      "board_bees": 23,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq005_f1602"
+    },
+    {
+      "time_sec": 177.76,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.454,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 178.83,
+      "sequence_id": "rec2125_seq005",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.706,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 180.0,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.199,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 181.07,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.065,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 182.13,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.359,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 183.2,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.437,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 184.27,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.4,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 185.34,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.151,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 186.41,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.34,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 187.47,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.195,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 188.54,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.197,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 189.61,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.173,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 190.68,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.4,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 191.75,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.315,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 192.81,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.438,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 193.88,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.52,
+      "board_bees": 25,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq006_f0833"
+    },
+    {
+      "time_sec": 194.95,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.056,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 196.02,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.173,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 197.08,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.081,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 198.15,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.195,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 199.22,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.425,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 200.29,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.502,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 201.35,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.173,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 202.42,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.135,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 203.49,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.604,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 204.56,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.496,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 205.63,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.738,
+      "board_bees": 18,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 206.69,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.751,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 207.76,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.978,
+      "board_bees": 25,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq006_f1666"
+    },
+    {
+      "time_sec": 208.83,
+      "sequence_id": "rec2125_seq006",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.759,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 210.0,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.643,
+      "board_bees": 25,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq007_f0000"
+    },
+    {
+      "time_sec": 211.07,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.368,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 212.13,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.287,
+      "board_bees": 17,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 213.2,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.737,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 214.27,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 4.27,
+      "surprise_score": 12.28,
+      "board_bees": 22,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq007_f0256"
+    },
+    {
+      "time_sec": 215.34,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.305,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 216.41,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.129,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 217.47,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 7.47,
+      "surprise_score": 10.919,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 218.54,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.352,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 219.61,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.217,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 220.68,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.575,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 221.75,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.416,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 222.81,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.424,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 223.88,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.564,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 224.95,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.181,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 226.02,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.542,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 227.08,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.062,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 228.15,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.176,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 229.22,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.093,
+      "board_bees": 31,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 230.29,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.168,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 231.35,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.342,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 232.42,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.08,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 233.49,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.086,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 234.56,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.254,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 235.63,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 25.63,
+      "surprise_score": 10.596,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 236.69,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.472,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 237.76,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.192,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 238.83,
+      "sequence_id": "rec2125_seq007",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.327,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 240.0,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.079,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 241.07,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.147,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 242.13,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.259,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 243.2,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.229,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 244.27,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.191,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 245.34,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.377,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 246.41,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.235,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 247.47,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.117,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 248.54,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.344,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 249.61,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 9.61,
+      "surprise_score": 10.947,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 250.68,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.124,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 251.75,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.023,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 252.81,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.628,
+      "board_bees": 28,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 253.88,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.82,
+      "board_bees": 28,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq008_f0833"
+    },
+    {
+      "time_sec": 254.95,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.73,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 256.02,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.411,
+      "board_bees": 29,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 257.08,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.253,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 258.15,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.919,
+      "board_bees": 22,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq008_f1089"
+    },
+    {
+      "time_sec": 259.22,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.258,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 260.29,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.151,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 261.36,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.077,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 262.42,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.002,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 263.49,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.3,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 264.56,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.504,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 265.63,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.447,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 266.69,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.208,
+      "board_bees": 21,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 267.76,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.342,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 268.83,
+      "sequence_id": "rec2125_seq008",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.291,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 270.0,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 0.0,
+      "surprise_score": 11.298,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 271.07,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 1.07,
+      "surprise_score": 11.089,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 272.13,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 2.13,
+      "surprise_score": 11.213,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 273.2,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 3.2,
+      "surprise_score": 11.141,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 274.27,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 4.27,
+      "surprise_score": 11.182,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 275.34,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 5.34,
+      "surprise_score": 11.324,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 276.41,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 6.41,
+      "surprise_score": 11.811,
+      "board_bees": 26,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq009_f0384"
+    },
+    {
+      "time_sec": 277.47,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 7.47,
+      "surprise_score": 11.212,
+      "board_bees": 20,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 278.54,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 8.54,
+      "surprise_score": 11.162,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 279.61,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 9.61,
+      "surprise_score": 11.001,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 280.68,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 10.68,
+      "surprise_score": 11.521,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 281.75,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 11.74,
+      "surprise_score": 11.063,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 282.81,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 12.81,
+      "surprise_score": 11.125,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 283.88,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 13.88,
+      "surprise_score": 11.347,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 284.95,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 14.95,
+      "surprise_score": 11.13,
+      "board_bees": 23,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 286.02,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 16.02,
+      "surprise_score": 11.224,
+      "board_bees": 25,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 287.08,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 17.08,
+      "surprise_score": 11.294,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 288.15,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 18.15,
+      "surprise_score": 11.406,
+      "board_bees": 19,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 289.22,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 19.22,
+      "surprise_score": 11.275,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 290.29,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 20.29,
+      "surprise_score": 11.557,
+      "board_bees": 26,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 291.36,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 21.36,
+      "surprise_score": 11.488,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 292.42,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 22.42,
+      "surprise_score": 11.221,
+      "board_bees": 22,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 293.49,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 23.49,
+      "surprise_score": 11.353,
+      "board_bees": 18,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 294.56,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 24.56,
+      "surprise_score": 11.466,
+      "board_bees": 24,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 295.63,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 25.63,
+      "surprise_score": 11.575,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 296.69,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 26.69,
+      "surprise_score": 11.5,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    },
+    {
+      "time_sec": 297.76,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 27.76,
+      "surprise_score": 11.778,
+      "board_bees": 20,
+      "is_event": true,
+      "event_id": "evt_rec2125_seq009_f1666"
+    },
+    {
+      "time_sec": 298.83,
+      "sequence_id": "rec2125_seq009",
+      "local_time_sec": 28.83,
+      "surprise_score": 11.334,
+      "board_bees": 27,
+      "is_event": false,
+      "event_id": null
+    }
+  ]
+}

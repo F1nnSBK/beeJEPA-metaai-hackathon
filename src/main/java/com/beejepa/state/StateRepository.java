@@ -8,10 +8,12 @@ import com.beejepa.state.model.SystemState;
 import com.beejepa.storage.StorageService;
 import com.beejepa.telemetry.TelemetryEntry;
 import jakarta.annotation.PostConstruct;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -31,23 +33,42 @@ public class StateRepository {
 
     private final StorageService storageService;
     private final StorageConfig storageConfig;
+    private final Path explicitDbPath;
     private final java.util.concurrent.locks.ReentrantLock writeLock = new java.util.concurrent.locks.ReentrantLock(true);
     private String jdbcUrl;
 
+    @Inject
     public StateRepository(StorageService storageService, StorageConfig storageConfig) {
         this.storageService = storageService;
         this.storageConfig = storageConfig;
+        this.explicitDbPath = null;
+    }
+
+    public StateRepository(Path explicitDbPath) {
+        this.storageService = null;
+        this.storageConfig = new StorageConfig();
+        this.explicitDbPath = explicitDbPath;
+        init();
     }
 
     @PostConstruct
     public void init() {
-        Path dbPath = storageService.getDatabasePath();
+        Path dbPath = explicitDbPath != null ? explicitDbPath : storageService.getDatabasePath();
+        try {
+            if (dbPath.getParent() != null) {
+                Files.createDirectories(dbPath.getParent());
+            }
+        } catch (Exception ignored) {}
         this.jdbcUrl = "jdbc:sqlite:" + dbPath.toAbsolutePath();
-        LOG.info("Initializing SQLite state database at: {}", dbPath.toAbsolutePath());
+        LOG.info("Initializing SQLite state & cache database at: {}", dbPath.toAbsolutePath());
 
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-            // Enable Write-Ahead Logging for high concurrency with Virtual Threads
-            stmt.execute("PRAGMA journal_mode=WAL;");
+            try {
+                stmt.execute("PRAGMA journal_mode=WAL;");
+            } catch (SQLException walEx) {
+                LOG.warn("WAL mode not supported on filesystem for {}, falling back to DELETE journal: {}", dbPath, walEx.getMessage());
+                stmt.execute("PRAGMA journal_mode=DELETE;");
+            }
             stmt.execute("PRAGMA synchronous=NORMAL;");
             stmt.execute("PRAGMA busy_timeout=" + storageConfig.getSqlite().getBusyTimeoutMs() + ";");
 
@@ -125,7 +146,54 @@ public class StateRepository {
                     );
                     """);
 
-            LOG.info("SQLite database schema verified successfully on SSD.");
+            // Live API Cache Table 1: Muse Spark Open Responses (with TTL)
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS muse_response_cache (
+                        cache_key TEXT PRIMARY KEY,
+                        response_markdown TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    );
+                    """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_muse_cache_expires ON muse_response_cache(expires_at);");
+
+            // Live API Cache Table 2: SAM 3.1 Spatial Summaries (with TTL)
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS sam_spatial_cache (
+                        event_id TEXT PRIMARY KEY,
+                        summary_json TEXT NOT NULL,
+                        board_bees INTEGER NOT NULL,
+                        hotspot_bees INTEGER NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    );
+                    """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sam_cache_expires ON sam_spatial_cache(expires_at);");
+
+            // Live API Cache Table 3: Neural TTS Audio Stream (with TTL)
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS tts_audio_cache (
+                        audio_hash TEXT PRIMARY KEY,
+                        spoken_text TEXT,
+                        audio_bytes BLOB NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    );
+                    """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_tts_cache_expires ON tts_audio_cache(expires_at);");
+
+            // Live Media Cache Table 4: Extracted Video Keyframes (with TTL)
+            stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS frame_cache (
+                        event_id TEXT PRIMARY KEY,
+                        frame_bytes BLOB NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL
+                    );
+                    """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_frame_cache_expires ON frame_cache(expires_at);");
+
+            LOG.info("SQLite database schema (including live API cache tables) verified successfully.");
         } catch (SQLException e) {
             LOG.error("Failed to initialize SQLite database: {}", e.getMessage(), e);
             throw new RuntimeException("Database initialization failed", e);
@@ -140,9 +208,269 @@ public class StateRepository {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA busy_timeout=" + busyTimeout + ";");
             stmt.execute("PRAGMA synchronous=NORMAL;");
+            stmt.execute("PRAGMA temp_store=MEMORY;");
+            stmt.execute("PRAGMA cache_size=-4000;");
             stmt.execute("PRAGMA foreign_keys=ON;");
         }
         return conn;
+    }
+
+    // ---------------- Live API Cache (SQLite L2 with TTL) ----------------
+
+    public Optional<String> getCachedMuseResponse(String cacheKey) {
+        if (cacheKey == null || cacheKey.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT response_markdown, expires_at FROM muse_response_cache WHERE cache_key = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, cacheKey);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                    if (Instant.now().isBefore(expiresAt)) {
+                        return Optional.ofNullable(rs.getString("response_markdown"));
+                    } else {
+                        deleteCachedMuseResponse(cacheKey);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error reading muse_response_cache for key {}: {}", cacheKey, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public Optional<String> getLatestCachedMuseResponse() {
+        String sql = "SELECT cache_key, response_markdown, expires_at FROM muse_response_cache ORDER BY created_at DESC LIMIT 5";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            Instant now = Instant.now();
+            while (rs.next()) {
+                Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                if (now.isBefore(expiresAt)) {
+                    return Optional.ofNullable(rs.getString("response_markdown"));
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error reading latest muse_response_cache: {}", e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public void saveCachedMuseResponse(String cacheKey, String responseMarkdown, long ttlSeconds) {
+        if (cacheKey == null || cacheKey.isBlank() || responseMarkdown == null || responseMarkdown.isBlank()) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(Math.max(1L, ttlSeconds));
+        String sql = """
+                INSERT INTO muse_response_cache (cache_key, response_markdown, created_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    response_markdown = excluded.response_markdown,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at;
+                """;
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, cacheKey);
+            ps.setString(2, responseMarkdown);
+            ps.setString(3, now.toString());
+            ps.setString(4, expiresAt.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to persist muse_response_cache for {}: {}", cacheKey, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public void deleteCachedMuseResponse(String cacheKey) {
+        if (cacheKey == null) return;
+        String sql = "DELETE FROM muse_response_cache WHERE cache_key = ?";
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, cacheKey);
+            ps.executeUpdate();
+        } catch (SQLException ignored) {
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public Optional<String> getCachedSpatialSummaryJson(String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT summary_json, expires_at FROM sam_spatial_cache WHERE event_id = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                    if (Instant.now().isBefore(expiresAt)) {
+                        return Optional.ofNullable(rs.getString("summary_json"));
+                    } else {
+                        deleteCachedSpatialSummary(eventId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error reading sam_spatial_cache for {}: {}", eventId, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public void saveCachedSpatialSummaryJson(String eventId, String summaryJson, int boardBees, int hotspotBees, long ttlSeconds) {
+        if (eventId == null || eventId.isBlank() || summaryJson == null || summaryJson.isBlank()) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(Math.max(1L, ttlSeconds));
+        String sql = """
+                INSERT INTO sam_spatial_cache (event_id, summary_json, board_bees, hotspot_bees, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    summary_json = excluded.summary_json,
+                    board_bees = excluded.board_bees,
+                    hotspot_bees = excluded.hotspot_bees,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at;
+                """;
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventId);
+            ps.setString(2, summaryJson);
+            ps.setInt(3, boardBees);
+            ps.setInt(4, hotspotBees);
+            ps.setString(5, now.toString());
+            ps.setString(6, expiresAt.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to persist sam_spatial_cache for {}: {}", eventId, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public void deleteCachedSpatialSummary(String eventId) {
+        if (eventId == null) return;
+        String sql = "DELETE FROM sam_spatial_cache WHERE event_id = ?";
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventId);
+            ps.executeUpdate();
+        } catch (SQLException ignored) {
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public Optional<byte[]> getCachedTtsAudio(String audioHash) {
+        if (audioHash == null || audioHash.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT audio_bytes, expires_at FROM tts_audio_cache WHERE audio_hash = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, audioHash);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                    if (Instant.now().isBefore(expiresAt)) {
+                        byte[] bytes = rs.getBytes("audio_bytes");
+                        if (bytes != null && bytes.length > 0) {
+                            return Optional.of(bytes);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error reading tts_audio_cache for {}: {}", audioHash, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public void saveCachedTtsAudio(String audioHash, String spokenText, byte[] audioBytes, long ttlSeconds) {
+        if (audioHash == null || audioHash.isBlank() || audioBytes == null || audioBytes.length == 0) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(Math.max(1L, ttlSeconds));
+        String sql = """
+                INSERT INTO tts_audio_cache (audio_hash, spoken_text, audio_bytes, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(audio_hash) DO UPDATE SET
+                    spoken_text = excluded.spoken_text,
+                    audio_bytes = excluded.audio_bytes,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at;
+                """;
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, audioHash);
+            ps.setString(2, spokenText);
+            ps.setBytes(3, audioBytes);
+            ps.setString(4, now.toString());
+            ps.setString(5, expiresAt.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to persist tts_audio_cache for {}: {}", audioHash, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public Optional<byte[]> getCachedFrameBytes(String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT frame_bytes, expires_at FROM frame_cache WHERE event_id = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+                    if (Instant.now().isBefore(expiresAt)) {
+                        byte[] bytes = rs.getBytes("frame_bytes");
+                        if (bytes != null && bytes.length > 0) {
+                            return Optional.of(bytes);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Error reading frame_cache for {}: {}", eventId, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public void saveCachedFrameBytes(String eventId, byte[] frameBytes, long ttlSeconds) {
+        if (eventId == null || eventId.isBlank() || frameBytes == null || frameBytes.length == 0) {
+            return;
+        }
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(Math.max(1L, ttlSeconds));
+        String sql = """
+                INSERT INTO frame_cache (event_id, frame_bytes, created_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    frame_bytes = excluded.frame_bytes,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at;
+                """;
+        writeLock.lock();
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, eventId);
+            ps.setBytes(2, frameBytes);
+            ps.setString(3, now.toString());
+            ps.setString(4, expiresAt.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.warn("Failed to persist frame_cache for {}: {}", eventId, e.getMessage());
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     // ---------------- System State (Key-Value) ----------------
@@ -445,6 +773,8 @@ public class StateRepository {
 
     // ---------------- Telemetry Logs (Prometheus & Latency Storage) ----------------
 
+    private final java.util.concurrent.atomic.AtomicLong telemetryWriteCounter = new java.util.concurrent.atomic.AtomicLong(0);
+
     public void saveTelemetry(TelemetryEntry entry) {
         String sql = """
                 INSERT INTO telemetry_logs (id, platform, method, uri, status_code, duration_ms, client_ip, timestamp)
@@ -461,6 +791,17 @@ public class StateRepository {
             ps.setString(7, entry.clientIp());
             ps.setString(8, entry.timestamp().toString());
             ps.executeUpdate();
+
+            if (telemetryWriteCounter.incrementAndGet() % 500 == 0) {
+                try (Statement pruneStmt = conn.createStatement()) {
+                    pruneStmt.execute("""
+                            DELETE FROM telemetry_logs
+                            WHERE id NOT IN (
+                                SELECT id FROM telemetry_logs ORDER BY timestamp DESC LIMIT 5000
+                            );
+                            """);
+                }
+            }
         } catch (SQLException e) {
             LOG.warn("Failed to save telemetry entry: {}", e.getMessage());
         } finally {

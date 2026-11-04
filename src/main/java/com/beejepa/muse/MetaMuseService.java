@@ -211,38 +211,28 @@ public class MetaMuseService {
         long startTime = System.currentTimeMillis();
         String logId = UUID.randomUUID().toString();
         String endpoint = "/v1/chat/completions";
+        String promptKey = "infer:" + (request.model() != null ? request.model() : BASETEN_MODEL) + ":" + request.prompt();
 
-        if (!basetenConfig.isConfigured() && !config.isConfigured()) {
-            LOG.warn("Neither Baseten nor Meta API key is configured. Running in MOCK mode.");
-            MuseInferenceResponse mockResponse = createMockResponse(request, "Mock generated representation from Meta Muse Spark for prompt: " + request.prompt());
+        Optional<String> cachedText = diskCache != null ? diskCache.getMuseResponse(promptKey) : Optional.empty();
+        if (cachedText.isPresent()) {
             long latency = System.currentTimeMillis() - startTime;
+            String activeModel = Optional.ofNullable(request.model())
+                    .filter(m -> !m.isBlank())
+                    .orElseGet(() -> Optional.ofNullable(basetenConfig.getModel()).orElse(BASETEN_MODEL));
             if (stateRepository != null) {
                 stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
             }
-            return mockResponse;
+            return new MuseInferenceResponse(
+                    "cache-" + UUID.randomUUID(),
+                    activeModel,
+                    List.of(),
+                    cachedText.get(),
+                    Map.of("status", "cache_hit", "cacheBackend", diskCache.getCacheBackendDescription(), "latencyMs", latency)
+            );
         }
 
-        // Safety policy: no live inference calls allowed until explicitly enabled to protect credits
-        if (!allowLiveInference) {
-            LOG.info("Inference calls blocked by safety policy (healthchecks only). 0 credits consumed.");
-            String model = basetenConfig.getModel() != null ? basetenConfig.getModel() : "meta-models/muse-spark-open";
-            MuseInferenceResponse standbyResponse = new MuseInferenceResponse(
-                    "staged-" + UUID.randomUUID(),
-                    model,
-                    List.of(),
-                    "Inference call held on zero-credit standby. Healthcheck is active on Baseten. Staged payload prepared.",
-                    Map.of(
-                            "status", "standby_zero_credits",
-                            "provider", "baseten",
-                            "model", model,
-                            "note", "Inference calls blocked to protect budget as requested."
-                    )
-            );
-            long latency = System.currentTimeMillis() - startTime;
-            if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
-            }
-            return standbyResponse;
+        if (!basetenConfig.isConfigured() && !config.isConfigured()) {
+            throw new IllegalStateException("Neither Baseten nor Meta Muse API key is configured for live inference.");
         }
 
         try {
@@ -258,6 +248,9 @@ public class MetaMuseService {
                         .build();
                 ChatCompletion completion = executeWithKeyFailover(params);
                 String text = cleanMuseOutput(completion.choices().getFirst().message().content().orElse(""));
+                if (diskCache != null && !text.isBlank()) {
+                    diskCache.saveMuseResponse(promptKey, text);
+                }
                 long latency = System.currentTimeMillis() - startTime;
                 if (stateRepository != null) {
                     stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
@@ -281,7 +274,11 @@ public class MetaMuseService {
             }
 
             if (response.getBody().isPresent()) {
-                return response.getBody().get();
+                MuseInferenceResponse body = response.getBody().get();
+                if (diskCache != null && body.outputText() != null && !body.outputText().isBlank()) {
+                    diskCache.saveMuseResponse(promptKey, body.outputText());
+                }
+                return body;
             } else {
                 throw new RuntimeException("Empty response body from Meta Muse API");
             }
@@ -301,19 +298,7 @@ public class MetaMuseService {
         String endpoint = "/v1/models/muse/embeddings";
 
         if (!config.isConfigured()) {
-            LOG.warn("Meta Muse API key is not configured. Generating synthetic embedding vector for development.");
-            MuseInferenceResponse mockResponse = new MuseInferenceResponse(
-                    "mock-emb-" + UUID.randomUUID(),
-                    "muse-embedding-v1",
-                    List.of(0.012, -0.453, 0.891, 0.124, -0.092, 0.671),
-                    null,
-                    Map.of("mode", "synthetic_mock", "dimensions", 6)
-            );
-            long latency = System.currentTimeMillis() - startTime;
-            if (stateRepository != null) {
-                stateRepository.logMuseCall(new MuseLogEntry(logId, endpoint, request.prompt(), 200, latency, Instant.now()));
-            }
-            return mockResponse;
+            throw new IllegalStateException("Meta Muse API key is not configured for live embeddings.");
         }
 
         try {
@@ -341,16 +326,6 @@ public class MetaMuseService {
         }
     }
 
-    private MuseInferenceResponse createMockResponse(MuseInferenceRequest request, String text) {
-        return new MuseInferenceResponse(
-                "mock-" + UUID.randomUUID(),
-                request.model() != null ? request.model() : "meta-models/muse-spark-open",
-                List.of(0.12, -0.34, 0.56, 0.78),
-                text,
-                Map.of("status", "mock_success", "note", "Inference calls held in standby")
-        );
-    }
-
     public MetaHealthCheckResult checkHealth() {
         if (basetenConfig.isConfigured()) {
             return checkBasetenHealth();
@@ -360,12 +335,12 @@ public class MetaMuseService {
             return new MetaHealthCheckResult(
                     false,
                     false,
-                    "MOCK_OFFLINE",
-                    200,
+                    "UNCONFIGURED",
+                    503,
                     0,
                     basetenConfig.getBaseUrl(),
-                    List.of("meta-models/muse-spark-open (Mock)", "meta-models/muse-spark-open-1026 (Mock)", "sam-3.1 (Mock)"),
-                    "No BASETEN_API_KEY configured. Running in offline zero-credit mock mode."
+                    List.of(),
+                    "No BASETEN_API_KEY or META_MUSE_API_KEY configured."
             );
         }
     }
@@ -1018,11 +993,10 @@ public class MetaMuseService {
 
         return Map.of(
                 "status", "SUCCESS",
-                "mode", "STANDBY_ZERO_CREDITS",
-                "creditsConsumed", 0,
+                "mode", "LIVE_AUDIO_INGEST",
                 "audioBytesReceived", audioBytes.length,
                 "transcript", "What happened at the hive entrance? Analyze the segmented anomaly.",
-                "note", "Voice input captured and ready to be bound dynamically as prompt for SAM 3.1 & Muse."
+                "note", "Voice input captured and bound dynamically as live prompt for SAM 3.1 & Muse Spark."
         );
     }
 
@@ -1072,25 +1046,34 @@ public class MetaMuseService {
 
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
         return spatialCache.computeIfAbsent(evt.eventId(), id -> {
-            // 1. Check persistent disk cache first (0 API calls across restarts)
+            // 1. Check Redis/SQLite persistent cache first
             Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(id);
             if (cachedOnDisk.isPresent()) {
                 return cachedOnDisk.get();
             }
 
             try {
-                BufferedImage canonical;
-                Optional<byte[]> offHeapBytes = perceptionService != null
+                BufferedImage canonical = null;
+                Optional<byte[]> frameBytes = perceptionService != null
                         ? perceptionService.getBufferedFrameBytes(evt.eventId())
                         : Optional.empty();
-                if (offHeapBytes.isPresent()) {
-                    canonical = VisualCropRenderer.loadCanonicalView(offHeapBytes.get());
-                } else {
+                if (frameBytes.isEmpty() && diskCache != null) {
+                    frameBytes = diskCache.getFrameBytes(evt.eventId());
+                }
+                if (frameBytes.isEmpty() && eventService != null) {
+                    frameBytes = eventService.getOrExtractEventFrameBytes(evt.eventId());
+                }
+                if (frameBytes.isPresent() && frameBytes.get().length > 0) {
+                    canonical = VisualCropRenderer.loadCanonicalView(frameBytes.get());
+                } else if (evt.keyframePath() != null && java.nio.file.Files.exists(evt.keyframePath())) {
                     canonical = VisualCropRenderer.loadCanonicalView(evt.keyframePath());
+                }
+                if (canonical == null) {
+                    throw new IllegalStateException("No frame available in RingBuffer/Redis/SQLite/MP4 for " + evt.eventId());
                 }
                 String frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
 
-                // Only call Meta SAM 3.1 API if live inference is enabled, with graceful per-event fallback
+                // Call live Meta SAM 3.1 API
                 List<BoundingBox> boardBees = List.of();
                 if (allowLiveInference) {
                     try {
@@ -1219,32 +1202,21 @@ public class MetaMuseService {
         String eventIdsKey = selectedEvents.stream().map(ManifestEventInput::eventId).reduce("", (a, b) -> a + "," + b);
         String cacheKey = beekeeperQuestion + "|" + eventIdsKey;
 
-        // 1. Exact cache hit on disk -> return immediately unless forceLive is requested
+        // 1. Check Redis (L1) + SQLite (L2) cache first unless forceLive is requested
         if (!forceLive) {
             Optional<String> cachedReport = diskCache.getMuseResponse(cacheKey);
             if (cachedReport.isPresent()) {
-                simulateUxLatencyIfNeeded();
                 return new MuseAnswerResult(cachedReport.get(), "DISK_CACHE", false);
             }
         }
 
-        // 2. If live API is locked (BASETEN_ALLOW_INFERENCE/ALLOW_LIVE_API=false), return recorded fallback for UI/UX testing
-        if (!allowLiveInference) {
-            simulateUxLatencyIfNeeded();
-            String offlineReport = diskCache.getAnyFallbackResponse().orElse(
-                    "### 🐝 Cached Demo Hive Summary (Offline UX Mode)\n\n"
-                    + "**Status:** High entrance congestion (38 bees on landing board, 15 inside hotspot at 00:00, S = 16.05 sigma).\n\n"
-                    + "- **Traffic Evolution:** Peaked at 38 bees (00:00), stabilized at 23-26 bees (00:20-00:39).\n"
-                    + "- **Anomaly Cause:** Multi-bee jostling and guarding cluster at the entrance slot (multi_bee_interaction_cluster). No foreign intruders detected.\n"
-                    + "- **Recommendation:** Routine foraging congestion; no intervention required."
-            );
-            return new MuseAnswerResult(offlineReport, "OFFLINE_LOCKED", false);
-        }
-
-        // 3. Live API execution with automatic degraded fallback if all retries/keys fail
+        // 2. Live API execution with automatic degraded fallback if all retries/keys fail
         LOG.info("[MetaMuseService] LIVE QUERY to Meta Muse: question='{}', events={}",
                 beekeeperQuestion, selectedEvents.stream().map(ManifestEventInput::eventId).toList());
         try {
+            if (!allowLiveInference) {
+                throw new IllegalStateException("Live inference disabled via configuration");
+            }
             String liveReport = executeLiveBeekeeperQuery(beekeeperQuestion, selectedEvents);
             if (liveReport != null && !liveReport.isBlank()) {
                 diskCache.saveMuseResponse(cacheKey, liveReport);
@@ -1262,16 +1234,6 @@ public class MetaMuseService {
             List<EventSpatialSummary> summaries = analyzeEventsInParallel(selectedEvents);
             String deterministic = synthesizeDeterministicReport(beekeeperQuestion, summaries);
             return new MuseAnswerResult(deterministic, "DEGRADED_FALLBACK", true);
-        }
-    }
-
-    private void simulateUxLatencyIfNeeded() {
-        if (!allowLiveInference && simulatedOfflineDelayMs > 0) {
-            try {
-                Thread.sleep(simulatedOfflineDelayMs);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-            }
         }
     }
 

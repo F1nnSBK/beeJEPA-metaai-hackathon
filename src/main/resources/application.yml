@@ -33,7 +33,7 @@ micronaut:
 meta:
   muse:
     base-url: ${META_MUSE_BASE_URL:https://api.meta.ai}
-    api-key: ${META_MUSE_API_KEY:default_mock_key}
+    api-key: ${META_MUSE_API_KEY:}
     timeout: ${META_MUSE_TIMEOUT:30s}
 
 baseten:
@@ -53,6 +53,9 @@ beejepa:
   sqlite:
     filename: state.db
     busy-timeout-ms: 5000
+  ring-buffer:
+    capacity: ${BEEJEPA_RING_BUFFER_CAPACITY:64}
+    max-payload-bytes: ${BEEJEPA_RING_BUFFER_MAX_PAYLOAD_BYTES:393216}
 
 endpoints:
   health:

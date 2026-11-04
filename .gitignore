@@ -56,5 +56,7 @@ logs/
 *.wav
 *.mp3
 audio/
+!src/main/resources/seed/**
+!src/test/resources/**
 
 create_pipeline_notebook.py

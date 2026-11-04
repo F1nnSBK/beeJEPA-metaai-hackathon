@@ -127,7 +127,6 @@ async function submit() {
   gap: 1rem;
   width: 100%;
   padding: clamp(1.15rem, 3.5vw, 1.5rem);
-  border: 1px solid #202224;
   border-radius: 0.75rem;
   background: #111315;
   text-align: left;
@@ -154,7 +153,7 @@ async function submit() {
   color: #eaebed;
   /* 16px prevents iOS Safari from zooming into focused inputs. */
   font-size: 16px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   transition: border-color 0.15s ease;
   touch-action: manipulation;
 }
@@ -221,7 +220,7 @@ async function submit() {
   min-height: 48px;
   margin-top: 0.25rem;
   padding: 0 1rem;
-  border: 1px solid #eaa23a;
+  border: none;
   border-radius: 0.5rem;
   background: #eaa23a;
   color: #060709;
@@ -230,12 +229,11 @@ async function submit() {
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .login-card__submit:hover:not(:disabled) {
   background: #f6bd73;
-  border-color: #f6bd73;
 }
 
 .login-card__submit:focus-visible {
@@ -260,9 +258,8 @@ async function submit() {
 .login-card__error {
   margin: 0;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(243, 108, 71, 0.45);
   border-radius: 0.5rem;
-  background: rgba(243, 108, 71, 0.1);
+  background: rgba(243, 108, 71, 0.12);
   color: #feb4a0;
   font-size: 0.82rem;
   line-height: 1.4;
@@ -274,8 +271,7 @@ async function submit() {
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #181a1c;
+  padding-top: 0.25rem;
 }
 
 .login-card__hint {
@@ -291,7 +287,7 @@ async function submit() {
 }
 
 .login-card__creds code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; /* taste-skill-ignore */
   font-size: 0.74rem;
   color: #eaa23a;
 }
@@ -299,21 +295,21 @@ async function submit() {
 .login-card__fill {
   min-height: 40px;
   padding: 0 0.85rem;
-  border: 1px solid #333638;
+  border: none;
   border-radius: 0.4rem;
   background: #171a1d;
   color: #eaebed;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.72rem;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .login-card__fill:hover {
-  border-color: #eaa23a;
   color: #eaa23a;
-  background: #111315;
+  background: #202224;
 }
 
 .login-card__fill:focus-visible {

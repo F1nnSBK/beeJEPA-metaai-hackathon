@@ -28,6 +28,10 @@ public final class VisualCropRenderer {
     private static final Color CONTAINED_BEE_COLOR = new Color(0x00, 0xFF, 0x66);
     private static final Color HOTSPOT_COLOR = new Color(0xFF, 0x2A, 0x2A);
 
+    static {
+        ImageIO.setUseCache(false);
+    }
+
     private VisualCropRenderer() {}
 
     @Serdeable
@@ -53,6 +57,7 @@ public final class VisualCropRenderer {
         Graphics2D g = copy.createGraphics();
         g.drawImage(raw, 0, 0, w, h, 0, 0, w, h, null);
         g.dispose();
+        raw.flush();
         return copy;
     }
 

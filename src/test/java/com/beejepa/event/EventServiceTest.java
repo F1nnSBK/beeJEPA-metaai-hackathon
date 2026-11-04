@@ -1,11 +1,14 @@
 package com.beejepa.event;
 
+import com.beejepa.config.JacksonFactory;
 import com.beejepa.config.StorageConfig;
+import com.beejepa.muse.MuseDiskCache;
 import com.beejepa.storage.StorageService;
 import io.micronaut.serde.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -19,16 +22,17 @@ public class EventServiceTest {
     private EventService eventService;
 
     @BeforeEach
-    void setUp() {
+    void setUp(@TempDir Path tempDir) {
         StorageConfig storageConfig = new StorageConfig();
-        storageConfig.getData().setPath(Paths.get("src/test/resources/data").toAbsolutePath().toString());
+        storageConfig.getData().setPath(Paths.get("data").toAbsolutePath().toString());
         storageConfig.getData().setRequireSymlink(false);
 
         StorageService storageService = new StorageService(storageConfig);
         storageService.init();
 
         ObjectMapper objectMapper = ObjectMapper.getDefault();
-        this.eventService = new EventService(storageService, objectMapper);
+        MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
+        this.eventService = new EventService(storageService, objectMapper, cache);
     }
 
     @Test
@@ -59,15 +63,14 @@ public class EventServiceTest {
     }
 
     @Test
-    void testGetMediaClipAndLazyPeakFrame() {
+    void testGetMediaClipAndInMemoryPeakFrameExtraction() {
         Optional<File> clip = eventService.getMediaFile("evt_rec2125_seq000_f0000", "clip_raw.mp4");
         Assertions.assertTrue(clip.isPresent(), "Raw event clip should be present in event_clips");
         Assertions.assertTrue(clip.get().exists());
 
-        Optional<File> frame = eventService.getMediaFile("evt_rec2125_seq000_f0000", "peak_frame.jpg");
-        Assertions.assertTrue(frame.isPresent(), "Peak frame should be lazily extracted or present");
-        Assertions.assertTrue(frame.get().exists());
-        Assertions.assertTrue(frame.get().length() > 1000);
+        Optional<byte[]> frameBytes = eventService.getOrExtractEventFrameBytes("evt_rec2125_seq000_f0000");
+        Assertions.assertTrue(frameBytes.isPresent(), "Peak frame bytes should be extracted via ffmpeg pipe and cached in SQLite/Redis");
+        Assertions.assertTrue(frameBytes.get().length > 1000);
     }
 
     @Test

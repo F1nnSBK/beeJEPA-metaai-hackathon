@@ -1,5 +1,6 @@
 plugins {
     id("application")
+    id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.application") version "4.4.5"
     id("io.micronaut.aot") version "4.4.5"
 }
@@ -92,6 +93,10 @@ micronaut {
     }
 }
 
+tasks.named("shadowJar") {
+    mergeServiceFiles()
+}
+
 graalvmNative {
     binaries {
         main {
@@ -101,7 +106,7 @@ graalvmNative {
                 "--no-fallback",
                 "-H:+ReportExceptionStackTraces",
                 "--initialize-at-build-time=org.sqlite.JDBC",
-                '-H:IncludeResources=.*\\.sql$'
+                '-H:IncludeResources=.*\\.(sql|json|mp3|jpg|png|svg|html|js|css|woff2?|glb|webp)$'
             )
         }
     }

@@ -1,7 +1,9 @@
 package com.beejepa.config;
 
+import com.beejepa.muse.Sam31Client;
 import io.micronaut.context.annotation.ConfigurationProperties;
 import io.micronaut.core.annotation.Introspected;
+import jakarta.annotation.PostConstruct;
 
 import java.time.Duration;
 
@@ -17,6 +19,40 @@ public class BasetenConfig {
     private Duration timeout = Duration.ofSeconds(30);
     private boolean allowInferenceCalls = true;
     private String systemPrompt = "";
+
+    @PostConstruct
+    public void loadDotEnvFallbacks() {
+        if (apiKey == null || apiKey.isBlank()) {
+            String v = Sam31Client.getEnvOrDotEnv("BASETEN_API_KEY");
+            if (v != null && !v.isBlank()) {
+                apiKey = v.trim();
+            }
+        }
+        if (apiKey1 == null || apiKey1.isBlank()) {
+            String v = Sam31Client.getEnvOrDotEnv("BASETEN_API_KEY1");
+            if (v != null && !v.isBlank()) {
+                apiKey1 = v.trim();
+            }
+        }
+        if (apiKey2 == null || apiKey2.isBlank()) {
+            String v = Sam31Client.getEnvOrDotEnv("BASETEN_API_KEY2");
+            if (v != null && !v.isBlank()) {
+                apiKey2 = v.trim();
+            }
+        }
+        String baseUrlEnv = Sam31Client.getEnvOrDotEnv("BASETEN_BASE_URL");
+        if ((baseUrl == null || baseUrl.isBlank()) && baseUrlEnv != null && !baseUrlEnv.isBlank()) {
+            baseUrl = baseUrlEnv.trim();
+        }
+        String modelEnv = Sam31Client.getEnvOrDotEnv("BASETEN_MUSE_MODEL");
+        if ((model == null || model.isBlank()) && modelEnv != null && !modelEnv.isBlank()) {
+            model = modelEnv.trim();
+        }
+        String allowEnv = Sam31Client.getEnvOrDotEnv("BASETEN_ALLOW_INFERENCE");
+        if (allowEnv != null && !allowEnv.isBlank()) {
+            allowInferenceCalls = Boolean.parseBoolean(allowEnv.trim());
+        }
+    }
 
     public String getSystemPrompt() {
         return systemPrompt;
@@ -97,6 +133,6 @@ public class BasetenConfig {
 
     public boolean isConfigured() {
         String key = getApiKey();
-        return key != null && !key.isBlank() && !key.equals("default_mock_key");
+        return key != null && !key.isBlank();
     }
 }

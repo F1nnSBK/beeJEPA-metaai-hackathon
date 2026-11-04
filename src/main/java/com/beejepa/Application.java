@@ -13,7 +13,12 @@ public class Application {
 
     private static final Logger LOG = LoggerFactory.getLogger(Application.class);
 
+    static {
+        System.setProperty("java.awt.headless", "true");
+    }
+
     public static void main(String[] args) {
+        System.setProperty("java.awt.headless", "true");
         loadDotEnvIfPresent();
         LOG.info("Starting beeJEPA Server [JVM: {}, Virtual Threads supported: {}]",
                 Runtime.version(),

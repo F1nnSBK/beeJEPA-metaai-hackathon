@@ -30,14 +30,7 @@ public class TelemetryHttpFilter implements HttpServerFilter {
         long startTime = System.nanoTime();
         String uri = request.getPath();
         String method = request.getMethodName();
-        String clientIp = "127.0.0.1";
-
-        try {
-            if (request.getRemoteAddress() != null && request.getRemoteAddress().getAddress() != null) {
-                clientIp = request.getRemoteAddress().getAddress().getHostAddress();
-            }
-        } catch (Exception ignored) {
-        }
+        String clientIp = extractClientIp(request);
 
         final String finalClientIp = clientIp;
 
@@ -53,6 +46,23 @@ public class TelemetryHttpFilter implements HttpServerFilter {
                     String platform = determinePlatform(uri);
                     telemetryService.recordRequest(platform, method, uri, status, durationMs, finalClientIp);
                 });
+    }
+
+    private String extractClientIp(HttpRequest<?> request) {
+        try {
+            for (String header : java.util.List.of("CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For")) {
+                String val = request.getHeaders().get(header);
+                if (val != null && !val.isBlank()) {
+                    int comma = val.indexOf(',');
+                    return (comma > 0 ? val.substring(0, comma) : val).trim();
+                }
+            }
+            if (request.getRemoteAddress() != null && request.getRemoteAddress().getAddress() != null) {
+                return request.getRemoteAddress().getAddress().getHostAddress();
+            }
+        } catch (Exception ignored) {
+        }
+        return "127.0.0.1";
     }
 
     private String determinePlatform(String uri) {

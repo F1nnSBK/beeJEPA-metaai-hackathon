@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @Singleton
@@ -37,6 +38,10 @@ public class EventService {
         this.museDiskCache = museDiskCache != null ? museDiskCache : new MuseDiskCache();
     }
 
+    public MuseDiskCache getMuseDiskCache() {
+        return museDiskCache;
+    }
+
     private Path getEventsDirectory() {
         return storageService.getDataDirectory().resolve("events");
     }
@@ -45,7 +50,34 @@ public class EventService {
         return storageService.getDataDirectory().resolve("timeline_rec2123.json");
     }
 
+    private static boolean isSafePathSegment(String segment) {
+        if (segment == null || segment.isBlank()) {
+            return false;
+        }
+        if (segment.contains("..") || segment.contains("/") || segment.contains("\\") || segment.indexOf('\0') >= 0) {
+            return false;
+        }
+        return !segment.equals(".");
+    }
+
+    private List<Path> getCandidateSampleDirectories() {
+        List<Path> candidates = new ArrayList<>(2);
+        if (storageService != null && storageService.getDataDirectory() != null) {
+            candidates.add(storageService.getDataDirectory().resolve("hackathon_sample"));
+        }
+        Path localData = Path.of("data", "hackathon_sample").toAbsolutePath().normalize();
+        if (!candidates.contains(localData)) {
+            candidates.add(localData);
+        }
+        return candidates;
+    }
+
     private Path getHackathonSampleDirectory() {
+        for (Path dir : getCandidateSampleDirectories()) {
+            if (Files.exists(dir.resolve("manifest.json"))) {
+                return dir;
+            }
+        }
         return storageService.getDataDirectory().resolve("hackathon_sample");
     }
 
@@ -79,12 +111,27 @@ public class EventService {
     }
 
     @SuppressWarnings("unchecked")
+    public boolean isKnownManifestEvent(String eventId) {
+        if (!isSafePathSegment(eventId)) {
+            return false;
+        }
+        Map<String, Object> manifest = getOrLoadManifest();
+        if (manifest != null && manifest.get("events") instanceof List<?> rawEvents) {
+            for (Object obj : rawEvents) {
+                if (obj instanceof Map<?, ?> ev && eventId.equals(String.valueOf(ev.get("event_id")))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> listEvents() {
         Map<String, Object> manifest = getOrLoadManifest();
         if (manifest != null && manifest.containsKey("events")) {
             List<Map<String, Object>> rawEvents = (List<Map<String, Object>>) manifest.get("events");
             List<Map<String, Object>> result = new ArrayList<>();
-            Path resultsDir = getHackathonSampleDirectory().resolve("event_results");
 
             for (Map<String, Object> ev : rawEvents) {
                 String eventId = String.valueOf(ev.get("event_id"));
@@ -103,8 +150,6 @@ public class EventService {
                 item.put("pixelDiffBaseline", 0.0142);
                 item.put("horizonDeltaFrames", 60);
 
-                // Real V-JEPA 43x43 native grid hotspot measured from event_frames/<event_id>.jpg
-                // (accounting for the 35px top caption header bar in the 1080x960 frame)
                 Map<String, Object> rawHotspot = ev.get("hotspot") instanceof Map<?, ?> m
                         ? (Map<String, Object>) m
                         : null;
@@ -135,9 +180,7 @@ public class EventService {
                     item.put("activeCells", n.intValue());
                 }
 
-                // Check cached agent analysis or real SAM 3.1 spatial summary cache
-                Path cachedResultFile = resultsDir.resolve(eventId + ".json");
-                boolean hasCached = Files.exists(cachedResultFile);
+                // Check real Redis/SQLite SAM 3.1 spatial summary cache
                 Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
                 item.put("vjepaBoardBees", ev.get("board_bees"));
                 if (spatialOpt.isPresent()) {
@@ -155,20 +198,11 @@ public class EventService {
                     samSpatialMap.put("cropBase64", sp.cropBase64() != null ? sp.cropBase64() : "");
                     item.put("samSpatial", samSpatialMap);
                     item.put("agentResult", buildAgentResultFromSpatial(eventId, sp, item));
-                } else if (hasCached) {
-                    item.put("isCached", true);
-                    item.put("hasSamSpatial", false);
-                    try {
-                        item.put("agentResult",
-                                objectMapper.readValue(Files.readAllBytes(cachedResultFile), Map.class));
-                    } catch (Exception ignored) {
-                    }
                 } else {
                     item.put("isCached", false);
                     item.put("hasSamSpatial", false);
                 }
 
-                // Media presence
                 item.put("hasRawClip", true);
                 item.put("hasComparisonClip", false);
                 item.put("hasPeakFrame", true);
@@ -236,6 +270,9 @@ public class EventService {
     }
 
     public Optional<Map<String, Object>> getEvent(String eventId) {
+        if (!isSafePathSegment(eventId)) {
+            return Optional.empty();
+        }
         List<Map<String, Object>> allEvents = listEvents();
         for (Map<String, Object> ev : allEvents) {
             if (eventId.equals(ev.get("eventId"))) {
@@ -262,8 +299,11 @@ public class EventService {
             }
         }
 
-        Path eventsDir = getEventsDirectory();
-        Path eventFolder = eventsDir.resolve(eventId);
+        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
+        Path eventFolder = eventsDir.resolve(eventId).normalize();
+        if (!eventFolder.startsWith(eventsDir)) {
+            return Optional.empty();
+        }
         Path metaFile = eventFolder.resolve("meta.json");
 
         if (!Files.exists(metaFile)) {
@@ -294,81 +334,161 @@ public class EventService {
         }
     }
 
-    public Optional<File> getMediaFile(String eventId, String filename) {
-        // 1. Check hackathon sample event clips
-        if ("clip_raw.mp4".equals(filename) || filename.endsWith(".mp4")) {
-            Path sampleClip = getHackathonSampleDirectory().resolve("event_clips").resolve(eventId + ".mp4");
-            if (Files.exists(sampleClip) && Files.isRegularFile(sampleClip)) {
-                return Optional.of(sampleClip.toFile());
+    /**
+     * Checks only exact per-event keyframe files on disk (without fallback to another event's frame).
+     */
+    public Optional<File> findExactEventFrameFile(String eventId) {
+        if (!isSafePathSegment(eventId)) {
+            return Optional.empty();
+        }
+        for (Path sampleDir : getCandidateSampleDirectories()) {
+            Path framePath = sampleDir.resolve("event_frames").resolve(eventId + ".jpg").normalize();
+            if (framePath.startsWith(sampleDir.toAbsolutePath().normalize())
+                    && Files.exists(framePath) && Files.isRegularFile(framePath)) {
+                return Optional.of(framePath.toFile());
             }
-            Path seqClip = getHackathonSampleDirectory().resolve("sequences").resolve(filename);
-            if (Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
-                return Optional.of(seqClip.toFile());
+        }
+        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
+        Path legacyFrame = eventsDir.resolve(eventId).resolve("peak_frame.jpg").normalize();
+        if (legacyFrame.startsWith(eventsDir) && Files.exists(legacyFrame) && Files.isRegularFile(legacyFrame)) {
+            return Optional.of(legacyFrame.toFile());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Retrieves or extracts the JPEG keyframe bytes for an event directly from the .mp4 video clip
+     * via ffmpeg pipe, caching the result in Redis + SQLite without writing static .jpg files to disk.
+     */
+    public synchronized Optional<byte[]> getOrExtractEventFrameBytes(String eventId) {
+        if (!isSafePathSegment(eventId)) {
+            return Optional.empty();
+        }
+        Optional<byte[]> cached = museDiskCache.getFrameBytes(eventId);
+        if (cached.isPresent() && cached.get().length > 0) {
+            return cached;
+        }
+        Optional<File> diskFrame = findExactEventFrameFile(eventId);
+        if (diskFrame.isPresent()) {
+            try {
+                byte[] bytes = Files.readAllBytes(diskFrame.get().toPath());
+                if (bytes.length > 0) {
+                    museDiskCache.saveFrameBytes(eventId, bytes);
+                    return Optional.of(bytes);
+                }
+            } catch (IOException ignored) {
             }
         }
 
-        // 2. Check lazy peak frame / heatmap extraction
-        if ("peak_frame.jpg".equals(filename) || "vjepa_heatmap.jpg".equals(filename)) {
-            Path framePath = getHackathonSampleDirectory().resolve("event_frames").resolve(eventId + ".jpg");
-            if (Files.exists(framePath)) {
-                return Optional.of(framePath.toFile());
+        Path clipPath = null;
+        for (Path dir : getCandidateSampleDirectories()) {
+            Path candidate = dir.resolve("event_clips").resolve(eventId + ".mp4");
+            if (Files.exists(candidate) && Files.isRegularFile(candidate)) {
+                clipPath = candidate;
+                break;
             }
-            extractFrameLazily(eventId);
-            if (Files.exists(framePath)) {
-                return Optional.of(framePath.toFile());
+        }
+        if (clipPath == null) {
+            return Optional.empty();
+        }
+
+        try {
+            if (clipPath.toFile().length() < 1024) {
+                return Optional.empty();
+            }
+            ProcessBuilder pb = new ProcessBuilder(
+                    resolveFfmpegBinary(),
+                    "-nostdin",
+                    "-loglevel", "error",
+                    "-ss", "00:00:01.5",
+                    "-i", clipPath.toString(),
+                    "-vframes", "1",
+                    "-f", "image2pipe",
+                    "-vcodec", "mjpeg",
+                    "-q:v", "2",
+                    "-"
+            );
+            Process process = pb.start();
+            byte[] frameBytes = process.getInputStream().readAllBytes();
+            boolean finished = process.waitFor(4, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return Optional.empty();
+            }
+            if (process.exitValue() == 0 && frameBytes.length > 512) {
+                museDiskCache.saveFrameBytes(eventId, frameBytes);
+                return Optional.of(frameBytes);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to extract keyframe via ffmpeg pipe for {}: {}", eventId, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    public Optional<File> getMediaFile(String eventId, String filename) {
+        if (!isSafePathSegment(eventId) || !isSafePathSegment(filename)) {
+            return Optional.empty();
+        }
+        List<Path> sampleDirs = getCandidateSampleDirectories();
+
+        // 1. Check hackathon sample event clips across candidate directories
+        if ("clip_raw.mp4".equals(filename) || filename.endsWith(".mp4")) {
+            for (Path sampleDir : sampleDirs) {
+                Path base = sampleDir.toAbsolutePath().normalize();
+                Path sampleClip = base.resolve("event_clips").resolve(eventId + ".mp4").normalize();
+                if (sampleClip.startsWith(base) && Files.exists(sampleClip) && Files.isRegularFile(sampleClip)) {
+                    return Optional.of(sampleClip.toFile());
+                }
+                Path seqClip = base.resolve("sequences").resolve(filename).normalize();
+                if (seqClip.startsWith(base) && Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
+                    return Optional.of(seqClip.toFile());
+                }
+            }
+        }
+
+        // 2. Check exact frame file if present
+        if ("peak_frame.jpg".equals(filename) || "vjepa_heatmap.jpg".equals(filename)) {
+            Optional<File> exact = findExactEventFrameFile(eventId);
+            if (exact.isPresent()) {
+                return exact;
             }
         }
 
         // 3. Fallback to standard events directory
-        Path eventsDir = getEventsDirectory();
-        Path filePath = eventsDir.resolve(eventId).resolve(filename);
-        if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
+        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
+        Path filePath = eventsDir.resolve(eventId).resolve(filename).normalize();
+        if (filePath.startsWith(eventsDir) && Files.exists(filePath) && Files.isRegularFile(filePath)) {
             return Optional.of(filePath.toFile());
         }
         return Optional.empty();
     }
 
     public Optional<File> getSequenceFile(String filename) {
-        if (filename == null || filename.isBlank()) {
+        if (!isSafePathSegment(filename)) {
             return Optional.empty();
         }
         String safeName = Path.of(filename).getFileName().toString();
-        Path seqClip = getHackathonSampleDirectory().resolve("sequences").resolve(safeName);
-        if (Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
-            return Optional.of(seqClip.toFile());
+        for (Path sampleDir : getCandidateSampleDirectories()) {
+            Path base = sampleDir.toAbsolutePath().normalize();
+            Path seqClip = base.resolve("sequences").resolve(safeName).normalize();
+            if (seqClip.startsWith(base) && Files.exists(seqClip) && Files.isRegularFile(seqClip)) {
+                return Optional.of(seqClip.toFile());
+            }
         }
         return Optional.empty();
     }
 
-    private synchronized void extractFrameLazily(String eventId) {
-        Path frameDir = getHackathonSampleDirectory().resolve("event_frames");
-        Path framePath = frameDir.resolve(eventId + ".jpg");
-        if (Files.exists(framePath)) {
-            return;
+    private static String resolveFfmpegBinary() {
+        String envBin = System.getenv("FFMPEG_BIN");
+        if (envBin != null && !envBin.isBlank()) {
+            return envBin.trim();
         }
-        Path clipPath = getHackathonSampleDirectory().resolve("event_clips").resolve(eventId + ".mp4");
-        if (!Files.exists(clipPath)) {
-            return;
-        }
-        try {
-            Files.createDirectories(frameDir);
-            ProcessBuilder pb = new ProcessBuilder(
-                    "/opt/homebrew/bin/ffmpeg",
-                    "-ss", "00:00:01.5",
-                    "-i", clipPath.toString(),
-                    "-vframes", "1",
-                    "-q:v", "2",
-                    framePath.toString(),
-                    "-y");
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-            boolean finished = process.waitFor(4, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
+        for (String candidate : List.of("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg")) {
+            if (Files.isExecutable(Path.of(candidate))) {
+                return candidate;
             }
-        } catch (Exception e) {
-            LOG.warn("Failed to lazily extract peak frame for {}: {}", eventId, e.getMessage());
         }
+        return "ffmpeg";
     }
 
     @SuppressWarnings("unchecked")
@@ -450,33 +570,32 @@ public class EventService {
     }
 
     public Map<String, Object> analyzeEvent(String eventId, boolean forceRefresh) {
-        Path resultsDir = getHackathonSampleDirectory().resolve("event_results");
-        Path agentResultFile = resultsDir.resolve(eventId + ".json");
-
-        // 1. Check real SAM 3.1 spatial summary cache first
-        Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
-        if (spatialOpt.isPresent()) {
-            Map<String, Object> groundedResult = buildAgentResultFromSpatial(eventId, spatialOpt.get(), null);
-            try {
-                Files.createDirectories(resultsDir);
-                Files.write(agentResultFile, objectMapper.writeValueAsBytes(groundedResult));
-            } catch (IOException ignored) {}
-            return groundedResult;
+        if (!isSafePathSegment(eventId)) {
+            return Map.of("error", "Invalid eventId", "cached", false);
         }
 
-        // 2. Check existing cached result file
-        if (!forceRefresh && Files.exists(agentResultFile)) {
-            try {
-                LOG.info("Returning cached agent result for event {}", eventId);
-                Map<String, Object> cached = objectMapper.readValue(Files.readAllBytes(agentResultFile), Map.class);
-                cached.put("cached", true);
-                return cached;
-            } catch (IOException e) {
-                LOG.warn("Failed to read cached agent result for {}", eventId);
+        // 1. Check real Redis/SQLite SAM 3.1 spatial summary cache first
+        if (!forceRefresh) {
+            Optional<SamGeometry.EventSpatialSummary> spatialOpt = museDiskCache.loadSpatialSummary(eventId);
+            if (spatialOpt.isPresent()) {
+                return buildAgentResultFromSpatial(eventId, spatialOpt.get(), null);
             }
         }
 
-        // 3. No cached SAM 3.1 spatial segmentation exists for this event; return honest V-JEPA 2.1 telemetry only
+        // 2. Check legacy events/<eventId>/agent_result.json if present
+        Path eventsDir = getEventsDirectory().toAbsolutePath().normalize();
+        Path legacyAgentFile = eventsDir.resolve(eventId).resolve("agent_result.json").normalize();
+        if (!forceRefresh && legacyAgentFile.startsWith(eventsDir) && Files.exists(legacyAgentFile)) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> cached = objectMapper.readValue(Files.readAllBytes(legacyAgentFile), Map.class);
+                cached.put("cached", true);
+                return cached;
+            } catch (IOException ignored) {
+            }
+        }
+
+        // 3. No cached SAM 3.1 spatial segmentation exists yet; return V-JEPA 2.1 telemetry
         Map<String, Object> result = new HashMap<>();
         result.put("eventId", eventId);
         result.put("cached", false);

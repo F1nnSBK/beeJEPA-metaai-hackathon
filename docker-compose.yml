@@ -1,0 +1,51 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: beejepa-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 160m
+
+  beejepa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BEEJEPA_DOCKER_TARGET:-full-runtime}
+    container_name: beejepa-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "8080"
+      BEEJEPA_DATA_PATH: "/opt/beejepa/data"
+      BEEJEPA_SQLITE_PATH: "/opt/beejepa/sqlite/state.db"
+      BEEJEPA_REQUIRE_SYMLINK: "false"
+      BASETEN_ALLOW_INFERENCE: "${BASETEN_ALLOW_INFERENCE:-true}"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_ENABLED: "true"
+      CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-604800}"
+      BEEJEPA_RING_BUFFER_CAPACITY: "${BEEJEPA_RING_BUFFER_CAPACITY:-64}"
+      BEEJEPA_RING_BUFFER_MAX_PAYLOAD_BYTES: "${BEEJEPA_RING_BUFFER_MAX_PAYLOAD_BYTES:-393216}"
+    volumes:
+      - ${BEEJEPA_HOST_DATA_DIR:-./data}:/opt/beejepa/data
+      - ${BEEJEPA_HOST_SQLITE_DIR:-./data}:/opt/beejepa/sqlite
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 768m
+
+volumes:
+  redis_data:

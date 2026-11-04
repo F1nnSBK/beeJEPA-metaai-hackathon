@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Singleton
 public class StorageService {
@@ -56,7 +57,6 @@ public class StorageService {
             }
         }
 
-        // Initialize standard subdirectories on the SSD
         List<String> subdirs = List.of("models", "embeddings", "captures", "runs");
         for (String subdir : subdirs) {
             Path subPath = dataDirectory.resolve(subdir);
@@ -69,6 +69,15 @@ public class StorageService {
                 LOG.error("Failed to create subdirectory {}: {}", subPath, e.getMessage());
             }
         }
+
+        Path dbPath = getDatabasePath();
+        if (dbPath.getParent() != null && !Files.exists(dbPath.getParent())) {
+            try {
+                Files.createDirectories(dbPath.getParent());
+            } catch (IOException e) {
+                LOG.warn("Could not create parent directory for SQLite database {}: {}", dbPath, e.getMessage());
+            }
+        }
     }
 
     public Path getDataDirectory() {
@@ -76,6 +85,12 @@ public class StorageService {
     }
 
     public Path getDatabasePath() {
+        String customSqlitePath = Optional.ofNullable(System.getProperty("BEEJEPA_SQLITE_PATH"))
+                .or(() -> Optional.ofNullable(System.getenv("BEEJEPA_SQLITE_PATH")))
+                .orElse(null);
+        if (customSqlitePath != null && !customSqlitePath.isBlank()) {
+            return Path.of(customSqlitePath.trim()).toAbsolutePath().normalize();
+        }
         return dataDirectory.resolve(storageConfig.getSqlite().getFilename());
     }
 
@@ -94,10 +109,12 @@ public class StorageService {
         status.put("isSymlink", isSymlink);
         status.put("targetRealPath", realTargetPath != null ? realTargetPath.toString() : null);
 
-        status.put("isMounted", isSymlink);
-
         File file = realTargetPath != null ? realTargetPath.toFile() : (dataDirectory != null ? dataDirectory.toFile() : null);
-        if (isSymlink && file != null && file.exists()) {
+        boolean requireSymlink = storageConfig.getData() != null && storageConfig.getData().isRequireSymlink();
+        boolean isMounted = requireSymlink ? isSymlink : (file != null && file.exists());
+        status.put("isMounted", isMounted);
+
+        if (isMounted && file != null && file.exists()) {
             long totalSpace = file.getTotalSpace();
             long freeSpace = file.getFreeSpace();
             long usableSpace = file.getUsableSpace();

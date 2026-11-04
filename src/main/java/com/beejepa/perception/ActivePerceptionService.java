@@ -117,16 +117,17 @@ public class ActivePerceptionService {
             // Ingest real keyframe into FFM off-heap ring buffer if available
             ingestFrameIntoRingBuffer(eventId, frameIndex, timestampSec, (float) surprise, focusX, focusY);
 
-            // Use real SAM 3.1 cached spatial summary if available
+            // Use real SAM 3.1 cached spatial summary if available, otherwise V-JEPA activeCells
             Optional<SamGeometry.EventSpatialSummary> cachedSam = museDiskCache != null
                     ? museDiskCache.loadSpatialSummary(eventId)
                     : Optional.empty();
+            int defaultHotspotBees = ev.get("activeCells") instanceof Number n ? n.intValue() : 0;
             int hotspotBees = cachedSam
                     .map(SamGeometry.EventSpatialSummary::beesInsideHotspotCount)
-                    .orElse(0);
+                    .orElse(defaultHotspotBees);
             String classification = cachedSam
                     .map(SamGeometry.EventSpatialSummary::geometricPreClassification)
-                    .orElse("vjepa_hotspot_only");
+                    .orElse(hotspotBees >= 2 ? "multi_bee_interaction_cluster" : "vjepa_hotspot_only");
 
             SaccadicTarget target = new SaccadicTarget(
                     eventId,
@@ -159,29 +160,45 @@ public class ActivePerceptionService {
             float surpriseSigma,
             float focusX,
             float focusY) {
-        Optional<File> frameFile = eventService.getMediaFile(eventId, "peak_frame.jpg");
-        if (frameFile.isPresent() && frameFile.get().exists()) {
-            try {
-                byte[] bytes = Files.readAllBytes(frameFile.get().toPath());
-                long timestampNs = (long) (timestampSec * 1_000_000_000L);
-                long seq = ringBuffer.appendFrame(timestampNs, frameIndex, surpriseSigma, focusX, focusY, bytes);
-                eventBufferSequences.put(eventId, seq);
+        if (eventBufferSequences.containsKey(eventId)) {
+            return;
+        }
+        Optional<byte[]> frameBytesOpt = eventService.getOrExtractEventFrameBytes(eventId);
+        if (frameBytesOpt.isPresent() && frameBytesOpt.get().length > 0) {
+            byte[] bytes = frameBytesOpt.get();
+            long timestampNs = (long) (timestampSec * 1_000_000_000L);
+            long seq = ringBuffer.appendFrame(timestampNs, frameIndex, surpriseSigma, focusX, focusY, bytes);
+            eventBufferSequences.put(eventId, seq);
 
-                // Evaluate latent transition with Java 25 SIMD Vector API (FloatVector.SPECIES_PREFERRED)
-                if (simdEvaluator != null && bytes.length >= 128) {
-                    float[] currentLatent = extractCompactLatentSignature(bytes, focusX, focusY, surpriseSigma);
-                    float[] prev = previousLatentVector;
-                    if (prev != null && prev.length == currentLatent.length) {
-                        float simdCos = simdEvaluator.cosineSimilarity(prev, currentLatent);
-                        eventSimdCosine.put(eventId, simdCos);
-                    } else {
-                        eventSimdCosine.put(eventId, 1.0f);
-                    }
-                    previousLatentVector = currentLatent;
+            // Evaluate latent transition with Java 25 SIMD Vector API (FloatVector.SPECIES_PREFERRED)
+            if (simdEvaluator != null && bytes.length >= 128) {
+                float[] currentLatent = extractCompactLatentSignature(bytes, focusX, focusY, surpriseSigma);
+                float[] prev = previousLatentVector;
+                if (prev != null && prev.length == currentLatent.length) {
+                    float simdCos = simdEvaluator.cosineSimilarity(prev, currentLatent);
+                    eventSimdCosine.put(eventId, simdCos);
+                } else {
+                    eventSimdCosine.put(eventId, 1.0f);
                 }
-            } catch (IOException e) {
-                LOG.warn("Failed to ingest keyframe into off-heap ring buffer for event {}: {}", eventId,
-                        e.getMessage());
+                previousLatentVector = currentLatent;
+            }
+        }
+    }
+
+    private synchronized void syncMissingFramesIfPresent() {
+        if (trajectory.isEmpty() || eventBufferSequences.size() >= trajectory.size()) {
+            return;
+        }
+        for (SaccadicTarget target : trajectory) {
+            if (!eventBufferSequences.containsKey(target.eventId())) {
+                ingestFrameIntoRingBuffer(
+                        target.eventId(),
+                        target.frameIndex(),
+                        target.timestampSec(),
+                        (float) target.surpriseScoreSigma(),
+                        target.focusCenterX(),
+                        target.focusCenterY()
+                );
             }
         }
     }
@@ -206,6 +223,9 @@ public class ActivePerceptionService {
     public Optional<byte[]> getBufferedFrameBytes(String eventId) {
         if (eventId == null) {
             return Optional.empty();
+        }
+        if (!eventBufferSequences.containsKey(eventId)) {
+            syncMissingFramesIfPresent();
         }
         Long seq = eventBufferSequences.get(eventId);
         if (seq != null) {
@@ -236,6 +256,7 @@ public class ActivePerceptionService {
     }
 
     public OffHeapFrameRingBuffer.BufferTelemetry getRingBufferTelemetry() {
+        syncMissingFramesIfPresent();
         return ringBuffer.getTelemetry();
     }
 

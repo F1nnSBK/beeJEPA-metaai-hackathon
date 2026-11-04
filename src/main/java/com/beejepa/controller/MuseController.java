@@ -4,6 +4,7 @@ import com.beejepa.event.EventService;
 import com.beejepa.muse.AudioSpectralAnalyzer;
 import com.beejepa.muse.BeeAcousticSynthesizer;
 import com.beejepa.muse.MetaMuseService;
+import com.beejepa.muse.MuseDiskCache;
 import com.beejepa.muse.ResponseLatencyModel;
 import com.beejepa.muse.SamGeometry;
 import com.beejepa.muse.dto.MuseInferenceRequest;
@@ -20,10 +21,13 @@ import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Controller("/api/v1/muse")
 @ExecuteOn(TaskExecutors.BLOCKING)
@@ -66,13 +70,8 @@ public class MuseController {
             return HttpResponse.badRequest();
         }
 
-        // 1. Fast FFT & Prosody feature extraction
         AudioSpectralAnalyzer.SpectralProfile profile = spectralAnalyzer.analyzeAudio(inputAudioBytes, 16000);
-
-        // 2. Draw from log-normal conversational latency distribution
         long delayMs = latencyModel.applyConversationalPause();
-
-        // 3. Synthesize bioacoustic bee response mirroring the input speech
         byte[] responseWav = acousticSynthesizer.synthesizeFromSpectralProfile(profile);
 
         boolean isQuestion = profile.pitchTiltHz() > 25.0f;
@@ -106,6 +105,10 @@ public class MuseController {
         statusMap.put("creditsConsumed", 0);
         statusMap.put("message", health.message());
         statusMap.put("thread", Thread.currentThread().toString());
+        if (museService.getDiskCache() != null) {
+            statusMap.put("cacheBackend", museService.getDiskCache().getCacheBackendDescription());
+            statusMap.put("redisActive", museService.getDiskCache().isRedisActive());
+        }
         if (museService.getResilientExecutor() != null) {
             statusMap.put("resilience", museService.getResilientExecutor().getResilienceMetrics());
         }
@@ -122,9 +125,9 @@ public class MuseController {
 
     @Get(value = "/tts", produces = "audio/mpeg")
     public HttpResponse<byte[]> getBriefingTts(@QueryValue(defaultValue = "") String text) {
-        String cleanText = text != null && !text.isBlank() ? text.trim() : "";
+        String cleanText = text != null ? text.trim() : "";
         if (cleanText.isBlank()) {
-            cleanText = "Hive entrance briefing. Flight traffic peaked at 38 bees at the start of the recording, with 15 bees clustering inside the entrance hotspot. Traffic then stabilized between 23 and 26 bees. All kinematic peaks were caused by normal multi-bee jostling and guarding at the entrance slot, with no foreign intruders detected. No intervention is required.";
+            return HttpResponse.badRequest();
         }
 
         String spokenText = cleanText
@@ -135,8 +138,8 @@ public class MuseController {
 
         String hash;
         try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(spokenText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(spokenText.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : digest) {
                 sb.append(String.format("%02x", b));
@@ -146,46 +149,57 @@ public class MuseController {
             hash = Integer.toHexString(spokenText.hashCode());
         }
 
-        Path cacheDir = Path.of("data", "hackathon_sample", "cache");
-        Path ttsFile = cacheDir.resolve("tts_" + hash + ".mp3");
+        MuseDiskCache cache = museService != null ? museService.getDiskCache() : null;
+        if (cache != null) {
+            Optional<byte[]> cachedAudio = cache.getTtsAudio(hash);
+            if (cachedAudio.isPresent() && cachedAudio.get().length > 512) {
+                return HttpResponse.ok(cachedAudio.get())
+                        .header("Content-Type", "audio/mpeg")
+                        .header("X-Cache", cache.getCacheBackendDescription())
+                        .header("Cache-Control", "public, max-age=86400");
+            }
+        }
 
-        if (!Files.exists(ttsFile)) {
-            Path tmpFile = cacheDir.resolve("tts_" + hash + ".mp3.tmp");
-            try {
-                Files.createDirectories(cacheDir);
-                String edgeTtsBin = "./.venv/bin/edge-tts";
-                if (!Files.exists(Path.of(".venv", "bin", "edge-tts"))) {
+        Path tmpFile = null;
+        try {
+            tmpFile = Files.createTempFile("beejepa_tts_" + hash + "_", ".mp3");
+            String edgeTtsBin = "./.venv/bin/edge-tts";
+            if (!Files.exists(Path.of(".venv", "bin", "edge-tts"))) {
+                if (Files.exists(Path.of("/opt/beejepa/.venv/bin/edge-tts"))) {
+                    edgeTtsBin = "/opt/beejepa/.venv/bin/edge-tts";
+                } else {
                     edgeTtsBin = "edge-tts";
                 }
-                for (int attempt = 1; attempt <= 2; attempt++) {
-                    Files.deleteIfExists(tmpFile);
-                    ProcessBuilder pb = new ProcessBuilder(
-                            edgeTtsBin,
-                            "--voice", "en-US-AvaNeural",
-                            "--text", spokenText,
-                            "--write-media", tmpFile.toAbsolutePath().toString()
-                    );
-                    pb.redirectErrorStream(true);
-                    Process proc = pb.start();
-                    boolean finished = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-                    if (!finished) {
-                        proc.destroyForcibly();
-                    }
-                    if (finished && proc.exitValue() == 0 && Files.exists(tmpFile) && Files.size(tmpFile) > 512) {
-                        try {
-                            Files.move(tmpFile, ttsFile,
-                                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-                        } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
-                            Files.move(tmpFile, ttsFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                        }
-                        break;
-                    }
-                    LOG.warn("edge-tts attempt {}/2 failed or produced invalid file. finished={}", attempt, finished);
+            }
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                ProcessBuilder pb = new ProcessBuilder(
+                        edgeTtsBin,
+                        "--voice", "en-US-AvaNeural",
+                        "--text", spokenText,
+                        "--write-media", tmpFile.toAbsolutePath().toString()
+                );
+                pb.redirectErrorStream(true);
+                Process proc = pb.start();
+                boolean finished = proc.waitFor(10, TimeUnit.SECONDS);
+                if (!finished) {
+                    proc.destroyForcibly();
                 }
-                Files.deleteIfExists(tmpFile);
-            } catch (Exception e) {
-                LOG.error("Failed to generate TTS via edge-tts ProcessBuilder: {}", e.getMessage(), e);
+                if (finished && proc.exitValue() == 0 && Files.exists(tmpFile) && Files.size(tmpFile) > 512) {
+                    byte[] audioBytes = Files.readAllBytes(tmpFile);
+                    Files.deleteIfExists(tmpFile);
+                    if (cache != null) {
+                        cache.saveTtsAudio(hash, spokenText, audioBytes);
+                    }
+                    return HttpResponse.ok(audioBytes)
+                            .header("Content-Type", "audio/mpeg")
+                            .header("X-Cache", "MISS_SYNTHESIZED")
+                            .header("Cache-Control", "public, max-age=86400");
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("edge-tts synthesis failed ({}); falling back to live acoustic synthesizer.", e.getMessage());
+        } finally {
+            if (tmpFile != null) {
                 try {
                     Files.deleteIfExists(tmpFile);
                 } catch (Exception ignored) {
@@ -193,18 +207,16 @@ public class MuseController {
             }
         }
 
-        if (Files.exists(ttsFile)) {
-            try {
-                if (Files.size(ttsFile) <= 512) {
-                    Files.deleteIfExists(ttsFile);
-                    return HttpResponse.notFound();
+        if (acousticSynthesizer != null) {
+            byte[] synthesized = acousticSynthesizer.synthesizeWav(spokenText);
+            if (synthesized != null && synthesized.length > 512) {
+                if (cache != null) {
+                    cache.saveTtsAudio(hash, spokenText, synthesized);
                 }
-                byte[] audioBytes = Files.readAllBytes(ttsFile);
-                return HttpResponse.ok(audioBytes)
+                return HttpResponse.ok(synthesized)
                         .header("Content-Type", "audio/mpeg")
+                        .header("X-Cache", "MISS_ACOUSTIC_SYNTH")
                         .header("Cache-Control", "public, max-age=86400");
-            } catch (Exception e) {
-                return HttpResponse.serverError();
             }
         }
 
@@ -218,23 +230,16 @@ public class MuseController {
 
     @Post("/query-voice")
     public Map<String, Object> queryVoice(@Body Map<String, String> payload) {
-        String prompt = payload != null ? payload.getOrDefault("prompt", "How are my bees doing?").toLowerCase() : "how are my bees doing?";
-        String response;
-
-        if (prompt.contains("queen") || prompt.contains("piping") || prompt.contains("swarm")) {
-            response = "Queen piping confirmed in lower frames. Swarm preparation likely within twenty-four hours?";
-        } else if (prompt.contains("alert") || prompt.contains("danger") || prompt.contains("wasp") || prompt.contains("bad") || prompt.contains("anomaly")) {
-            response = "Alert! Rapid cluster vibration detected at tubelet four. Possible wasp intrusion!";
-        } else {
-            response = "Brood nest stable at thirty-four degrees. Foraging traffic high, zero threats.";
-        }
+        String prompt = payload != null ? payload.getOrDefault("prompt", "How are my bees doing?") : "How are my bees doing?";
+        List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(null, 1);
+        MetaMuseService.MuseAnswerResult answer = museService.answerBeekeeperQuestionWithMeta(prompt, topEvents, 1, false);
+        String spoken = answer.spokenSummary();
 
         return Map.of(
                 "prompt", prompt,
-                "response", response,
-                "creditsConsumed", 0,
-                "mode", "MOCK_TEST_ZERO_CREDITS",
-                "audioEndpoint", "/api/v1/muse/voice?text=" + java.net.URLEncoder.encode(response, java.nio.charset.StandardCharsets.UTF_8)
+                "response", spoken,
+                "mode", answer.sourceMode(),
+                "audioEndpoint", "/api/v1/muse/tts?text=" + java.net.URLEncoder.encode(spoken, StandardCharsets.UTF_8)
         );
     }
 
@@ -267,6 +272,71 @@ public class MuseController {
         return museService.callEmbedding(request);
     }
 
+    private List<MetaMuseService.ManifestEventInput> resolveTopEvents(String requestedEventId, int maxEventsToTake) {
+        List<MetaMuseService.ManifestEventInput> topEvents = new ArrayList<>();
+        if (eventService == null) {
+            return topEvents;
+        }
+        boolean specificEventRequested = requestedEventId != null && !requestedEventId.isBlank();
+        List<Map<String, Object>> rawEvents = new ArrayList<>(eventService.listEvents());
+
+        if (specificEventRequested) {
+            rawEvents.sort((a, b) -> {
+                String idA = (String) a.get("eventId");
+                String idB = (String) b.get("eventId");
+                if (requestedEventId.equals(idA)) return -1;
+                if (requestedEventId.equals(idB)) return 1;
+                return 0;
+            });
+        } else {
+            List<String> canonicalIds = List.of(
+                    "evt_rec2125_seq000_f0000",
+                    "evt_rec2125_seq000_f1217",
+                    "evt_rec2125_seq001_f0320"
+            );
+
+            rawEvents.sort((a, b) -> {
+                String idA = (String) a.get("eventId");
+                String idB = (String) b.get("eventId");
+                int idxA = canonicalIds.indexOf(idA);
+                int idxB = canonicalIds.indexOf(idB);
+                if (idxA >= 0 && idxB >= 0) return Integer.compare(idxA, idxB);
+                if (idxA >= 0) return -1;
+                if (idxB >= 0) return 1;
+                return 0;
+            });
+        }
+
+        for (Map<String, Object> ev : rawEvents) {
+            if (topEvents.size() >= maxEventsToTake) break;
+            String eventId = (String) ev.get("eventId");
+            String formattedTime = (String) ev.getOrDefault("formattedTime", "00:00");
+            double surprise = ev.get("surpriseScoreL2") instanceof Number n ? n.doubleValue() : 0.0;
+            String severity = (String) ev.getOrDefault("severity", "MEDIUM");
+
+            com.beejepa.event.AnomalyEvent.Hotspot hs = ev.get("hotspot") instanceof com.beejepa.event.AnomalyEvent.Hotspot h ? h : null;
+            Double ncx = hs != null ? hs.normCenterX() : null;
+            Double ncy = hs != null ? hs.normCenterY() : null;
+            int[] bb = hs != null ? hs.boundingBoxPx() : null;
+
+            Path keyframePath = eventService.findExactEventFrameFile(eventId)
+                    .map(File::toPath)
+                    .orElse(null);
+
+            topEvents.add(new MetaMuseService.ManifestEventInput(
+                    eventId,
+                    formattedTime,
+                    surprise,
+                    severity,
+                    keyframePath,
+                    ncx,
+                    ncy,
+                    bb
+            ));
+        }
+        return topEvents;
+    }
+
     @Post("/ask")
     public HttpResponse<Map<String, Object>> askMuse(@Body Map<String, Object> payload) {
         long startTime = System.currentTimeMillis();
@@ -280,74 +350,7 @@ public class MuseController {
         boolean specificEventRequested = requestedEventId != null && !requestedEventId.isBlank();
         int maxEventsToTake = specificEventRequested ? 1 : 3;
 
-        List<MetaMuseService.ManifestEventInput> topEvents = new ArrayList<>();
-        if (eventService != null) {
-            List<Map<String, Object>> rawEvents = new ArrayList<>(eventService.listEvents());
-
-            if (specificEventRequested) {
-                rawEvents.sort((a, b) -> {
-                    String idA = (String) a.get("eventId");
-                    String idB = (String) b.get("eventId");
-                    if (requestedEventId.equals(idA)) return -1;
-                    if (requestedEventId.equals(idB)) return 1;
-                    return 0;
-                });
-            } else {
-                // Canonical 3-event storyboard for Hive Briefing:
-                List<String> canonicalIds = List.of(
-                        "evt_rec2125_seq000_f0000",
-                        "evt_rec2125_seq000_f1217",
-                        "evt_rec2125_seq001_f0320"
-                );
-
-                rawEvents.sort((a, b) -> {
-                    String idA = (String) a.get("eventId");
-                    String idB = (String) b.get("eventId");
-                    int idxA = canonicalIds.indexOf(idA);
-                    int idxB = canonicalIds.indexOf(idB);
-                    if (idxA >= 0 && idxB >= 0) return Integer.compare(idxA, idxB);
-                    if (idxA >= 0) return -1;
-                    if (idxB >= 0) return 1;
-                    return 0;
-                });
-            }
-
-            for (Map<String, Object> ev : rawEvents) {
-                if (topEvents.size() >= maxEventsToTake) break;
-                String eventId = (String) ev.get("eventId");
-                String formattedTime = (String) ev.getOrDefault("formattedTime", "00:00");
-                double surprise = ev.get("surpriseScoreL2") instanceof Number n ? n.doubleValue() : 0.0;
-                String severity = (String) ev.getOrDefault("severity", "MEDIUM");
-
-                com.beejepa.event.AnomalyEvent.Hotspot hs = ev.get("hotspot") instanceof com.beejepa.event.AnomalyEvent.Hotspot h ? h : null;
-                Double ncx = hs != null ? hs.normCenterX() : null;
-                Double ncy = hs != null ? hs.normCenterY() : null;
-                int[] bb = hs != null ? hs.boundingBoxPx() : null;
-
-                Path keyframePath = eventService.getMediaFile(eventId, "peak_frame.jpg")
-                        .map(File::toPath)
-                        .orElseGet(() -> {
-                            Path fallback = Path.of("data", "hackathon_sample", "event_frames", eventId + ".jpg");
-                            if (Files.exists(fallback)) {
-                                return fallback;
-                            }
-                            return null;
-                        });
-
-                if (keyframePath != null) {
-                    topEvents.add(new MetaMuseService.ManifestEventInput(
-                            eventId,
-                            formattedTime,
-                            surprise,
-                            severity,
-                            keyframePath,
-                            ncx,
-                            ncy,
-                            bb
-                    ));
-                }
-            }
-        }
+        List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(requestedEventId, maxEventsToTake);
 
         boolean forceLive = payload != null && ("true".equalsIgnoreCase(String.valueOf(payload.get("forceLive")))
                 || Boolean.TRUE.equals(payload.get("forceLive")));
@@ -376,6 +379,10 @@ public class MuseController {
         telemetry.put("offlineLocked", !museService.isAllowLiveInference());
         telemetry.put("sourceMode", answerResult.sourceMode());
         telemetry.put("degradedFallback", answerResult.degradedFallback());
+        if (museService.getDiskCache() != null) {
+            telemetry.put("cacheBackend", museService.getDiskCache().getCacheBackendDescription());
+            telemetry.put("redisActive", museService.getDiskCache().isRedisActive());
+        }
 
         Map<String, Object> responseMap = new LinkedHashMap<>();
         responseMap.put("question", question);
@@ -390,4 +397,3 @@ public class MuseController {
         return HttpResponse.ok(responseMap);
     }
 }
-

@@ -1,7 +1,9 @@
 package com.beejepa.config;
 
+import com.beejepa.muse.Sam31Client;
 import io.micronaut.context.annotation.ConfigurationProperties;
 import io.micronaut.core.annotation.Introspected;
+import jakarta.annotation.PostConstruct;
 
 import java.time.Duration;
 
@@ -12,6 +14,20 @@ public class MetaMuseConfig {
     private String baseUrl = "https://api.meta.ai";
     private String apiKey = "";
     private Duration timeout = Duration.ofSeconds(30);
+
+    @PostConstruct
+    public void loadDotEnvFallbacks() {
+        if (apiKey == null || apiKey.isBlank()) {
+            String v = Sam31Client.getEnvOrDotEnv("META_MUSE_API_KEY");
+            if (v != null && !v.isBlank()) {
+                apiKey = v.trim();
+            }
+        }
+        String baseUrlEnv = Sam31Client.getEnvOrDotEnv("META_MUSE_BASE_URL");
+        if ((baseUrl == null || baseUrl.isBlank()) && baseUrlEnv != null && !baseUrlEnv.isBlank()) {
+            baseUrl = baseUrlEnv.trim();
+        }
+    }
 
     public String getBaseUrl() {
         return baseUrl;
@@ -38,6 +54,6 @@ public class MetaMuseConfig {
     }
 
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank() && !apiKey.equals("default_mock_key");
+        return apiKey != null && !apiKey.isBlank();
     }
 }

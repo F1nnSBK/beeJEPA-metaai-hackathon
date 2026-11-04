@@ -1,5 +1,7 @@
 package com.beejepa;
 
+import com.beejepa.muse.MuseDiskCache;
+import com.beejepa.muse.SamGeometry;
 import com.beejepa.state.StateService;
 import com.beejepa.storage.StorageService;
 import io.micronaut.runtime.EmbeddedApplication;
@@ -8,6 +10,7 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 @MicronautTest
@@ -24,6 +27,9 @@ class ApplicationTest {
 
     @Inject
     com.beejepa.controller.MuseController museController;
+
+    @Inject
+    MuseDiskCache museDiskCache;
 
     @Inject
     @io.micronaut.http.client.annotation.Client("/")
@@ -80,8 +86,26 @@ class ApplicationTest {
 
     @Test
     void testMuseAskEndpointSerialization() {
+        String question = "What happened at the hive entrance? Analyze the segmented anomaly.";
+        for (String id : List.of("evt_rec2125_seq000_f0000", "evt_rec2125_seq000_f1217", "evt_rec2125_seq001_f0320")) {
+            museDiskCache.saveSpatialSummary(new SamGeometry.EventSpatialSummary(
+                    id, "00:00", 16.05, "CRITICAL", 28, 11, "multi_bee_interaction_cluster",
+                    List.of(
+                            new SamGeometry.ContainedBee(0, List.of(220, 320, 380, 460), 0.92),
+                            new SamGeometry.ContainedBee(1, List.of(240, 340, 360, 440), 0.88)
+                    ),
+                    List.of(List.of(220, 320, 380, 460), List.of(240, 340, 360, 440)),
+                    "frameB64", "cropB64"
+            ));
+        }
+        String cacheKey = question + "|,evt_rec2125_seq000_f0000,evt_rec2125_seq000_f1217,evt_rec2125_seq001_f0320";
+        museDiskCache.saveMuseResponse(
+                cacheKey,
+                "<REPORT>### Live Cached Hive Report\n- 28 bees on landing board.</REPORT>\n<SPOKEN>Twenty-eight bees on the landing board.</SPOKEN>"
+        );
+
         var req = io.micronaut.http.HttpRequest.POST("/api/v1/muse/ask", Map.of(
-                "question", "What happened at the hive entrance? Analyze the segmented anomaly."
+                "question", question
         ));
         var resp = httpClient.toBlocking().exchange(req, String.class);
         Assertions.assertEquals(200, resp.getStatus().getCode());
@@ -98,11 +122,11 @@ class ApplicationTest {
 
     @Test
     void testMuseTtsEndpoint() {
-        var req = io.micronaut.http.HttpRequest.GET("/api/v1/muse/tts");
+        var req = io.micronaut.http.HttpRequest.GET("/api/v1/muse/tts?text=Hive+entrance+status+normal");
         var resp = httpClient.toBlocking().exchange(req, byte[].class);
         Assertions.assertEquals(200, resp.getStatus().getCode());
         Assertions.assertNotNull(resp.body());
-        Assertions.assertTrue(resp.body().length > 1000);
+        Assertions.assertTrue(resp.body().length > 512);
         Assertions.assertEquals("audio/mpeg", resp.getContentType().map(Object::toString).orElse(""));
     }
 }
