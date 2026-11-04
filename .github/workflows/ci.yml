@@ -72,7 +72,66 @@ jobs:
           name: beejepa-raspi-release
           path: |
             build/libs/*-all.jar
+            src/main/resources/public/
             Dockerfile
             docker-compose.yml
             deploy/
           retention-days: 7
+
+  deploy-raspberry-pi:
+    name: Deploy to Raspberry Pi (Self-Hosted ARM64)
+    needs: build-and-test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/java25-sam-muse-pipeline'))
+    runs-on: [self-hosted, linux, arm64]
+
+    steps:
+      - name: Download Raspberry Pi Release Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: beejepa-raspi-release
+          path: release-bundle
+
+      - name: Deploy Prebuilt Bundle & Reload Nginx on Raspberry Pi
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="/home/finn/beejepa-raspi"
+          SSD_DATA_DIR="/mnt/onlypits/beeJEPA"
+          EXT4_STATE_DIR="/mnt/onlypits-ext4/beejepa"
+
+          chmod 755 /home/finn
+          mkdir -p "${REMOTE_DIR}/public"
+          sudo mkdir -p "${EXT4_STATE_DIR}/sqlite" "${EXT4_STATE_DIR}/redis"
+          sudo chown -R finn:finn "${EXT4_STATE_DIR}"
+          ln -sfn "${SSD_DATA_DIR}" "${REMOTE_DIR}/data"
+
+          cp release-bundle/build/libs/*-all.jar "${REMOTE_DIR}/beeJEPA-all.jar"
+          cp release-bundle/Dockerfile release-bundle/docker-compose.yml "${REMOTE_DIR}/"
+          rm -rf "${REMOTE_DIR}/public/"*
+          cp -r release-bundle/src/main/resources/public/* "${REMOTE_DIR}/public/"
+          cp release-bundle/deploy/manifest.json "${SSD_DATA_DIR}/hackathon_sample/manifest.json"
+          cp release-bundle/deploy/beejepa-raspi-nginx.conf "${REMOTE_DIR}/beejepa-raspi-nginx.conf"
+
+          cd "${REMOTE_DIR}"
+          BEEJEPA_DOCKER_TARGET=prebuilt-runtime \
+          BEEJEPA_HOST_DATA_DIR="${SSD_DATA_DIR}" \
+          BEEJEPA_HOST_SQLITE_DIR="${EXT4_STATE_DIR}/sqlite" \
+          docker compose up -d --build --remove-orphans
+
+          sudo cp "${REMOTE_DIR}/beejepa-raspi-nginx.conf" /etc/nginx/sites-available/beejepa
+          sudo ln -sfn /etc/nginx/sites-available/beejepa /etc/nginx/sites-enabled/beejepa
+          sudo rm -f /etc/nginx/sites-enabled/onlypits /etc/nginx/sites-enabled/default /etc/nginx/sites-available/onlypits
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Verify Live Raspberry Pi Health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8080/api/v1/ping && break || sleep 1
+          done
+          echo ""
+          curl -fsS http://127.0.0.1:8080/api/v1/muse/status
+          echo ""
+          curl -fsS http://127.0.0.1/api/v1/ping
+          echo ""
+
