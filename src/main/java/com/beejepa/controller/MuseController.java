@@ -294,67 +294,29 @@ public class MuseController {
         return museService.callEmbedding(request);
     }
 
+    /**
+     * Selects the events sent to SAM + Muse: the event selected in the UI (if any) first, followed by the
+     * highest token-delta events of the catalog, so catalog-wide questions are never answered from one event.
+     */
     private List<MetaMuseService.ManifestEventInput> resolveTopEvents(String requestedEventId, int maxEventsToTake) {
         List<MetaMuseService.ManifestEventInput> topEvents = new ArrayList<>();
         if (eventService == null) {
             return topEvents;
         }
-        boolean specificEventRequested = requestedEventId != null && !requestedEventId.isBlank();
         List<Map<String, Object>> rawEvents = new ArrayList<>(eventService.listEvents());
-
-        if (specificEventRequested) {
-            rawEvents.sort((a, b) -> {
-                String idA = (String) a.get("eventId");
-                String idB = (String) b.get("eventId");
-                if (requestedEventId.equals(idA)) return -1;
-                if (requestedEventId.equals(idB)) return 1;
-                return 0;
-            });
-        } else {
-            List<String> canonicalIds = List.of(
-                    "evt_rec2125_seq000_f0000",
-                    "evt_rec2125_seq000_f1217",
-                    "evt_rec2125_seq001_f0320"
-            );
-
-            rawEvents.sort((a, b) -> {
-                String idA = (String) a.get("eventId");
-                String idB = (String) b.get("eventId");
-                int idxA = canonicalIds.indexOf(idA);
-                int idxB = canonicalIds.indexOf(idB);
-                if (idxA >= 0 && idxB >= 0) return Integer.compare(idxA, idxB);
-                if (idxA >= 0) return -1;
-                if (idxB >= 0) return 1;
-                return 0;
-            });
+        rawEvents.sort((a, b) -> Double.compare(
+                b.get("tokenDeltaScore") instanceof Number nb ? nb.doubleValue() : Double.NEGATIVE_INFINITY,
+                a.get("tokenDeltaScore") instanceof Number na ? na.doubleValue() : Double.NEGATIVE_INFINITY));
+        if (requestedEventId != null && !requestedEventId.isBlank()) {
+            rawEvents.stream()
+                    .filter(ev -> requestedEventId.equals(ev.get("eventId")))
+                    .findFirst()
+                    .ifPresent(ev -> topEvents.add(MetaMuseService.toManifestInput(ev)));
         }
-
         for (Map<String, Object> ev : rawEvents) {
             if (topEvents.size() >= maxEventsToTake) break;
-            String eventId = (String) ev.get("eventId");
-            String formattedTime = (String) ev.getOrDefault("formattedTime", "00:00");
-            double surprise = ev.get("surpriseScoreL2") instanceof Number n ? n.doubleValue() : 0.0;
-            String severity = (String) ev.getOrDefault("severity", "MEDIUM");
-
-            com.beejepa.event.AnomalyEvent.Hotspot hs = ev.get("hotspot") instanceof com.beejepa.event.AnomalyEvent.Hotspot h ? h : null;
-            Double ncx = hs != null ? hs.normCenterX() : null;
-            Double ncy = hs != null ? hs.normCenterY() : null;
-            int[] bb = hs != null ? hs.boundingBoxPx() : null;
-
-            Path keyframePath = eventService.findExactEventFrameFile(eventId)
-                    .map(File::toPath)
-                    .orElse(null);
-
-            topEvents.add(new MetaMuseService.ManifestEventInput(
-                    eventId,
-                    formattedTime,
-                    surprise,
-                    severity,
-                    keyframePath,
-                    ncx,
-                    ncy,
-                    bb
-            ));
+            if (requestedEventId != null && requestedEventId.equals(ev.get("eventId"))) continue;
+            topEvents.add(MetaMuseService.toManifestInput(ev));
         }
         return topEvents;
     }
@@ -364,18 +326,18 @@ public class MuseController {
         long startTime = System.currentTimeMillis();
         String logId = UUID.randomUUID().toString();
         String question = payload != null && payload.get("question") != null
-                ? String.valueOf(payload.get("question"))
-                : "What happened at my hive today?";
-        String requestedEventId = payload != null && payload.get("eventId") != null
-                ? String.valueOf(payload.get("eventId"))
-                : null;
-        boolean specificEventRequested = requestedEventId != null && !requestedEventId.isBlank();
-        int maxEventsToTake = specificEventRequested ? 1 : 3;
+                ? String.valueOf(payload.get("question")).trim()
+                : "";
+        if (question.isBlank()) {
+            return HttpResponse.<Map<String, Object>>badRequest().body(Map.of("error", "question is required"));
+        }
+        String requestedEventId = payload.get("eventId") != null ? String.valueOf(payload.get("eventId")) : null;
+        int maxEventsToTake = payload.get("maxEvents") instanceof Number n ? Math.max(1, Math.min(5, n.intValue())) : 3;
 
         List<MetaMuseService.ManifestEventInput> topEvents = resolveTopEvents(requestedEventId, maxEventsToTake);
 
-        boolean forceLive = payload != null && ("true".equalsIgnoreCase(String.valueOf(payload.get("forceLive")))
-                || Boolean.TRUE.equals(payload.get("forceLive")));
+        boolean forceLive = "true".equalsIgnoreCase(String.valueOf(payload.get("forceLive")))
+                || Boolean.TRUE.equals(payload.get("forceLive"));
         MetaMuseService.MuseAnswerResult answerResult = museService.answerBeekeeperQuestionWithMeta(
                 question, topEvents, maxEventsToTake, forceLive);
         List<SamGeometry.EventSpatialSummary> summaries = museService.analyzeEventsInParallel(topEvents);
@@ -388,7 +350,7 @@ public class MuseController {
                     logId,
                     "/api/v1/muse/ask",
                     question,
-                    200,
+                    "UNAVAILABLE".equals(answerResult.sourceMode()) ? 503 : 200,
                     latency,
                     Instant.now()
             ));
@@ -416,6 +378,10 @@ public class MuseController {
         responseMap.put("degradedFallback", answerResult.degradedFallback());
         responseMap.put("telemetry", telemetry);
 
+        if ("UNAVAILABLE".equals(answerResult.sourceMode())) {
+            responseMap.put("error", "Meta Muse is currently unavailable. No answer was generated.");
+            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE).body(responseMap);
+        }
         return HttpResponse.ok(responseMap);
     }
 }

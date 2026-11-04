@@ -58,7 +58,7 @@ class SamGeometryTest {
 
     @Test
     void testFindContainedBeesAndClassification() {
-        BoundingBox hotspot = SamGeometry.defaultEntranceHotspot(); // [235, 372, 395, 480]
+        BoundingBox hotspot = new BoundingBox(235, 372, 395, 480);
 
         BoundingBox bee1 = new BoundingBox(250, 390, 290, 430); // inside
         BoundingBox bee2 = new BoundingBox(310, 410, 350, 450); // inside
@@ -69,16 +69,14 @@ class SamGeometryTest {
         Assertions.assertEquals(0, contained.get(0).beeIndex());
         Assertions.assertEquals(1, contained.get(1).beeIndex());
 
-        // Multi-bee interaction classification
-        String classMulti = SamGeometry.classifyHotspot(contained);
-        Assertions.assertEquals("multi_bee_interaction_cluster", classMulti);
+        // Factual count labels only (no predator or intruder claims)
+        Assertions.assertEquals("multi_bee_cluster_in_hotspot", SamGeometry.classifyHotspot(contained));
+        Assertions.assertEquals("single_bee_in_hotspot", SamGeometry.classifyHotspot(List.of(contained.get(0))));
+        Assertions.assertEquals("no_bee_in_hotspot", SamGeometry.classifyHotspot(List.of()));
+    }
 
-        // Single bee classification
-        String classSingle = SamGeometry.classifyHotspot(List.of(contained.get(0)));
-        Assertions.assertEquals("single_anomalous_honeybee", classSingle);
-
-        // Potential non-bee anomaly (empty)
-        String classNone = SamGeometry.classifyHotspot(List.of());
-        Assertions.assertEquals("potential_non_bee_anomaly", classNone);
+    @Test
+    void testMissingHotspotBoxYieldsNoBox() {
+        Assertions.assertNull(SamGeometry.fromManifestBoxPx(null, 688, 688));
     }
 }
