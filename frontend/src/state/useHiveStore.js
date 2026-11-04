@@ -341,7 +341,6 @@ async function loadSystemAndData() {
   fetchPerceptionTelemetry()
   fetchSaccadicTargets()
   fetchAblationPyramid(selectedEvent.value?.eventId)
-  warmMusePipeline(selectedEvent.value?.eventId)
 }
 
 let lastWarmedEventId = null
@@ -362,7 +361,7 @@ function warmMusePipeline(eventId = null) {
     cancelKey: 'warmMuse',
     retries: 0,
     timeoutMs: 6000
-  }).catch(() => {})
+  }).catch(() => { })
 }
 
 function isGlobalCohortQuestion(questionText) {
@@ -399,183 +398,183 @@ async function askMuse(question = null, options = {}) {
       retries: 1,
       timeoutMs: 45000
     })
-      if (res.ok && res.data && res.data.sourceMode !== 'UNAVAILABLE') {
-        const normalized = normalizeMuseDiagnosis(res.data)
-        museDiagnosis.value = normalized
-        fetchSaccadicTargets()
+    if (res.ok && res.data && res.data.sourceMode !== 'UNAVAILABLE') {
+      const normalized = normalizeMuseDiagnosis(res.data)
+      museDiagnosis.value = normalized
+      fetchSaccadicTargets()
 
-        if (!silentAutoLoad) {
-          if (beeModeActive.value) {
-            const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
-            playBeeBuzz(textToBuzz)
-          } else if (autoReadAloud.value && normalized.spokenSummary) {
-            readAloud(normalized.spokenSummary)
-          }
+      if (!silentAutoLoad) {
+        if (beeModeActive.value) {
+          const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
+          playBeeBuzz(textToBuzz)
+        } else if (autoReadAloud.value && normalized.spokenSummary) {
+          readAloud(normalized.spokenSummary)
         }
-      } else if (!res.aborted) {
-        museDiagnosis.value = null
-        museError.value = res.data?.error || 'Meta Muse is currently unavailable. No answer was generated.'
       }
-    } finally {
-      isAskingMuse.value = false
+    } else if (!res.aborted) {
+      museDiagnosis.value = null
+      museError.value = res.data?.error || 'Meta Muse is currently unavailable. No answer was generated.'
     }
+  } finally {
+    isAskingMuse.value = false
   }
+}
 
 async function prepareMusePayload(event = null, question = null) {
-    const ev = event || selectedEvent.value
-    const q = question || museQuestionInput.value
+  const ev = event || selectedEvent.value
+  const q = question || museQuestionInput.value
 
-    isPreparingMuse.value = true
-    try {
-      const res = await apiFetch('/api/v1/muse/prepare-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: ev?.eventId || (events.value.length > 0 ? events.value[0].eventId : null),
-          question: q,
-          eventData: ev || (events.value.length > 0 ? events.value[0] : null),
-          dryRun: true
-        }),
-        cancelKey: 'prepareMuse',
-        retries: 1
-      })
-      if (res.ok && res.data) {
-        stagedSamQuery.value = null
-        stagedMuseQuery.value = res.data
-        stagedTab.value = 'prompt'
-        stagedMuseModalOpen.value = true
+  isPreparingMuse.value = true
+  try {
+    const res = await apiFetch('/api/v1/muse/prepare-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: ev?.eventId || (events.value.length > 0 ? events.value[0].eventId : null),
+        question: q,
+        eventData: ev || (events.value.length > 0 ? events.value[0] : null),
+        dryRun: true
+      }),
+      cancelKey: 'prepareMuse',
+      retries: 1
+    })
+    if (res.ok && res.data) {
+      stagedSamQuery.value = null
+      stagedMuseQuery.value = res.data
+      stagedTab.value = 'prompt'
+      stagedMuseModalOpen.value = true
+    }
+  } finally {
+    isPreparingMuse.value = false
+  }
+}
+
+async function prepareSamPayload(event = null, prompt = null) {
+  const ev = event || selectedEvent.value
+  if (!ev) return
+  const p = prompt || 'bee'
+
+  isPreparingMuse.value = true
+  try {
+    const res = await apiFetch('/api/v1/muse/prepare-sam', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: ev.eventId,
+        prompt: p,
+        customBox: ev.hotspot ? {
+          x: ev.hotspot.normCenterX - 0.06,
+          y: ev.hotspot.normCenterY - 0.07,
+          width: 0.12,
+          height: 0.14
+        } : null,
+        mediaType: 'image'
+      }),
+      cancelKey: 'prepareSam',
+      retries: 1
+    })
+    if (res.ok && res.data) {
+      stagedMuseQuery.value = null
+      stagedSamQuery.value = res.data
+      stagedTab.value = 'payload'
+      stagedMuseModalOpen.value = true
+    }
+  } finally {
+    isPreparingMuse.value = false
+  }
+}
+
+async function runMetaAnalysis() {
+  if (!selectedEvent.value) return
+  isAnalyzing.value = true
+  try {
+    const res = await apiFetch(`/api/v1/events/${selectedEvent.value.eventId}/analyze?forceRefresh=true`, {
+      method: 'POST',
+      cancelKey: 'runMetaAnalysis',
+      retries: 1,
+      timeoutMs: 45000
+    })
+    if (res.ok && res.data) {
+      selectedEvent.value.agentResult = res.data
+      selectedEvent.value.isCached = true
+      const idx = events.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
+      if (idx !== -1) {
+        events.value[idx].agentResult = res.data
+        events.value[idx].isCached = true
       }
-    } finally {
-      isPreparingMuse.value = false
+      fetchSaccadicTargets()
     }
+  } finally {
+    isAnalyzing.value = false
   }
+}
 
-  async function prepareSamPayload(event = null, prompt = null) {
-    const ev = event || selectedEvent.value
-    if (!ev) return
-    const p = prompt || 'bee'
+export function useHiveStore() {
+  return {
+    // Auth
+    isAuthenticated,
+    isAuthResolved,
+    currentUser,
+    fetchUserProfile,
 
-    isPreparingMuse.value = true
-    try {
-      const res = await apiFetch('/api/v1/muse/prepare-sam', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: ev.eventId,
-          prompt: p,
-          customBox: ev.hotspot ? {
-            x: ev.hotspot.normCenterX - 0.06,
-            y: ev.hotspot.normCenterY - 0.07,
-            width: 0.12,
-            height: 0.14
-          } : null,
-          mediaType: 'image'
-        }),
-        cancelKey: 'prepareSam',
-        retries: 1
-      })
-      if (res.ok && res.data) {
-        stagedMuseQuery.value = null
-        stagedSamQuery.value = res.data
-        stagedTab.value = 'payload'
-        stagedMuseModalOpen.value = true
-      }
-    } finally {
-      isPreparingMuse.value = false
-    }
+    // System & Health
+    storageStatus,
+    metaHealth,
+    resilienceTelemetry,
+    ringBufferTelemetry,
+    checkMetaHealth,
+    fetchPerceptionTelemetry,
+    loadSystemAndData,
+
+    // Timeline, Events & Saccades
+    timelineData,
+    timelineMeta,
+    events,
+    selectedEvent,
+    currentTimelineSec,
+    activeView,
+    isAnalyzing,
+    saccadicTargets,
+    activeSaccade,
+    ablationPyramid,
+    selectedPyramidTier,
+    selectedCounterfactual,
+    fetchSaccadicTargets,
+    fetchAblationPyramid,
+    updateActiveSaccade,
+    runMetaAnalysis,
+
+    // Muse & Staging
+    stagedMuseModalOpen,
+    stagedMuseQuery,
+    stagedSamQuery,
+    isPreparingMuse,
+    isTranscribing,
+    voiceTranscript,
+    museQuestionInput,
+    stagedTab,
+    museDiagnosis,
+    museError,
+    isAskingMuse,
+    showRawWirePayload,
+    askMuse,
+    warmMusePipeline,
+    prepareMusePayload,
+    prepareSamPayload,
+
+    // Unified Audio & Voice
+    beeModeActive,
+    autoReadAloud,
+    isBeeModePlaying,
+    isPlayingBeeBuzz,
+    isLoadingTts,
+    isSpeakingAloud,
+    isRecording,
+    isProcessing,
+    stopAllAudio,
+    readAloud,
+    stopReadAloud,
+    playBeeBuzz
   }
-
-  async function runMetaAnalysis() {
-    if (!selectedEvent.value) return
-    isAnalyzing.value = true
-    try {
-      const res = await apiFetch(`/api/v1/events/${selectedEvent.value.eventId}/analyze?forceRefresh=true`, {
-        method: 'POST',
-        cancelKey: 'runMetaAnalysis',
-        retries: 1,
-        timeoutMs: 45000
-      })
-      if (res.ok && res.data) {
-        selectedEvent.value.agentResult = res.data
-        selectedEvent.value.isCached = true
-        const idx = events.value.findIndex(e => e.eventId === selectedEvent.value.eventId)
-        if (idx !== -1) {
-          events.value[idx].agentResult = res.data
-          events.value[idx].isCached = true
-        }
-        fetchSaccadicTargets()
-      }
-    } finally {
-      isAnalyzing.value = false
-    }
-  }
-
-  export function useHiveStore() {
-    return {
-      // Auth
-      isAuthenticated,
-      isAuthResolved,
-      currentUser,
-      fetchUserProfile,
-
-      // System & Health
-      storageStatus,
-      metaHealth,
-      resilienceTelemetry,
-      ringBufferTelemetry,
-      checkMetaHealth,
-      fetchPerceptionTelemetry,
-      loadSystemAndData,
-
-      // Timeline, Events & Saccades
-      timelineData,
-      timelineMeta,
-      events,
-      selectedEvent,
-      currentTimelineSec,
-      activeView,
-      isAnalyzing,
-      saccadicTargets,
-      activeSaccade,
-      ablationPyramid,
-      selectedPyramidTier,
-      selectedCounterfactual,
-      fetchSaccadicTargets,
-      fetchAblationPyramid,
-      updateActiveSaccade,
-      runMetaAnalysis,
-
-      // Muse & Staging
-      stagedMuseModalOpen,
-      stagedMuseQuery,
-      stagedSamQuery,
-      isPreparingMuse,
-      isTranscribing,
-      voiceTranscript,
-      museQuestionInput,
-      stagedTab,
-      museDiagnosis,
-      museError,
-      isAskingMuse,
-      showRawWirePayload,
-      askMuse,
-      warmMusePipeline,
-      prepareMusePayload,
-      prepareSamPayload,
-
-      // Unified Audio & Voice
-      beeModeActive,
-      autoReadAloud,
-      isBeeModePlaying,
-      isPlayingBeeBuzz,
-      isLoadingTts,
-      isSpeakingAloud,
-      isRecording,
-      isProcessing,
-      stopAllAudio,
-      readAloud,
-      stopReadAloud,
-      playBeeBuzz
-    }
-  }
+}
 

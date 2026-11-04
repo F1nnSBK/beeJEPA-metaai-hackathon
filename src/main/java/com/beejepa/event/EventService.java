@@ -66,7 +66,6 @@ public class EventService {
             double maxScore) {
     }
 
-
     record EventInfo(
             String eventId,
             String recordingId,
@@ -85,7 +84,6 @@ public class EventService {
             Integer clipStartFrame) {
     }
 
-
     record TimelinePoint(
             String sequenceId,
             String recordingId,
@@ -96,7 +94,6 @@ public class EventService {
             int boardPeaks,
             String eventId) {
     }
-
 
     record Catalog(
             String source,
@@ -126,14 +123,14 @@ public class EventService {
             }
             Catalog loaded = raw != null
                     ? buildCatalog(raw.source(), raw.sequences(), raw.events(), raw.timeline())
-                    : new Catalog("none", List.of(), List.of(), Map.of(), List.of(), Double.NaN, Double.NaN, Double.NaN);
+                    : new Catalog("none", List.of(), List.of(), Map.of(), List.of(), Double.NaN, Double.NaN,
+                            Double.NaN);
             catalog = loaded;
             loadPersistedHotspots(loaded);
             startHotspotMeasurement(loaded);
             return loaded;
         }
     }
-
 
     private static Catalog buildCatalog(
             String source,
@@ -178,9 +175,9 @@ public class EventService {
         static CsvTable read(Path path) throws IOException {
             CsvTable t = new CsvTable();
             List<String> lines = Files.readAllLines(path);
-                if (lines.isEmpty()) {
-                    return t;
-                }
+            if (lines.isEmpty()) {
+                return t;
+            }
             String[] head = lines.getFirst().trim().split(",", -1);
             for (int i = 0; i < head.length; i++) {
                 t.header.put(head[i].trim(), i);
@@ -204,9 +201,9 @@ public class EventService {
     }
 
     private void loadPersistedHotspots(Catalog c) {
-            if (museDiskCache.getStateRepository() == null) {
-                return;
-            }
+        if (museDiskCache.getStateRepository() == null) {
+            return;
+        }
         for (EventInfo e : c.events()) {
             try {
                 museDiskCache.getStateRepository().get(HOTSPOT_KEY_PREFIX + e.eventId()).ifPresent(s -> {
@@ -248,14 +245,15 @@ public class EventService {
                 hotspotVersion.incrementAndGet();
                 measured++;
             }
-            LOG.info("Hotspot measurement finished: {} newly measured, {} total known", measured, measuredHotspots.size());
+            LOG.info("Hotspot measurement finished: {} newly measured, {} total known", measured,
+                    measuredHotspots.size());
         });
     }
 
     private void persistHotspot(String eventId, Optional<HeatmapHotspotExtractor.MeasuredHotspot> h) {
-            if (museDiskCache.getStateRepository() == null) {
-                return;
-            }
+        if (museDiskCache.getStateRepository() == null) {
+            return;
+        }
         try {
             museDiskCache.getStateRepository().set(
                     HOTSPOT_KEY_PREFIX + eventId,
@@ -280,9 +278,9 @@ public class EventService {
     public boolean awaitHotspotMeasurement(long timeoutMs) throws InterruptedException {
         getCatalog();
         Thread t = measurementThread;
-            if (t == null) {
-                return true;
-            }
+        if (t == null) {
+            return true;
+        }
         return t.join(java.time.Duration.ofMillis(timeoutMs));
     }
 
@@ -475,7 +473,8 @@ public class EventService {
     }
 
     /** Extracts and caches the JPEG peak frame for an event. */
-    public synchronized Optional<byte[]> getOrExtractEventFrameBytes(String eventId) {
+
+    public Optional<byte[]> getOrExtractEventFrameBytes(String eventId) {
         if (!isSafePathSegment(eventId)) {
             return Optional.empty();
         }
@@ -484,30 +483,36 @@ public class EventService {
         if (cached.isPresent() && cached.get().length > 0) {
             return cached;
         }
-        EventInfo e = getCatalog().eventsById().get(eventId);
-        if (e == null) {
-            return Optional.empty();
-        }
-        Path video = null;
-        double offset = 0.0;
-        Optional<File> seq = getSequenceFile(e.sequenceClip());
-        if (seq.isPresent()) {
-            video = seq.get().toPath();
-            offset = e.timeSecLocal();
-        } else {
-            Path clip = findEventClipPath(eventId);
-            if (clip != null && e.clipStartFrame() != null) {
-                video = clip;
-                offset = Math.max(0, e.peakFrame() - e.clipStartFrame()) / CatalogLoader.FPS;
+        synchronized (eventId.intern()) {
+            cached = museDiskCache.getFrameBytes(cacheKey);
+            if (cached.isPresent() && cached.get().length > 0) {
+                return cached;
             }
+            EventInfo e = getCatalog().eventsById().get(eventId);
+            if (e == null) {
+                return Optional.empty();
+            }
+            Path video = null;
+            double offset = 0.0;
+            Optional<File> seq = getSequenceFile(e.sequenceClip());
+            if (seq.isPresent()) {
+                video = seq.get().toPath();
+                offset = e.timeSecLocal();
+            } else {
+                Path clip = findEventClipPath(eventId);
+                if (clip != null && e.clipStartFrame() != null) {
+                    video = clip;
+                    offset = Math.max(0, e.peakFrame() - e.clipStartFrame()) / CatalogLoader.FPS;
+                }
+            }
+            if (video == null) {
+                return Optional.empty();
+            }
+            Optional<byte[]> extracted = VideoFrameExtractor.extractJpegBytes(
+                    video, offset, VideoFrameExtractor.resolveFfmpegBinary());
+            extracted.ifPresent(bytes -> museDiskCache.saveFrameBytes(cacheKey, bytes));
+            return extracted;
         }
-        if (video == null) {
-            return Optional.empty();
-        }
-        Optional<byte[]> extracted = VideoFrameExtractor.extractJpegBytes(
-                video, offset, VideoFrameExtractor.resolveFfmpegBinary());
-        extracted.ifPresent(bytes -> museDiskCache.saveFrameBytes(cacheKey, bytes));
-        return extracted;
     }
 
     private Path findEventClipPath(String eventId) {

@@ -7,6 +7,8 @@ import com.beejepa.perception.SimdLatentEvaluator;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
+import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.annotation.ExecuteOn;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,7 @@ import java.util.Optional;
  * FFM Off-Heap Ring Buffer telemetry, saccadic fixation trajectories, and SIMD latent evaluations.
  */
 @Controller("/api/v1/perception")
+@ExecuteOn(TaskExecutors.BLOCKING)
 public class PerceptionController {
 
     private final ActivePerceptionService perceptionService;

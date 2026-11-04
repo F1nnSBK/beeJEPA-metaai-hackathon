@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
 import beeLogo from './assets/bee.png'
 import { apiFetch } from './api/client.js'
 import { useHiveStore } from './state/useHiveStore.js'
@@ -458,9 +458,6 @@ function getMaxSequenceIndex() {
 function selectEvent(ev) {
   selectedEvent.value = ev
   updateActiveSaccade()
-  if (ev?.eventId) {
-    warmMusePipeline(ev.eventId)
-  }
   if (ev && typeof ev.timestampSec === 'number') {
     const t = ev.timestampSec
     currentTimelineSec.value = t
@@ -473,8 +470,8 @@ function selectEvent(ev) {
 
     if (activeView.value === 'comparison' || activeView.value === 'sequence') {
       if (targetSeqIdx !== currentSequenceIndex.value) {
-        currentSequenceIndex.value = targetSeqIdx
         pendingSeekSec = localSec
+        currentSequenceIndex.value = targetSeqIdx
       } else if (videoPlayer.value) {
         try {
           videoPlayer.value.currentTime = localSec
@@ -693,13 +690,12 @@ function syncTimelineToVideo(seek = true) {
   if (closest && closest.eventId !== selectedEvent.value?.eventId) {
     selectedEvent.value = closest
     updateActiveSaccade()
-    warmMusePipeline(closest.eventId)
   }
 
   if (seek && (activeView.value === 'comparison' || activeView.value === 'sequence')) {
     if (targetSeqIdx !== currentSequenceIndex.value) {
-      currentSequenceIndex.value = targetSeqIdx
       pendingSeekSec = localSec
+      currentSequenceIndex.value = targetSeqIdx
     } else if (videoPlayer.value) {
       try {
         if (Math.abs(videoPlayer.value.currentTime - localSec) > 0.3) {
@@ -714,7 +710,7 @@ function syncTimelineToVideo(seek = true) {
 
 function onTimelineSliderInput() {
   isUserScrubbing = true
-  syncTimelineToVideo(true)
+  syncTimelineToVideo(false)
 }
 
 function onTimelineSliderChange() {
@@ -734,18 +730,20 @@ function onTimelineContainerClick(e) {
 }
 
 function onVideoLoaded() {
-  if (pendingSeekSec !== null && videoPlayer.value && !isNaN(videoPlayer.value.duration)) {
+  if (!videoPlayer.value) return
+  if (pendingSeekSec !== null && !isNaN(videoPlayer.value.duration)) {
+    const safeTarget = Math.min(pendingSeekSec, Math.max(0, videoPlayer.value.duration - 0.1))
+    pendingSeekSec = null
     try {
-      videoPlayer.value.currentTime = Math.min(pendingSeekSec, videoPlayer.value.duration)
+      videoPlayer.value.currentTime = safeTarget
     } catch (e) {
       console.debug('onVideoLoaded seek error:', e)
     }
-    pendingSeekSec = null
   }
 }
 
 function onVideoTimeUpdate() {
-  if (isUserScrubbing) return
+  if (isUserScrubbing || pendingSeekSec !== null) return
   if (!videoPlayer.value) return
   if (activeView.value === 'comparison' || activeView.value === 'sequence') {
     const globalSec = (currentSequenceIndex.value * 30.0) + (videoPlayer.value.currentTime || 0)
@@ -760,14 +758,9 @@ function onVideoTimeUpdate() {
 function onVideoEnded() {
   if (activeView.value === 'comparison' || activeView.value === 'sequence') {
     if (currentSequenceIndex.value < getMaxSequenceIndex()) {
-      currentSequenceIndex.value++
       pendingSeekSec = 0
+      currentSequenceIndex.value++
       currentTimelineSec.value = currentSequenceIndex.value * 30.0
-      nextTick(() => {
-        if (videoPlayer.value) {
-          videoPlayer.value.play().catch(() => {})
-        }
-      })
     }
   }
 }

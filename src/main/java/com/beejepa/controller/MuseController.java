@@ -272,14 +272,17 @@ public class MuseController {
     }
 
     @Post("/warm")
-    public HttpResponse<Map<String, Object>> warmPipeline(@Body @io.micronaut.core.annotation.Nullable Map<String, Object> payload) {
+    public HttpResponse<Map<String, Object>> warmPipeline(
+            @Body @io.micronaut.core.annotation.Nullable Map<String, Object> payload) {
         String requestedEventId = payload != null && payload.get("eventId") != null
                 ? String.valueOf(payload.get("eventId")).trim()
                 : null;
         if (requestedEventId != null && (requestedEventId.isBlank() || "null".equalsIgnoreCase(requestedEventId))) {
             requestedEventId = null;
         }
-        List<MetaMuseService.ManifestEventInput> eventsToWarm = resolveTopEvents(requestedEventId, 3);
+        List<MetaMuseService.ManifestEventInput> eventsToWarm = requestedEventId != null
+                ? resolveTopEvents(requestedEventId, 1)
+                : List.of();
         museService.warmPipelineAsync(eventsToWarm);
         return HttpResponse.accepted().body(Map.of(
                 "status", "WARMING",

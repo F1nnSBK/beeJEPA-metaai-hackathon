@@ -5,6 +5,8 @@ import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
 import io.micronaut.http.server.types.files.SystemFile;
+import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.annotation.ExecuteOn;
 
 import java.io.File;
 import java.util.List;
@@ -12,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Controller("/api/v1")
+@ExecuteOn(TaskExecutors.BLOCKING)
 public class EventController {
 
     private final EventService eventService;
