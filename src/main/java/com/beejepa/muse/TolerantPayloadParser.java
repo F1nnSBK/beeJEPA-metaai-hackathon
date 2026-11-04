@@ -25,7 +25,7 @@ public final class TolerantPayloadParser {
             Pattern.compile("<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)(?:;w=(\\d+(?:\\.\\d+)?);h=(\\d+(?:\\.\\d+)?))?[^|]*\\|>");
 
     private static final Pattern REPORT_TAG_REGEX =
-            Pattern.compile("(?is)<report>\\s*(.*?)\\s*</report>");
+            Pattern.compile("(?is)<report>\\s*(.*?)\\s*(?:</report>|(?=<spoken)|$)");
     private static final Pattern SPOKEN_TAG_REGEX =
             Pattern.compile("(?is)<spoken(?:_summary)?>\\s*(.*?)\\s*(?:</spoken(?:_summary)?>|$)");
     private static final Pattern SPOKEN_HEADING_SPLIT_REGEX =
@@ -419,22 +419,30 @@ public final class TolerantPayloadParser {
         }
 
         if (reportMatcher.find()) {
-            String reportOnly = reportMatcher.group(1).trim();
+            String reportOnly = stripXmlReportTags(reportMatcher.group(1));
             return new DualMuseOutput(reportOnly, sanitizeForNaturalSpeech(reportOnly));
         }
 
         // 3. Check for a Markdown heading split (e.g. "### Spoken Summary" or "--- SPOKEN ---")
         Matcher splitMatcher = SPOKEN_HEADING_SPLIT_REGEX.matcher(trimmed);
         if (splitMatcher.find()) {
-            String reportPart = trimmed.substring(0, splitMatcher.start()).trim();
-            String spokenPart = trimmed.substring(splitMatcher.end()).trim();
+            String reportPart = stripXmlReportTags(trimmed.substring(0, splitMatcher.start()));
+            String spokenPart = stripXmlReportTags(trimmed.substring(splitMatcher.end()));
             if (!reportPart.isBlank() && !spokenPart.isBlank()) {
                 return new DualMuseOutput(reportPart, sanitizeForNaturalSpeech(spokenPart));
             }
         }
 
         // 4. Fallback: single Markdown report -> derive complete natural spoken summary without truncation
-        return new DualMuseOutput(trimmed, sanitizeForNaturalSpeech(trimmed));
+        String cleanFallback = stripXmlReportTags(trimmed);
+        return new DualMuseOutput(cleanFallback, sanitizeForNaturalSpeech(cleanFallback));
+    }
+
+    private static String stripXmlReportTags(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replaceAll("(?is)</?(?:report|spoken|spoken_summary)>", "").trim();
     }
 
     /**

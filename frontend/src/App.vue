@@ -379,6 +379,7 @@ function setPresetQuestion(q) {
 function formatMarkdownReport(md) {
   if (!md) return ''
   let text = md
+    .replace(/<\/?(?:report|spoken|spoken_summary)>/gi, '')
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '')
     .replace(/^\s*---+\s*$/gm, '')
     .trim()

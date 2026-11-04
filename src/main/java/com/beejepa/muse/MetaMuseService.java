@@ -783,18 +783,17 @@ public class MetaMuseService {
      * containment.
      */
     public EventSpatialSummary analyzeSingleEvent(ManifestEventInput evt) {
+        double score = Math.round(evt.surpriseScore() * 10000.0) / 10000.0;
         EventSpatialSummary inMemory = spatialCache.get(evt.eventId());
         if (inMemory != null) {
-            return alignSummaryTimestamp(inMemory, evt.formattedTime());
+            return alignSummaryTimestamp(inMemory, evt.formattedTime(), score, evt.severity());
         }
         Optional<EventSpatialSummary> cachedOnDisk = diskCache.loadSpatialSummary(evt.eventId());
         if (cachedOnDisk.isPresent()) {
-            EventSpatialSummary aligned = alignSummaryTimestamp(cachedOnDisk.get(), evt.formattedTime());
+            EventSpatialSummary aligned = alignSummaryTimestamp(cachedOnDisk.get(), evt.formattedTime(), score, evt.severity());
             spatialCache.put(evt.eventId(), aligned);
             return aligned;
         }
-
-        double score = Math.round(evt.surpriseScore() * 10000.0) / 10000.0;
         BufferedImage canonical;
         try {
             Optional<byte[]> frameBytes = perceptionService != null
@@ -863,15 +862,21 @@ public class MetaMuseService {
         return summary;
     }
 
-    private static EventSpatialSummary alignSummaryTimestamp(EventSpatialSummary s, String formattedTime) {
-        if (formattedTime == null || formattedTime.isBlank() || formattedTime.equals(s.timestamp())) {
+    private static EventSpatialSummary alignSummaryTimestamp(EventSpatialSummary s, String formattedTime, double score,
+            String severity) {
+        String alignedTime = (formattedTime != null && !formattedTime.isBlank()) ? formattedTime : s.timestamp();
+        double alignedScore = (!Double.isNaN(score) && score > 0.0) ? score : s.tokenDeltaScore();
+        String alignedSeverity = (severity != null && !severity.isBlank()) ? severity : s.severity();
+        if (Objects.equals(alignedTime, s.timestamp())
+                && Double.compare(alignedScore, s.tokenDeltaScore()) == 0
+                && Objects.equals(alignedSeverity, s.severity())) {
             return s;
         }
         return new EventSpatialSummary(
                 s.eventId(),
-                formattedTime,
-                s.tokenDeltaScore(),
-                s.severity(),
+                alignedTime,
+                alignedScore,
+                alignedSeverity,
                 s.landingBoardBeeCount(),
                 s.beesInsideHotspotCount(),
                 s.geometricPreClassification(),
@@ -1036,7 +1041,7 @@ public class MetaMuseService {
 
         ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
                 .model(activeModel)
-                .maxCompletionTokens(4096)
+                .maxCompletionTokens(8192)
                 .addSystemMessage(systemPrompt)
                 .addUserMessageOfArrayOfContentParts(userParts)
                 .addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO);
@@ -1061,7 +1066,7 @@ public class MetaMuseService {
                 Map<String, Object> toolResult = executeSamConceptTool(inlineArgsJson, summaries);
                 ChatCompletionCreateParams followUpParams = ChatCompletionCreateParams.builder()
                         .model(activeModel)
-                        .maxCompletionTokens(4096)
+                        .maxCompletionTokens(8192)
                         .addSystemMessage(systemPrompt)
                         .addUserMessageOfArrayOfContentParts(userParts)
                         .addUserMessage("SAM 3.1 tool verification result: "
@@ -1082,7 +1087,7 @@ public class MetaMuseService {
                         firstTurn.choices().getFirst().finishReason());
                 ChatCompletionCreateParams directParams = ChatCompletionCreateParams.builder()
                         .model(activeModel)
-                        .maxCompletionTokens(4096)
+                        .maxCompletionTokens(8192)
                         .addSystemMessage(systemPrompt)
                         .addUserMessageOfArrayOfContentParts(userParts)
                         .build();
@@ -1097,7 +1102,7 @@ public class MetaMuseService {
 
         ChatCompletionCreateParams.Builder secondTurnBuilder = ChatCompletionCreateParams.builder()
                 .model(activeModel)
-                .maxCompletionTokens(4096)
+                .maxCompletionTokens(8192)
                 .addSystemMessage(systemPrompt)
                 .addUserMessageOfArrayOfContentParts(userParts)
                 .addMessage(assistantMsg);

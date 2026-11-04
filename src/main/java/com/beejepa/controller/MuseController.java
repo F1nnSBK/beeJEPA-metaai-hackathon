@@ -159,7 +159,7 @@ public class MuseController {
         MuseDiskCache cache = museService != null ? museService.getDiskCache() : null;
         if (cache != null) {
             Optional<byte[]> cachedAudio = cache.getTtsAudio(hash);
-            if (cachedAudio.isPresent() && cachedAudio.get().length > 512) {
+            if (cachedAudio.isPresent() && cachedAudio.get().length > 512 && !isRiffWav(cachedAudio.get())) {
                 return HttpResponse.ok(cachedAudio.get())
                         .header("Content-Type", "audio/mpeg")
                         .header("X-Cache", cache.getCacheBackendDescription())
@@ -182,11 +182,11 @@ public class MuseController {
                 ProcessBuilder pb = new ProcessBuilder(
                         edgeTtsBin,
                         "--voice", "en-US-AvaNeural",
-                        "--text", spokenText,
+                        "--text=" + spokenText,
                         "--write-media", tmpFile.toAbsolutePath().toString());
                 pb.redirectErrorStream(true);
                 Process proc = pb.start();
-                boolean finished = proc.waitFor(10, TimeUnit.SECONDS);
+                boolean finished = proc.waitFor(15, TimeUnit.SECONDS);
                 if (!finished) {
                     proc.destroyForcibly();
                 }
@@ -203,7 +203,7 @@ public class MuseController {
                 }
             }
         } catch (Exception e) {
-            LOG.warn("edge-tts synthesis failed ({}); falling back to live acoustic synthesizer.", e.getMessage());
+            LOG.warn("edge-tts synthesis failed: {}", e.getMessage());
         } finally {
             if (tmpFile != null) {
                 try {
@@ -213,20 +213,12 @@ public class MuseController {
             }
         }
 
-        if (acousticSynthesizer != null) {
-            byte[] synthesized = acousticSynthesizer.synthesizeWav(spokenText);
-            if (synthesized != null && synthesized.length > 512) {
-                if (cache != null) {
-                    cache.saveTtsAudio(hash, spokenText, synthesized);
-                }
-                return HttpResponse.ok(synthesized)
-                        .header("Content-Type", "audio/mpeg")
-                        .header("X-Cache", "MISS_ACOUSTIC_SYNTH")
-                        .header("Cache-Control", "public, max-age=86400");
-            }
-        }
+        return HttpResponse.status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
-        return HttpResponse.notFound();
+    private static boolean isRiffWav(byte[] bytes) {
+        return bytes != null && bytes.length >= 4
+                && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F';
     }
 
     @Post("/generate")
