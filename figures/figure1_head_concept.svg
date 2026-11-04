@@ -95,9 +95,9 @@
    <!-- Highlighted Tubelet Hotspot (4,2) -->
    <rect x="56" y="68" width="32" height="24" fill="#ef4444" fill-opacity=".28" stroke="#dc2626" stroke-width="1.6"/>
   </g>
-  <text class="comp-label" x="125" y="342">V-JEPA <tspan class="math-text" font-family="Fira Math">2.1</tspan> (<tspan class="math-text" font-family="Fira Math">9×9</tspan> Grid)</text>
+  <text class="comp-label" x="125" y="342">V-JEPA <tspan class="math-text" font-family="Fira Math">2.1</tspan> (ViT-B/<tspan class="math-text" font-family="Fira Math">16</tspan> · <tspan class="math-text" font-family="Fira Math">43×43</tspan>)</text>
   <rect x="28" y="356" width="194" height="24" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text class="metric-pill" x="125" y="372"><tspan class="math-text" font-family="Fira Math">60</tspan> fps · <tspan class="math-text" font-family="Fira Math">18,000</tspan> frames</text>
+  <text class="metric-pill" x="125" y="372"><tspan class="math-text" font-family="Fira Math">60</tspan> fps · <tspan class="math-text" font-family="Fira Math">2,688</tspan> windows</text>
  </g>
  <!-- Stage 1 -> Stage 2 Arrow -->
  <line x1="312" x2="334" y1="260" y2="260" marker-end="url(#arrow-flow)" stroke="#64748b" stroke-width="1.6"/>
@@ -125,15 +125,15 @@
    <!-- Axes -->
    <line x2="202" y1="96" y2="96" stroke="#64748b"/>
    <line y1="10" y2="96" stroke="#64748b"/>
-   <!-- Threshold line tau = 10.2 sigma -->
+   <!-- Threshold line tau (P99) -->
    <line x2="202" y1="52" y2="52" stroke="#dc2626" stroke-dasharray="4,3" stroke-width="1.1"/>
-   <text class="axis-tag math-text" x="8" y="45" fill="#dc2626" font-family="Fira Math">τ = 10.2σ</text>
+   <text class="axis-tag math-text" x="8" y="45" fill="#dc2626" font-family="Fira Math">τ (P99)</text>
    <!-- Surprise Curve S(t) -->
    <path d="m4 84 20-4 20 3 20-5 16 4 16-68 16 65 20 3 22-50 16 49 26 2" fill="none" stroke="#2563eb" stroke-linejoin="round" stroke-width="2"/>
    <!-- Peak Markers -->
    <circle cx="96" cy="14" r="4.5" fill="#dc2626"/>
    <circle cx="154" cy="32" r="3.5" fill="#f59e0b"/>
-   <text class="axis-tag math-text" x="106" y="16" fill="#dc2626" font-family="Fira Math">16.05σ</text>
+   <text class="axis-tag math-text" x="106" y="16" fill="#dc2626" font-family="Fira Math">16.05</text>
   </g>
   <!-- Visual Frame Filtering Funnel (Many grey frames -> 1 active peak frame) -->
   <g transform="translate(45 290)">
@@ -145,9 +145,9 @@
    <rect x="104" width="24" height="26" rx="3" fill="#fef2f2" stroke="#dc2626" stroke-width="1.6"/>
    <circle cx="116" cy="13" r="4" fill="#dc2626"/>
   </g>
-  <text class="comp-label math-text" x="125" y="342" font-family="Fira Math">𝑆(𝑡) = ‖𝑧<tspan dy="2.5" font-size="8.5">pred</tspan><tspan dx="3" dy="-2.5">− 𝑧</tspan><tspan dy="2.5" font-size="8.5">target</tspan><tspan dx="1" dy="-2.5">‖</tspan><tspan dy="2.5" font-size="8.5">2</tspan></text>
+  <text class="comp-label" x="125" y="342">Token-<tspan class="math-text" font-family="Fira Math">Δ</tspan> Trajectory</text>
   <rect x="28" y="356" width="194" height="24" rx="12" fill="#fef2f2" stroke="#fecaca"/>
-  <text class="metric-pill" x="125" y="372" fill="#991b1b"><tspan class="math-text" font-family="Fira Math">−93.6%</tspan> frames (<tspan class="math-text" font-family="Fira Math">20</tspan> peaks)</text>
+  <text class="metric-pill" x="125" y="372" fill="#991b1b"><tspan class="math-text" font-family="Fira Math">−93.2%</tspan> windows (<tspan class="math-text" font-family="Fira Math">184</tspan> peaks)</text>
  </g>
  <!-- Stage 2 -> Stage 3 Arrow -->
  <line x1="598" x2="620" y1="260" y2="260" marker-end="url(#arrow-flow)" stroke="#64748b" stroke-width="1.6"/>
