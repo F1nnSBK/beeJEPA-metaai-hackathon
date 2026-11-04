@@ -48,6 +48,7 @@ import com.openai.models.chat.completions.ChatCompletionMessageToolCall;
 import com.openai.models.chat.completions.ChatCompletionToolMessageParam;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -68,6 +69,11 @@ public class MetaMuseService {
                     Pattern.DOTALL);
     private static final Pattern INTERNAL_TAG_BLOCK = Pattern
             .compile("<\\|start\\|>assistant to=[^<]+<\\|message\\|>.*?(?:<\\|eom\\|>|<\\|eot\\|>|$)", Pattern.DOTALL);
+    private static final Pattern CONCEPT_TOOL_TRIGGER = Pattern.compile(
+            "(?i)\\b(hornet|hornets|wasp|wasps|vespa|intruder|intruders|predator|predators|pest|pests|"
+                    + "mite|mites|varroa|beetle|beetles|moth|moths|fly|flies|ant|ants|spider|spiders|bird|birds|"
+                    + "mouse|mice|robber|robbing|threat|threats|attack|attacks|foreign|other\\s+insect|other\\s+animal|"
+                    + "other\\s+organism|species|hornisse|hornissen|wespe|wespen|feind|räuber|schädling|milbe|milben)\\b");
 
     private final MetaMuseClient client;
     private final MetaMuseConfig config;
@@ -85,6 +91,9 @@ public class MetaMuseService {
     private final boolean allowLiveInference;
     private final long simulatedOfflineDelayMs;
     private final Map<String, EventSpatialSummary> spatialCache = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<EventSpatialSummary>> inFlightSpatial = new ConcurrentHashMap<>();
+    private final Map<String, String> cleanFrameB64Cache = new ConcurrentHashMap<>();
+    private volatile long lastBasetenWarmupMs;
 
     @Serdeable
     public record MuseAnswerResult(
@@ -795,6 +804,30 @@ public class MetaMuseService {
             spatialCache.put(evt.eventId(), aligned);
             return aligned;
         }
+
+        CompletableFuture<EventSpatialSummary> future = new CompletableFuture<>();
+        CompletableFuture<EventSpatialSummary> existing = inFlightSpatial.putIfAbsent(evt.eventId(), future);
+        if (existing != null) {
+            try {
+                return alignSummaryTimestamp(existing.join(), evt.formattedTime(), score, evt.severity());
+            } catch (Exception e) {
+                return unavailableSummary(evt, score, "", "");
+            }
+        }
+        try {
+            EventSpatialSummary computed = computeSingleEventSpatialSummary(evt, score);
+            future.complete(computed);
+            return computed;
+        } catch (Throwable t) {
+            EventSpatialSummary fallback = unavailableSummary(evt, score, "", "");
+            future.complete(fallback);
+            return fallback;
+        } finally {
+            inFlightSpatial.remove(evt.eventId(), future);
+        }
+    }
+
+    private EventSpatialSummary computeSingleEventSpatialSummary(ManifestEventInput evt, double score) {
         BufferedImage canonical;
         try {
             Optional<byte[]> frameBytes = perceptionService != null
@@ -815,6 +848,7 @@ public class MetaMuseService {
         String frameB64;
         try {
             frameB64 = VisualCropRenderer.encodeJpegBase64(canonical, 0.92f);
+            cleanFrameB64Cache.put(evt.eventId(), frameB64);
         } catch (Exception e) {
             return unavailableSummary(evt, score, "", "");
         }
@@ -861,6 +895,44 @@ public class MetaMuseService {
             }
         }
         return summary;
+    }
+
+    /**
+     * Asynchronously warms the TLS connection pools and pre-computes SAM 3.1 spatial
+     * summaries for the supplied events.
+     */
+    public void warmPipelineAsync(List<ManifestEventInput> events) {
+        Thread.startVirtualThread(this::warmBasetenConnection);
+        if (sam31Client != null) {
+            Thread.startVirtualThread(sam31Client::warmConnection);
+        }
+        if (events != null) {
+            for (ManifestEventInput evt : events) {
+                if (evt != null && evt.eventId() != null && !spatialCache.containsKey(evt.eventId())) {
+                    Thread.startVirtualThread(() -> analyzeSingleEvent(evt));
+                }
+            }
+        }
+    }
+
+    /** Establishes a keep-alive TLS connection in the Baseten OkHttp pool. */
+    public void warmBasetenConnection() {
+        if (!allowLiveInference || primaryApiKey.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastBasetenWarmupMs < 45_000L) {
+            return;
+        }
+        lastBasetenWarmupMs = now;
+        try {
+            basetenClient.models().list();
+        } catch (Exception ignored) {
+        }
+    }
+
+    static boolean requiresConceptTool(String beekeeperQuestion) {
+        return beekeeperQuestion != null && CONCEPT_TOOL_TRIGGER.matcher(beekeeperQuestion).find();
     }
 
 
@@ -1041,12 +1113,15 @@ public class MetaMuseService {
                 .or(() -> Optional.ofNullable(basetenConfig.getModel()))
                 .orElse(BASETEN_MODEL);
 
+        boolean enableConceptTool = requiresConceptTool(beekeeperQuestion);
         ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
                 .model(activeModel)
                 .maxCompletionTokens(8192)
                 .addSystemMessage(systemPrompt)
-                .addUserMessageOfArrayOfContentParts(userParts)
-                .addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO);
+                .addUserMessageOfArrayOfContentParts(userParts);
+        if (enableConceptTool) {
+            paramsBuilder.addTool(QuerySam31Concept.class, JsonSchemaLocalValidation.NO);
+        }
 
         ChatCompletion firstTurn = executeWithKeyFailover(paramsBuilder.build());
         if (firstTurn.choices() == null || firstTurn.choices().isEmpty()) {
@@ -1083,7 +1158,7 @@ public class MetaMuseService {
             if (firstTurnText.isBlank()) {
                 firstTurnText = extractChoiceText(firstTurn);
             }
-            if (firstTurnText.isBlank()) {
+            if (firstTurnText.isBlank() && enableConceptTool) {
                 LOG.warn(
                         "[MetaMuseService] First turn with tools returned empty text (finishReason={}); retrying direct completion without tools.",
                         firstTurn.choices().getFirst().finishReason());
@@ -1109,19 +1184,38 @@ public class MetaMuseService {
                 .addUserMessageOfArrayOfContentParts(userParts)
                 .addMessage(assistantMsg);
 
-        for (ChatCompletionMessageToolCall tc : toolCalls) {
-            if (!tc.isFunction()) {
-                continue;
-            }
-            ChatCompletionMessageFunctionToolCall ftc = tc.asFunction();
-            String rawArgsJson = ftc.function()._arguments().toString();
-            Map<String, Object> toolResult = executeSamConceptTool(rawArgsJson, summaries);
+        List<ChatCompletionMessageFunctionToolCall> functionCalls = toolCalls.stream()
+                .filter(ChatCompletionMessageToolCall::isFunction)
+                .map(ChatCompletionMessageToolCall::asFunction)
+                .toList();
 
-            secondTurnBuilder.addMessage(
-                    ChatCompletionToolMessageParam.builder()
-                            .toolCallId(ftc.id())
-                            .contentAsJson(toolResult)
-                            .build());
+        try (var toolExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Map<String, Object>>> toolFutures = functionCalls.stream()
+                    .map(ftc -> {
+                        String rawArgsJson = ftc.function()._arguments().toString();
+                        return toolExecutor.submit(() -> executeSamConceptTool(rawArgsJson, summaries));
+                    })
+                    .toList();
+
+            for (int i = 0; i < functionCalls.size(); i++) {
+                ChatCompletionMessageFunctionToolCall ftc = functionCalls.get(i);
+                Map<String, Object> toolResult = toolFutures.get(i).get();
+                secondTurnBuilder.addMessage(
+                        ChatCompletionToolMessageParam.builder()
+                                .toolCallId(ftc.id())
+                                .contentAsJson(toolResult)
+                                .build());
+            }
+        } catch (Exception e) {
+            for (ChatCompletionMessageFunctionToolCall ftc : functionCalls) {
+                String rawArgsJson = ftc.function()._arguments().toString();
+                Map<String, Object> toolResult = executeSamConceptTool(rawArgsJson, summaries);
+                secondTurnBuilder.addMessage(
+                        ChatCompletionToolMessageParam.builder()
+                                .toolCallId(ftc.id())
+                                .contentAsJson(toolResult)
+                                .build());
+            }
         }
 
         ChatCompletion secondTurn = executeWithKeyFailover(secondTurnBuilder.build());
@@ -1149,16 +1243,21 @@ public class MetaMuseService {
         toolResult.put("event_id", targetEvent.eventId());
         toolResult.put("queried_concept", args.conceptPrompt());
         try {
-            Optional<byte[]> peak = eventService != null
-                    ? eventService.getOrExtractEventFrameBytes(targetEvent.eventId())
-                    : Optional.empty();
-            if (peak.isEmpty()) {
-                throw new IllegalStateException("peak frame unavailable");
+            String cleanB64 = cleanFrameB64Cache.get(targetEvent.eventId());
+            if (cleanB64 == null || cleanB64.isBlank()) {
+                Optional<byte[]> peak = eventService != null
+                        ? eventService.getOrExtractEventFrameBytes(targetEvent.eventId())
+                        : Optional.empty();
+                if (peak.isEmpty()) {
+                    throw new IllegalStateException("peak frame unavailable");
+                }
+                BufferedImage clean = VisualCropRenderer.loadCanonicalView(peak.get());
+                cleanB64 = VisualCropRenderer.encodeJpegBase64(clean, 0.92f);
+                cleanFrameB64Cache.put(targetEvent.eventId(), cleanB64);
             }
-            BufferedImage clean = VisualCropRenderer.loadCanonicalView(peak.get());
             List<BoundingBox> matches = sam31Client.queryConcept(
-                    args.conceptPrompt(), VisualCropRenderer.encodeJpegBase64(clean, 0.92f),
-                    clean.getWidth(), clean.getHeight(), isBeeConcept);
+                    args.conceptPrompt(), cleanB64,
+                    SamGeometry.FRAME_SIZE, SamGeometry.FRAME_SIZE, isBeeConcept);
             toolResult.put("sam_status", "SUCCESS");
             toolResult.put("matches", matches.size());
             toolResult.put("match_boxes_xyxy", matches.stream().map(BoundingBox::toList).toList());

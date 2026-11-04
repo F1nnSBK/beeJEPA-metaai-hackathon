@@ -47,6 +47,7 @@ const {
   isAskingMuse,
   showRawWirePayload,
   askMuse,
+  warmMusePipeline,
   prepareMusePayload,
   prepareSamPayload,
   beeModeActive,
@@ -178,6 +179,7 @@ async function toggleMicrophoneListening() {
   }
 
   stopAllAudio()
+  warmMusePipeline(selectedEvent.value?.eventId)
 
   const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
   if (window.isSecureContext === false && !isLocalHost) {
@@ -455,6 +457,9 @@ function getMaxSequenceIndex() {
 function selectEvent(ev) {
   selectedEvent.value = ev
   updateActiveSaccade()
+  if (ev?.eventId) {
+    warmMusePipeline(ev.eventId)
+  }
   if (ev && typeof ev.timestampSec === 'number') {
     const t = ev.timestampSec
     currentTimelineSec.value = t
@@ -1392,12 +1397,14 @@ async function handleLogout() {
                 <!-- Single-Row Composer Bar -->
                 <form
                   @submit.prevent="askMuse()"
+                  @mouseenter="warmMusePipeline()"
                   class="flex items-center gap-1.5 bg-ink-950 rounded-md p-1 transition-colors"
                 >
                   <input
                     id="muse-prompt-input"
                     type="text"
                     v-model="museQuestionInput"
+                    @focus="warmMusePipeline()"
                     class="flex-1 min-w-0 px-2.5 py-1.5 bg-transparent text-ink-100 text-base sm:text-xs focus:outline-none font-sans placeholder:text-ink-500"
                     placeholder="Ask a question..."
                   />

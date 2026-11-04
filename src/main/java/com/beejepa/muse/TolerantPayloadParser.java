@@ -24,13 +24,16 @@ public final class TolerantPayloadParser {
     private static final Pattern BOX_TOKEN_REGEX = Pattern.compile(
             "<\\|box;x1=(-?\\d+(?:\\.\\d+)?);y1=(-?\\d+(?:\\.\\d+)?);x2=(-?\\d+(?:\\.\\d+)?);y2=(-?\\d+(?:\\.\\d+)?)(?:;w=(\\d+(?:\\.\\d+)?);h=(\\d+(?:\\.\\d+)?))?[^|]*\\|>");
 
+    private static final Pattern REPORT_TAG_REGEX = Pattern
+            .compile("(?is)<report>\\s*(.*?)\\s*(?:</report>|(?=<spoken)|$)");
     private static final Pattern SPOKEN_TAG_REGEX = Pattern
             .compile("(?is)<spoken(?:_summary)?>\\s*(.*?)\\s*(?:</spoken(?:_summary)?>|$)");
     private static final Pattern SPOKEN_HEADING_SPLIT_REGEX = Pattern.compile(
             "(?im)^(?:#+\\s*(?:spoken\\s+summary|natural\\s+spoken\\s+summary|voice\\s+briefing|audio\\s+narration)|---\\s*spoken\\s*---)\\s*:?\\s*$");
     private static final Pattern MM_SS_TIMESTAMP_REGEX = Pattern.compile("\\b(\\d{2}):(\\d{2})\\b");
 
-    private TolerantPayloadParser() {}
+    private TolerantPayloadParser() {
+    }
 
     public record DualMuseOutput(
             String displayReport,
@@ -77,7 +80,8 @@ public final class TolerantPayloadParser {
 
             int tx = readInt(root, defaultX, "target_x", "targetX", "x", "center_x", "centerX", "focus_x");
             int ty = readInt(root, defaultY, "target_y", "targetY", "y", "center_y", "centerY", "focus_y");
-            int radius = readInt(root, defaultRadius, "fovea_radius_px", "foveaRadiusPx", "radius", "r", "fovea_radius");
+            int radius = readInt(root, defaultRadius, "fovea_radius_px", "foveaRadiusPx", "radius", "r",
+                    "fovea_radius");
 
             tx = Math.clamp(tx, 0, SamGeometry.FRAME_SIZE);
             ty = Math.clamp(ty, 0, SamGeometry.FULL_FRAME_HEIGHT_PX);
@@ -111,7 +115,8 @@ public final class TolerantPayloadParser {
             String rawEvt = readString(root, "event_id", "eventId", "id", "timestamp", "event");
             String resolvedId = resolveEventId(rawEvt, availableEvents, fallbackEventId);
 
-            String concept = readString(root, "concept_prompt", "conceptPrompt", "concept", "prompt", "query", "label", "target");
+            String concept = readString(root, "concept_prompt", "conceptPrompt", "concept", "prompt", "query", "label",
+                    "target");
             if (concept == null || concept.isBlank()) {
                 concept = "bee";
             } else {
@@ -128,10 +133,12 @@ public final class TolerantPayloadParser {
     }
 
     /**
-     * Resolves an LLM-supplied event identifier (exact ID, frame suffix like "f1217",
+     * Resolves an LLM-supplied event identifier (exact ID, frame suffix like
+     * "f1217",
      * or timestamp like "00:20") against the available events.
      */
-    public static String resolveEventId(String candidate, List<EventSpatialSummary> availableEvents, String fallbackId) {
+    public static String resolveEventId(String candidate, List<EventSpatialSummary> availableEvents,
+            String fallbackId) {
         if (availableEvents == null || availableEvents.isEmpty()) {
             return (candidate != null && !candidate.isBlank()) ? candidate.trim() : fallbackId;
         }
@@ -164,16 +171,17 @@ public final class TolerantPayloadParser {
     }
 
     /**
-     * Extracts SAM 3.1 bounding boxes from token strings (<|box;x1=...|>), JSON arrays,
-     * or nested response objects, optionally scaling from [0..1000] normalized space to pixel space.
+     * Extracts SAM 3.1 bounding boxes from token strings (<|box;x1=...|>), JSON
+     * arrays,
+     * or nested response objects, optionally scaling from [0..1000] normalized
+     * space to pixel space.
      */
     public static List<BoundingBox> parseSamBoxes(
             String rawJsonOrText,
             int imageWidth,
             int imageHeight,
             boolean scaleFrom1000,
-            boolean filterLandingBoard
-    ) {
+            boolean filterLandingBoard) {
         List<BoundingBox> boxes = new ArrayList<>();
         if (rawJsonOrText == null || rawJsonOrText.isBlank()) {
             return boxes;
@@ -191,7 +199,7 @@ public final class TolerantPayloadParser {
                 double y2 = Double.parseDouble(matcher.group(4));
                 double tokenW = matcher.group(5) != null ? Double.parseDouble(matcher.group(5)) : -1.0;
                 double tokenH = matcher.group(6) != null ? Double.parseDouble(matcher.group(6)) : -1.0;
-                rawCoords.add(new double[]{x1, y1, x2, y2, tokenW, tokenH});
+                rawCoords.add(new double[] { x1, y1, x2, y2, tokenW, tokenH });
             } catch (NumberFormatException ignored) {
             }
         }
@@ -255,18 +263,20 @@ public final class TolerantPayloadParser {
     }
 
     private static void extractBoxesFromJsonNode(JsonNode node, List<double[]> collector) {
-        if (node == null) return;
+        if (node == null)
+            return;
         if (node.isTextual()) {
             Matcher m = BOX_TOKEN_REGEX.matcher(node.asText());
             while (m.find()) {
                 try {
-                    collector.add(new double[]{
+                    collector.add(new double[] {
                             Double.parseDouble(m.group(1)),
                             Double.parseDouble(m.group(2)),
                             Double.parseDouble(m.group(3)),
                             Double.parseDouble(m.group(4))
                     });
-                } catch (NumberFormatException ignored) {}
+                } catch (NumberFormatException ignored) {
+                }
             }
             return;
         }
@@ -274,7 +284,7 @@ public final class TolerantPayloadParser {
             // Check if this array is a 4-number bounding box [x1, y1, x2, y2]
             if (node.size() == 4 && node.get(0).isNumber() && node.get(1).isNumber()
                     && node.get(2).isNumber() && node.get(3).isNumber()) {
-                collector.add(new double[]{
+                collector.add(new double[] {
                         node.get(0).asDouble(),
                         node.get(1).asDouble(),
                         node.get(2).asDouble(),
@@ -289,7 +299,7 @@ public final class TolerantPayloadParser {
         }
         if (node.isObject()) {
             if (node.has("x1") && node.has("y1") && node.has("x2") && node.has("y2")) {
-                collector.add(new double[]{
+                collector.add(new double[] {
                         node.get("x1").asDouble(),
                         node.get("y1").asDouble(),
                         node.get("x2").asDouble(),
@@ -305,13 +315,15 @@ public final class TolerantPayloadParser {
     }
 
     public static String readString(JsonNode node, String... keys) {
-        if (node == null || !node.isObject()) return null;
+        if (node == null || !node.isObject())
+            return null;
         for (String key : keys) {
             JsonNode v = node.get(key);
             if (v != null && !v.isNull()) {
                 if (v.isTextual() || v.isNumber() || v.isBoolean()) {
                     String s = v.asText().trim();
-                    if (!s.isEmpty()) return s;
+                    if (!s.isEmpty())
+                        return s;
                 }
             }
         }
@@ -325,7 +337,8 @@ public final class TolerantPayloadParser {
                     JsonNode v = entry.getValue();
                     if (v != null && !v.isNull()) {
                         String s = v.asText().trim();
-                        if (!s.isEmpty()) return s;
+                        if (!s.isEmpty())
+                            return s;
                     }
                 }
             }
@@ -335,7 +348,8 @@ public final class TolerantPayloadParser {
 
     public static int readInt(JsonNode node, int defaultValue, String... keys) {
         String raw = readString(node, keys);
-        if (raw == null || raw.isBlank()) return defaultValue;
+        if (raw == null || raw.isBlank())
+            return defaultValue;
         try {
             if (raw.contains(".")) {
                 return (int) Math.round(Double.parseDouble(raw));
@@ -348,7 +362,8 @@ public final class TolerantPayloadParser {
 
     public static boolean readBoolean(JsonNode node, boolean defaultValue, String... keys) {
         String raw = readString(node, keys);
-        if (raw == null || raw.isBlank()) return defaultValue;
+        if (raw == null || raw.isBlank())
+            return defaultValue;
         if ("true".equalsIgnoreCase(raw) || "1".equals(raw) || "yes".equalsIgnoreCase(raw)) {
             return true;
         }
@@ -361,8 +376,10 @@ public final class TolerantPayloadParser {
     /**
      * Parses a dual-output response from Meta Muse Spark Open into:
      * 1) displayReport: concise, visually formatted Markdown for the dashboard UI
-     * 2) spokenSummary: complete, natural-language narration for TTS with zero missing facts,
-     *    no headings/markdown, and natural time expressions ("at the beginning / second zero" instead of "00:00").
+     * 2) spokenSummary: complete, natural-language narration for TTS with zero
+     * missing facts,
+     * no headings/markdown, and natural time expressions ("at the beginning /
+     * second zero" instead of "00:00").
      */
     public static DualMuseOutput parseDualMuseOutput(String rawOutput) {
         if (rawOutput == null || rawOutput.isBlank()) {
@@ -374,7 +391,8 @@ public final class TolerantPayloadParser {
                 .replaceAll("(?m)^\\s*---+\\s*$", "")
                 .trim();
 
-        // 1. Check if the response is a JSON object {"report": "...", "spokenSummary": "..."}
+        // 1. Check if the response is a JSON object {"report": "...", "spokenSummary":
+        // "..."}
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
             try {
                 JsonNode root = MAPPER.readTree(trimmed);
@@ -420,7 +438,8 @@ public final class TolerantPayloadParser {
             return new DualMuseOutput(reportOnly, sanitizeForNaturalSpeech(reportOnly));
         }
 
-        // 3. Check for a Markdown heading split (e.g. "### Spoken Summary" or "--- SPOKEN ---")
+        // 3. Check for a Markdown heading split (e.g. "### Spoken Summary" or "---
+        // SPOKEN ---")
         Matcher splitMatcher = SPOKEN_HEADING_SPLIT_REGEX.matcher(trimmed);
         if (splitMatcher.find()) {
             String reportPart = stripXmlReportTags(trimmed.substring(0, splitMatcher.start()));
@@ -430,7 +449,8 @@ public final class TolerantPayloadParser {
             }
         }
 
-        // 4. Fallback: single Markdown report -> derive complete natural spoken summary without truncation
+        // 4. Fallback: single Markdown report -> derive complete natural spoken summary
+        // without truncation
         String cleanFallback = stripXmlReportTags(trimmed);
         return new DualMuseOutput(cleanFallback, sanitizeForNaturalSpeech(cleanFallback));
     }
@@ -443,9 +463,12 @@ public final class TolerantPayloadParser {
     }
 
     /**
-     * Converts any text or spoken block into clean, natural spoken prose suitable for TTS:
-     * - Replaces MM:SS timestamps (e.g. 00:00 -> second zero, 00:20 -> second twenty)
-     * - Strips Markdown headings, bullets, backticks, raw event IDs, and pixel brackets
+     * Converts any text or spoken block into clean, natural spoken prose suitable
+     * for TTS:
+     * - Replaces MM:SS timestamps (e.g. 00:00 -> second zero, 00:20 -> second
+     * twenty)
+     * - Strips Markdown headings, bullets, backticks, raw event IDs, and pixel
+     * brackets
      * - Preserves all factual sentences without arbitrary character truncation.
      */
     public static String sanitizeForNaturalSpeech(String input) {
@@ -477,7 +500,8 @@ public final class TolerantPayloadParser {
         tsMatcher.appendTail(tsBuffer);
         text = tsBuffer.toString();
 
-        // Replace raw event IDs, pixel coordinate arrays, and technical symbols with natural speech
+        // Replace raw event IDs, pixel coordinate arrays, and technical symbols with
+        // natural speech
         text = text
                 .replaceAll("\\(\\s*`?evt_[a-zA-Z0-9_]+`?\\s*\\)", "")
                 .replaceAll("\\b`?evt_[a-zA-Z0-9_]+`?\\b", "")

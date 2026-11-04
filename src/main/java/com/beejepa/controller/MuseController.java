@@ -26,6 +26,8 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Controller("/api/v1/muse")
@@ -41,6 +43,7 @@ public class MuseController {
     private final EventService eventService;
     private final StateRepository stateRepository;
     private final com.beejepa.muse.MetaVoiceTranscribeClient voiceClient;
+    private final Map<String, CompletableFuture<byte[]>> inFlightTts = new ConcurrentHashMap<>();
 
     @jakarta.inject.Inject
     public MuseController(MetaMuseService museService,
@@ -132,29 +135,11 @@ public class MuseController {
 
     @Get(value = "/tts", produces = "audio/mpeg")
     public HttpResponse<byte[]> getBriefingTts(@QueryValue(defaultValue = "") String text) {
-        String cleanText = text != null ? text.trim() : "";
-        if (cleanText.isBlank()) {
+        String spokenText = normalizeSpokenText(text);
+        if (spokenText.isBlank()) {
             return HttpResponse.badRequest();
         }
-
-        String spokenText = cleanText
-                .replaceAll("(?m)^#+\\s*", "")
-                .replaceAll("[*`~()\\[\\]\"]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
-
-        String hash;
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(spokenText.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(String.format("%02x", b));
-            }
-            hash = sb.toString();
-        } catch (Exception e) {
-            hash = Integer.toHexString(spokenText.hashCode());
-        }
+        String hash = computeTtsHash(spokenText);
 
         MuseDiskCache cache = museService != null ? museService.getDiskCache() : null;
         if (cache != null) {
@@ -164,6 +149,70 @@ public class MuseController {
                         .header("Content-Type", "audio/mpeg")
                         .header("X-Cache", cache.getCacheBackendDescription())
                         .header("Cache-Control", "public, max-age=86400");
+            }
+        }
+
+        byte[] audioBytes = synthesizeOrJoinTts(hash, spokenText, cache);
+        if (audioBytes != null && audioBytes.length > 512) {
+            return HttpResponse.ok(audioBytes)
+                    .header("Content-Type", "audio/mpeg")
+                    .header("X-Cache", "MISS_SYNTHESIZED")
+                    .header("Cache-Control", "public, max-age=86400");
+        }
+
+        return HttpResponse.status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    private static String normalizeSpokenText(String text) {
+        String cleanText = text != null ? text.trim() : "";
+        if (cleanText.isBlank()) {
+            return "";
+        }
+        return cleanText
+                .replaceAll("(?m)^#+\\s*", "")
+                .replaceAll("[*`~()\\[\\]\"]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static String computeTtsHash(String spokenText) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(spokenText.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(spokenText.hashCode());
+        }
+    }
+
+    private void warmTtsAsync(String rawText) {
+        String spokenText = normalizeSpokenText(rawText);
+        if (spokenText.isBlank()) {
+            return;
+        }
+        String hash = computeTtsHash(spokenText);
+        MuseDiskCache cache = museService != null ? museService.getDiskCache() : null;
+        if (cache != null) {
+            Optional<byte[]> cachedAudio = cache.getTtsAudio(hash);
+            if (cachedAudio.isPresent() && cachedAudio.get().length > 512 && !isRiffWav(cachedAudio.get())) {
+                return;
+            }
+        }
+        Thread.startVirtualThread(() -> synthesizeOrJoinTts(hash, spokenText, cache));
+    }
+
+    private byte[] synthesizeOrJoinTts(String hash, String spokenText, MuseDiskCache cache) {
+        CompletableFuture<byte[]> future = new CompletableFuture<>();
+        CompletableFuture<byte[]> existing = inFlightTts.putIfAbsent(hash, future);
+        if (existing != null) {
+            try {
+                return existing.get(16, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                return null;
             }
         }
 
@@ -196,15 +245,18 @@ public class MuseController {
                     if (cache != null) {
                         cache.saveTtsAudio(hash, spokenText, audioBytes);
                     }
-                    return HttpResponse.ok(audioBytes)
-                            .header("Content-Type", "audio/mpeg")
-                            .header("X-Cache", "MISS_SYNTHESIZED")
-                            .header("Cache-Control", "public, max-age=86400");
+                    future.complete(audioBytes);
+                    return audioBytes;
                 }
             }
+            future.complete(null);
+            return null;
         } catch (Exception e) {
             LOG.warn("edge-tts synthesis failed: {}", e.getMessage());
+            future.complete(null);
+            return null;
         } finally {
+            inFlightTts.remove(hash, future);
             if (tmpFile != null) {
                 try {
                     Files.deleteIfExists(tmpFile);
@@ -212,14 +264,26 @@ public class MuseController {
                 }
             }
         }
-
-        return HttpResponse.status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE);
     }
-
 
     private static boolean isRiffWav(byte[] bytes) {
         return bytes != null && bytes.length >= 4
                 && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F';
+    }
+
+    @Post("/warm")
+    public HttpResponse<Map<String, Object>> warmPipeline(@Body @io.micronaut.core.annotation.Nullable Map<String, Object> payload) {
+        String requestedEventId = payload != null && payload.get("eventId") != null
+                ? String.valueOf(payload.get("eventId")).trim()
+                : null;
+        if (requestedEventId != null && (requestedEventId.isBlank() || "null".equalsIgnoreCase(requestedEventId))) {
+            requestedEventId = null;
+        }
+        List<MetaMuseService.ManifestEventInput> eventsToWarm = resolveTopEvents(requestedEventId, 3);
+        museService.warmPipelineAsync(eventsToWarm);
+        return HttpResponse.accepted().body(Map.of(
+                "status", "WARMING",
+                "events", eventsToWarm.stream().map(MetaMuseService.ManifestEventInput::eventId).toList()));
     }
 
     @Post("/generate")
@@ -242,6 +306,7 @@ public class MuseController {
                     .body(Map.of("error", "Meta Muse is currently unavailable.", "mode", "UNAVAILABLE"));
         }
         String spoken = answer.spokenSummary();
+        warmTtsAsync(spoken);
 
         return HttpResponse.ok(Map.of(
                 "prompt", prompt,
@@ -280,6 +345,7 @@ public class MuseController {
             return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("status", "UNAVAILABLE", "error", "Meta voice transcription is not configured."));
         }
+        Thread.startVirtualThread(museService::warmBasetenConnection);
         try {
             com.beejepa.muse.MetaVoiceTranscribeClient.Transcription t = voiceClient.transcribe(audioBytes);
             Map<String, Object> body = new LinkedHashMap<>();
@@ -357,9 +423,12 @@ public class MuseController {
                 || Boolean.TRUE.equals(payload.get("forceLive"));
         MetaMuseService.MuseAnswerResult answerResult = museService.answerBeekeeperQuestionWithMeta(
                 question, topEvents, maxEventsToTake, forceLive);
-        List<SamGeometry.EventSpatialSummary> summaries = museService.analyzeEventsInParallel(topEvents);
         String reportMarkdown = answerResult.reportMarkdown();
         String spokenSummary = answerResult.spokenSummary();
+        if (!"UNAVAILABLE".equals(answerResult.sourceMode())) {
+            warmTtsAsync(spokenSummary);
+        }
+        List<SamGeometry.EventSpatialSummary> summaries = museService.analyzeEventsInParallel(topEvents);
 
         long latency = System.currentTimeMillis() - startTime;
         if (stateRepository != null) {

@@ -341,6 +341,28 @@ async function loadSystemAndData() {
   fetchPerceptionTelemetry()
   fetchSaccadicTargets()
   fetchAblationPyramid(selectedEvent.value?.eventId)
+  warmMusePipeline(selectedEvent.value?.eventId)
+}
+
+let lastWarmedEventId = null
+let lastWarmTimestamp = 0
+
+function warmMusePipeline(eventId = null) {
+  const targetId = eventId || selectedEvent.value?.eventId || null
+  const now = Date.now()
+  if (targetId === lastWarmedEventId && (now - lastWarmTimestamp) < 15000) {
+    return
+  }
+  lastWarmedEventId = targetId
+  lastWarmTimestamp = now
+  apiFetch('/api/v1/muse/warm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ eventId: targetId }),
+    cancelKey: 'warmMuse',
+    retries: 0,
+    timeoutMs: 6000
+  }).catch(() => {})
 }
 
 function isGlobalCohortQuestion(questionText) {
@@ -533,6 +555,7 @@ async function prepareMusePayload(event = null, question = null) {
       isAskingMuse,
       showRawWirePayload,
       askMuse,
+      warmMusePipeline,
       prepareMusePayload,
       prepareSamPayload,
 
