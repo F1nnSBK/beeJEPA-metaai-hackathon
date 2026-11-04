@@ -20,31 +20,33 @@ Hive entrance monitoring system combining **V-JEPA 2.1** prediction error tracki
 Continuous 60 fps video from a beehive entrance produces too much footage for manual review or constant cloud VLM calls. **beeJEPA** splits the workload into two stages:
 
 - **Stage 1 — Continuous Video Encoding:**
-  A pre-computed **V-JEPA 2.1** ViT-H/16 encoder processes `1080x960` entrance video at 60 fps using an overlapping `9x9` patch grid. It measures the L2 distance `S(t) = ||z_pred - z_target||_2` between predicted and observed latent features and triggers the second stage only when `S(t)` exceeds the threshold `τ`.
+  A pre-computed **V-JEPA 2.1** ViT-B/16 (`vjepa2_1_vit_base_384`) encoder processes `1080x960` entrance video at 60 fps on a `43x43` token grid. It computes the `token_delta_score` per sliding window and highlights windows exceeding the 99th percentile threshold `τ (P99)` derived from the dataset.
 
 - **Stage 2 — Targeted Segmentation and Multimodal Analysis:**
-  - **Hotspot Cropping:** When `S(t)` crosses `τ`, `VisualCropRenderer` extracts a `688x688` overview of the flight board and a `384x384` crop around the V-JEPA attention peak.
+  - **Hotspot Cropping:** For each peak event, `HeatmapHotspotExtractor` measures the V-JEPA attention hotspot from the side-by-side video overlay on the `43x43` grid, and `VisualCropRenderer` extracts a `688x688` overview of the flight board and a `384x384` crop around the measured hotspot.
   - **Off-Heap Frame Buffer and Vector API:** `OffHeapFrameRingBuffer` stores keyframes outside the JVM heap via Java 25 `Arena` and `MemorySegment`, while `SimdLatentEvaluator` computes vector distances and cosine similarity with `FloatVector`.
-  - **SAM 3.1 Segmentation and Geometric Filtering:** `Sam31Client` segments bees on the landing board via **Meta SAM 3.1**, and `SamGeometry` measures how much of each detected bee lies inside the V-JEPA hotspot using an Intersection-over-Area threshold of `0.25` and a `22%` minimum hotspot coverage check.
-  - **Muse Spark Open Report Generation:** `MetaMuseService` sends the event crops and segmentation metrics to `meta-models/muse-spark-open-1026` on Baseten. The model can call `QuerySam31Concept` and `QueryFovealHotspot` as tools and returns both a `<REPORT>` block in Markdown and a `<SPOKEN>` block formatted for text-to-speech.
-  - **Caching and Fault Tolerance:** `ResilientApiExecutor` handles retries, circuit breaking, and API key failover. Results are cached across an in-memory map, Redis, and a local SQLite WAL database.
+  - **SAM 3.1 Segmentation and Geometric Filtering:** `Sam31Client` segments bees on the landing board via **Meta SAM 3.1**, and `SamGeometry` measures how much of each detected bee lies inside the V-JEPA hotspot using an Intersection-over-Area threshold of `0.25`.
+  - **Muse Spark Open Report Generation:** `MetaMuseService` sends the event crops and segmentation metrics to `meta-models/muse-spark-open-1026` on Baseten. The model can call `QuerySam31Concept` as a tool and returns both a `<REPORT>` block in Markdown and a `<SPOKEN>` block formatted for text-to-speech.
+  - **Voice Transcription:** `MetaVoiceTranscribeClient` transcribes 16 kHz mono WAV microphone audio via Meta Model API `muse-voice-transcribe-1.0` (`POST /api/v1/muse/transcribe`).
+  - **Caching and Fault Tolerance:** `ResilientApiExecutor` handles retries, circuit breaking, and API key failover. Results are cached by exact `(eventId, normalizedPrompt, modelVersion)` across an in-memory map, Redis, and a local SQLite WAL database.
   - **Web Interface:** A Three.js scroll introduction leads into a Vue 3 console with video playback, SAM overlays, English speech output via `edge-tts`, and synthesized bee audio from `BeeAcousticSynthesizer`.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  STAGE 1: V-JEPA 2.1 VIDEO STREAM                            │
-│  60 fps 1080x960 Entrance Video -> V-JEPA 2.1 ViT-H/16       │
-│  Prediction Error Trajectory S(t) = ||z_pred - z_target||_2  │
+│  60 fps 1080x960 Entrance Video -> V-JEPA 2.1 ViT-B/16       │
+│  43x43 Token-Delta Score Trajectory vs. P99 Threshold τ      │
 └──────────────────────────────┬───────────────────────────────┘
-                               │  Trigger when S(t) >= τ
+                               │  Peak Event Windows
 ┌──────────────────────────────▼───────────────────────────────┐
 │  STAGE 2: SEGMENTATION, REASONING & WEB CONSOLE              │
 │  1. Java 25 Off-Heap Frame Buffer & Vector API               │
 │  2. Meta SAM 3.1 Instance Segmentation on Landing Board      │
 │  3. Geometric Hotspot Containment Filter with IoA >= 0.25    │
 │  4. Meta Muse Spark Open Report & Spoken Summary             │
-│  5. In-Memory, Redis & SQLite WAL Cache                      │
-│  6. Three.js Scroll Intro & Vue 3 Console                    │
+│  5. Meta Muse Voice Transcribe 1.0 Speech-to-Text            │
+│  6. In-Memory, Redis & SQLite WAL Cache                      │
+│  7. Three.js Scroll Intro & Vue 3 Console                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -76,7 +78,7 @@ Instead of evaluating single frames in isolation, `MetaMuseService` processes co
 | :--- | :--- | :--- |
 | **Frame Selection** | Fixed-interval sampling across the full video | Triggered only at prediction error peaks |
 | **Visual Input** | Full camera frame only | Full overview plus `384x384` crop around the hotspot |
-| **Spatial Filtering** | Unfiltered detections across the board | Hotspot containment with `IoA >= 0.25` and coverage check |
+| **Spatial Filtering** | Unfiltered detections across the board | Hotspot containment with `IoA >= 0.25` |
 | **Model Output** | Single-frame description | Multi-event Markdown report and spoken summary |
 
 ### 5. Five-Tier Pipeline Breakdown
@@ -96,8 +98,8 @@ Instead of evaluating single frames in isolation, `MetaMuseService` processes co
 
 The dataset and event clips are hosted on Hugging Face at [**F1nnSBK/bee-jepa-entrance-anomalies**](https://huggingface.co/datasets/F1nnSBK/bee-jepa-entrance-anomalies).
 
-- **Recordings:** `rec2123` and `rec2125` from `mrkschtr/thehiveisreal`, recorded at `1080x960` and 60 fps with side-by-side camera and V-JEPA 2.1 heatmap views.
-- **Media Delivery:** When a keyframe is requested and not yet on disk, `EventService` extracts it on demand from the `.mp4` clip at `00:00:01.5` using `ffmpeg` and stores it in Redis and SQLite. When a video file is missing locally, `EventController` responds with a `307` redirect to the Hugging Face dataset file.
+- **Recordings:** `rec2123` and `rec2125` from `mrkschtr/thehiveisreal`, recorded at `1080x960` and 60 fps with side-by-side camera and V-JEPA 2.1 heatmap views (`96` 30-second sequences, `2,688` timeline windows, `184` peak events).
+- **Media Delivery:** When a keyframe is requested and not yet on disk, `EventService` extracts it on demand from the `.mp4` sequence at the event's exact `peak_frame / 59.94` timestamp using `ffmpeg` and stores it in Redis and SQLite. All videos and keyframes are served directly from local SSD storage with HTTP Range support (`206 Partial Content`); missing files return `404 Not Found` without redirecting clients to external CDNs.
 
 ```python
 import pandas as pd
@@ -125,7 +127,8 @@ print(peaks[["sequence_id", "timestamp_sec", "surprise_score_l2", "event_id"]].h
 2. **Segmentation, Multimodal Client, Caching and Audio — `com.beejepa.muse`**
    - `Sam31Client` and `SamGeometry` call `/v1/responses` with `model: "sam-3.1"`, filter detections to the landing board area `x <= 535` and `372 <= y <= 518`, and evaluate hotspot containment.
    - `VisualCropRenderer` draws bounding boxes onto the `688x688` frame and produces the `384x384` bicubic crop.
-   - `MetaMuseService` and `TolerantPayloadParser` run inference against `meta-models/muse-spark-open-1026`, execute tool calls, and split the response into Markdown and spoken text.
+   - `MetaMuseService` and `TolerantPayloadParser` run inference against `meta-models/muse-spark-open-1026`, execute `QuerySam31Concept` tool calls, and split the response into Markdown and spoken text.
+   - `MetaVoiceTranscribeClient` calls `https://api.meta.ai/v1/asr/transcribe` with `muse-voice-transcribe-1.0` for speech-to-text transcription.
    - `ResilientApiExecutor`, `MuseDiskCache`, and `RedisCacheClient` manage circuit breaking, backoff retries, API key failover, and caching across memory, Redis, and SQLite.
    - `BeeAcousticSynthesizer` and `AudioSpectralAnalyzer` generate 22.05 kHz WAV audio with 210–460 Hz carriers and analyze microphone input with a 1024-point FFT.
 
@@ -192,13 +195,14 @@ Open `http://localhost:8080`. During frontend development, run `cd frontend && n
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/auth/login` | Authenticate user and issue a 12-hour `bee_` bearer token |
 | `GET` | `/api/v1/auth/me` | Validate current bearer token and return user profile |
-| `GET` | `/api/v1/timeline` | Return surprise trajectory `S(t)` and sequence metadata |
-| `GET` | `/api/v1/events` | List peak anomaly events with cached SAM 3.1 and Muse data |
-| `GET` | `/api/v1/events/{id}/media/{file}` | Serve event keyframes or `.mp4` clips from local storage or Hugging Face |
-| `GET` | `/api/v1/sequences/{filename}` | Stream 30-second sequence videos from local storage or Hugging Face |
+| `GET` | `/api/v1/timeline` | Return token-delta trajectory, P99 threshold `τ`, and sequence metadata |
+| `GET` | `/api/v1/events` | List peak anomaly events with measured hotspots and cached SAM 3.1 / Muse data |
+| `GET` | `/api/v1/events/{id}/media/{file}` | Serve event keyframes or `.mp4` clips from local storage (`404` if absent) |
+| `GET` | `/api/v1/sequences/{filename}` | Stream 30-second sequence videos from local storage with HTTP Range support |
 | `POST` | `/api/v1/events/{id}/analyze` | Run or refresh SAM 3.1 and Muse Spark analysis for an event |
 | `GET` | `/api/v1/muse/status` | Check upstream API status, active model, and circuit breaker state |
 | `POST` | `/api/v1/muse/ask` | Run multi-event visual analysis and return report, spoken summary, and crops |
+| `POST` | `/api/v1/muse/transcribe` | Transcribe 16 kHz mono WAV audio via Meta `muse-voice-transcribe-1.0` |
 | `GET/POST` | `/api/v1/muse/events/{id}/sam` | Load or run SAM 3.1 segmentation and hotspot containment for an event |
 | `GET` | `/api/v1/muse/tts?text=...` | Stream English TTS audio generated via `edge-tts` |
 | `GET` | `/api/v1/muse/voice?text=...` | Stream 22.05 kHz WAV audio from `BeeAcousticSynthesizer` |

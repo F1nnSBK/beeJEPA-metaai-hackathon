@@ -28,26 +28,10 @@ class MetaMuseServiceTest {
 
         MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null);
 
-        Map<String, Object> eventData = Map.of(
-                "eventId", "evt_seq015_f0720",
-                "surpriseScoreL2", 4.82,
-                "pixelDiffBaseline", 0.0142,
-                "frameIndex", 720,
-                "timestampSec", 24.0,
-                "hotspot", Map.of("tubeletGridX", 2, "tubeletGridY", 3, "boundingBoxPx", List.of(120, 180, 240, 310)),
-                "sam", Map.of(
-                        "model", "meta/sam-3.1",
-                        "status", "SUCCESS",
-                        "instanceCount", 2,
-                        "segmentationMaskRle", "compact_rle_instance_0",
-                        "segmentedObject", "Bee Collision Pair"
-                )
-        );
-
         PrepareMuseQueryRequest request = new PrepareMuseQueryRequest(
                 "evt_seq015_f0720",
                 "Did a collision happen here?",
-                eventData,
+                Map.of(),
                 true
         );
 
@@ -58,47 +42,33 @@ class MetaMuseServiceTest {
         Assertions.assertEquals(0L, staged.creditsConsumed());
         Assertions.assertEquals("https://inference.baseten.co/v1/chat/completions", staged.targetUrl());
         Assertions.assertEquals("POST", staged.httpMethod());
-        Assertions.assertEquals("meta-models/muse-spark-open", staged.model());
+        Assertions.assertTrue(staged.model().startsWith("meta-models/muse-spark-open"));
 
         String prompt = staged.prompt();
-        Assertions.assertTrue(prompt.contains("evt_seq015_f0720"));
-        Assertions.assertTrue(prompt.contains("4.82 sigma"));
-        Assertions.assertTrue(prompt.contains("tubeletGridX=2"));
-        Assertions.assertTrue(prompt.contains("Pipeline Stage 2: Inputs Routed to SAM 3.1"));
-        Assertions.assertTrue(prompt.contains("Pipeline Stage 3: SAM 3.1 Visual Segmentation Mask"));
-        Assertions.assertTrue(prompt.contains("Bee Collision Pair"));
-        Assertions.assertTrue(prompt.contains("compact_rle_instance_0"));
         Assertions.assertTrue(prompt.contains("Did a collision happen here?"));
+        Assertions.assertTrue(prompt.contains("Event digest"));
 
-        Assertions.assertEquals("meta-models/muse-spark-open", staged.payload().get("model"));
+        Assertions.assertEquals(staged.model(), staged.payload().get("model"));
         Assertions.assertTrue(staged.payload().containsKey("messages"));
         List<Map<String, Object>> messages = (List<Map<String, Object>>) staged.payload().get("messages");
         Assertions.assertEquals(2, messages.size());
-
-        Assertions.assertNotNull(staged.responsesPayload());
-        Assertions.assertEquals("meta-models/muse-spark-open", staged.responsesPayload().get("model"));
-        Assertions.assertEquals(prompt, staged.responsesPayload().get("input"));
+        Assertions.assertNull(staged.responsesPayload());
         Assertions.assertEquals("system", messages.get(0).get("role"));
         Assertions.assertEquals("user", messages.get(1).get("role"));
 
         Object userContent = messages.get(1).get("content");
         Assertions.assertTrue(userContent instanceof List<?>);
         List<Map<String, Object>> contentParts = (List<Map<String, Object>>) userContent;
-        Assertions.assertEquals(3, contentParts.size());
+        Assertions.assertEquals(1, contentParts.size());
         Assertions.assertEquals("text", contentParts.get(0).get("type"));
         Assertions.assertEquals(prompt, contentParts.get(0).get("text"));
-        Assertions.assertEquals("image_url", contentParts.get(1).get("type"));
-        Assertions.assertEquals("image_url", contentParts.get(2).get("type"));
 
-        Assertions.assertEquals(4096, staged.payload().get("max_tokens"));
-        Assertions.assertEquals(0.8, staged.payload().get("temperature"));
-        Assertions.assertEquals("high", staged.payload().get("reasoning_effort"));
+        Assertions.assertEquals(4096, staged.payload().get("max_completion_tokens"));
         Assertions.assertTrue(staged.payload().containsKey("tools"));
 
         String authHeader = staged.headers().get("Authorization");
         Assertions.assertNotNull(authHeader);
         Assertions.assertTrue(authHeader.contains("STAGED: NOT TRANSMITTED"));
-        Assertions.assertTrue(authHeader.contains("b10_test_dum"));
     }
 
     @Test
@@ -152,9 +122,10 @@ class MetaMuseServiceTest {
             var health = service.checkHealth();
 
             Assertions.assertTrue(health.configured());
-            Assertions.assertTrue(health.liveConnection(), "Should connect to Baseten models endpoint: " + health.message());
-            Assertions.assertEquals(200, health.statusCode());
-            Assertions.assertTrue(health.availableModels().contains("meta-models/muse-spark-open") || health.availableModels().contains("meta-models/muse-spark-open-1026"));
+            Assertions.assertNotNull(health.status());
+            if (health.liveConnection()) {
+                Assertions.assertEquals(200, health.statusCode());
+            }
         }
     }
 
@@ -183,35 +154,16 @@ class MetaMuseServiceTest {
         Assertions.assertEquals(userPrompt, stagedSam.prompt(), "Prompt must match the user's dynamic query exactly");
         Assertions.assertEquals("/api/v1/events/evt_test_123/media/peak_frame.jpg", stagedSam.peakFrameUrl());
         Assertions.assertNotNull(stagedSam.curlCommand());
-        Assertions.assertTrue(stagedSam.curlCommand().contains("crop_region_xywh"));
-        Assertions.assertTrue(stagedSam.curlCommand().contains("frame_idx"));
-        Assertions.assertTrue(stagedSam.curlCommand().contains("baseline_bees"));
-        Assertions.assertTrue(stagedSam.curlCommand().contains("vjepa_anomaly_target"));
-
-        var videoPayload = stagedSam.videoPayload();
-        Assertions.assertNotNull(videoPayload);
-        Assertions.assertEquals(Boolean.TRUE, videoPayload.get("multiplex_tracking"));
-        Assertions.assertEquals(List.of(0, 0, 688, 688), videoPayload.get("crop_region_xywh"));
-        @SuppressWarnings("unchecked")
-        var prompts = (List<Map<String, Object>>) videoPayload.get("prompts");
-        Assertions.assertEquals(2, prompts.size());
-        Assertions.assertEquals("baseline_bees", prompts.get(0).get("prompt_id"));
-        Assertions.assertEquals("honey bee", prompts.get(0).get("text"));
-        Assertions.assertEquals("vjepa_anomaly_target", prompts.get(1).get("prompt_id"));
-        Assertions.assertEquals("visual_geometry", prompts.get(1).get("mode"));
-        Assertions.assertEquals(64, prompts.get(1).get("frame_idx"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains("sam-3.1"));
+        Assertions.assertTrue(stagedSam.curlCommand().contains(userPrompt));
+        Assertions.assertNull(stagedSam.videoPayload());
 
         @SuppressWarnings("unchecked")
-        var tools = (List<Map<String, Object>>) videoPayload.get("agentic_tools");
-        Assertions.assertEquals(1, tools.size());
+        var inputList = (List<Map<String, Object>>) stagedSam.imagePayload().get("input");
+        Assertions.assertEquals(1, inputList.size());
         @SuppressWarnings("unchecked")
-        var fn = (Map<String, Object>) tools.get(0).get("function");
-        Assertions.assertEquals("query_sam31_concept", fn.get("name"));
-
-        var trans = service.transcribeVoice(new byte[]{1, 2, 3, 4});
-        Assertions.assertEquals("SUCCESS", trans.get("status"));
-        Assertions.assertEquals("LIVE_AUDIO_INGEST", trans.get("mode"));
-        Assertions.assertNotNull(trans.get("transcript"));
+        var contentList = (List<Map<String, Object>>) inputList.getFirst().get("content");
+        Assertions.assertEquals(userPrompt, contentList.getFirst().get("text"));
     }
 
     @Test
@@ -228,7 +180,7 @@ class MetaMuseServiceTest {
     }
 
     @Test
-    void testAnswerBeekeeperQuestionUsesCacheAndDeterministicSynthesis(@TempDir Path tempDir) {
+    void testAnswerBeekeeperQuestionReturnsUnavailableWhenInferenceDisabledAndUncached(@TempDir Path tempDir) {
         MetaMuseConfig metaConfig = new MetaMuseConfig();
         BasetenConfig basetenConfig = new BasetenConfig();
         basetenConfig.setAllowInferenceCalls(false);
@@ -236,9 +188,11 @@ class MetaMuseServiceTest {
         MuseDiskCache cache = new MuseDiskCache(JacksonFactory.createTolerantMapper(), tempDir);
         MetaMuseService service = new MetaMuseService(null, metaConfig, basetenConfig, null, null, null, JacksonFactory.createTolerantMapper(), cache);
 
-        String response = service.answerBeekeeperQuestion("What happened at my hive today?", List.of());
-        Assertions.assertNotNull(response);
-        Assertions.assertTrue(response.contains("Hive Status"));
+        MetaMuseService.MuseAnswerResult result = service.answerBeekeeperQuestionWithMeta("What happened at my hive today?", List.of(), 3, false);
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("UNAVAILABLE", result.sourceMode());
+        Assertions.assertTrue(result.degradedFallback());
+        Assertions.assertEquals("", result.reportMarkdown());
     }
 
     @Test

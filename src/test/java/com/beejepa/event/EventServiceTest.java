@@ -36,7 +36,8 @@ public class EventServiceTest {
     }
 
     @Test
-    void testLazyLoadEventsFromHackathonSample() {
+    void testLazyLoadEventsFromHackathonSample() throws InterruptedException {
+        eventService.awaitHotspotMeasurement(10_000);
         List<Map<String, Object>> events = eventService.listEvents();
         Assertions.assertNotNull(events);
         Assertions.assertEquals(20, events.size(), "Should load exactly 20 events from hackathon sample manifest");
@@ -44,8 +45,10 @@ public class EventServiceTest {
         Map<String, Object> firstEvent = events.get(0);
         Assertions.assertEquals("evt_rec2125_seq000_f0000", firstEvent.get("eventId"));
         Assertions.assertEquals("rec2125_seq000", firstEvent.get("sequenceId"));
-        Assertions.assertEquals("CRITICAL", firstEvent.get("severity"));
-        Assertions.assertEquals(16.052, Double.parseDouble(String.valueOf(firstEvent.get("surpriseScoreL2"))), 0.001);
+        Assertions.assertEquals("ABOVE_TAU", firstEvent.get("severity"));
+        Assertions.assertEquals(Boolean.TRUE, firstEvent.get("aboveThreshold"));
+        Assertions.assertEquals(16.052, Double.parseDouble(String.valueOf(firstEvent.get("tokenDeltaScore"))), 0.001);
+        Assertions.assertEquals("MEASURED", firstEvent.get("hotspotStatus"));
         Assertions.assertNotNull(firstEvent.get("hotspot"));
     }
 
@@ -55,7 +58,9 @@ public class EventServiceTest {
         Assertions.assertNotNull(timeline);
         Assertions.assertEquals(300.0, Double.parseDouble(String.valueOf(timeline.get("totalDurationSec"))));
         Assertions.assertEquals("05:00", timeline.get("formattedDuration"));
-        Assertions.assertEquals(10.2, Double.parseDouble(String.valueOf(timeline.get("decisionThreshold"))));
+        double tau = Double.parseDouble(String.valueOf(timeline.get("decisionThreshold")));
+        Assertions.assertTrue(tau > 13.0, "Decision threshold tau should be the P99 of timeline windows: " + tau);
+        Assertions.assertEquals("P99 of all timeline windows", timeline.get("decisionThresholdMethod"));
 
         List<?> points = (List<?>) timeline.get("timeline");
         Assertions.assertNotNull(points);

@@ -26,8 +26,8 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(OffHeapFrameRingBuffer.class);
 
-    public static final int DEFAULT_CAPACITY = 600; // 10 seconds of 60 fps frames
-    public static final int MAX_PAYLOAD_BYTES = 1024 * 1024; // 1 MB per frame slot
+    public static final int DEFAULT_CAPACITY = 64;
+    public static final int MAX_PAYLOAD_BYTES = 393_216; // 384 KB per frame slot
 
     // Slot Header Layout (32 bytes total)
     private static final long OFFSET_TIMESTAMP_NS = 0;       // JAVA_LONG (8 bytes)
@@ -81,7 +81,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
         this.arena = Arena.ofShared();
         this.bufferSegment = arena.allocate(totalAllocatedBytes, 64);
 
-        LOG.info("🐝 Initialized FFM Off-Heap Ring Buffer: capacity={} slots, allocatedBytes={} ({} MB)",
+        LOG.info("Initialized FFM Off-Heap Ring Buffer: capacity={} slots, allocatedBytes={} ({} MB)",
                 capacity, totalAllocatedBytes, totalAllocatedBytes / (1024 * 1024));
     }
 
@@ -90,7 +90,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
      *
      * @param timestampNs Event timestamp in nanoseconds
      * @param frameIndex Monotonic or sequence frame index
-     * @param surpriseSigma V-JEPA predictor surprise score in sigmas
+     * @param surpriseSigma V-JEPA token-delta score
      * @param hotspotCenterX Normalized or pixel hotspot X coordinate
      * @param hotspotCenterY Normalized or pixel hotspot Y coordinate
      * @param frameBytes Raw compressed image payload (JPEG/PNG)
@@ -244,7 +244,7 @@ public final class OffHeapFrameRingBuffer implements AutoCloseable {
     public void close() {
         if (arena.scope().isAlive()) {
             arena.close();
-            LOG.info("🐝 FFM Off-Heap Ring Buffer closed and native memory freed.");
+            LOG.info("FFM Off-Heap Ring Buffer closed and native memory freed.");
         }
     }
 }

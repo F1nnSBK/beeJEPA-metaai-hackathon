@@ -280,7 +280,7 @@ const facts = computed(() => {
     sequenceCount: source.sequenceCount,
     measurementCount: timeline.length,
     eventCount: source.eventCount,
-    tau: source.tau.toFixed(1),
+    tau: source.tau.toFixed(2),
     maxSurprise: source.maxSurprise.toFixed(2),
     dataset: source.dataset,
     focusTime: focus.formattedTime,
@@ -445,12 +445,12 @@ onBeforeUnmount(() => {
               <CalligraphyWord word="beeJEPA" :drawn="sceneState !== 'loading'" />
             </h1>
             <p class="lead">
-              V-JEPA 2.1 predicts the next latent state of the hive entrance. Where the prediction error peaks, SAM 3.1
+              V-JEPA 2.1 (ViT-B/16) tracks frame-to-frame token changes across the hive entrance. Where the token-delta score peaks, SAM 3.1
               and Muse Spark take a closer look.
             </p>
             <p class="data">
               {{ facts.durationSec }} s · {{ facts.fps }} fps · {{ facts.sequenceCount }} sequences ·
-              {{ facts.eventCount }} peak events · <span class="math">𝜏 = {{ facts.tau }}𝜎</span>
+              {{ facts.eventCount }} peak events · <span class="math">𝜏 = {{ facts.tau }}</span> (P99)
             </p>
             <span class="scroll-cue" aria-hidden="true">Scroll</span>
           </div>
@@ -463,10 +463,10 @@ onBeforeUnmount(() => {
             <p class="eyebrow">Act I · System 1</p>
             <h2 class="act__title"><CalligraphyWord word="Periphery" :drawn="isSeen(ACT.PERIPHERY)" /></h2>
             <p class="body">
-              V-JEPA 2.1 encodes the flight board recorded at {{ facts.fps }} fps. It does not label objects. It
-              predicts the next latent state and measures the prediction error.
+              V-JEPA 2.1 (ViT-B/16) encodes the flight board recorded at {{ facts.fps }} fps on a 43×43 token grid. It does not label objects. It
+              measures frame-to-frame token persistence across adjacent windows.
             </p>
-            <p class="data">{{ facts.measurementCount }} measurements of <span class="math">𝑆(𝑡)</span> · {{ facts.dataset }}</p>
+            <p class="data">{{ facts.measurementCount }} measurements of <span class="math">Token-Δ</span> · {{ facts.dataset }}</p>
           </div>
         </div>
       </section>
@@ -474,16 +474,16 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.SURPRISE)" class="act" :class="{ 'is-seen': isSeen(ACT.SURPRISE) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.SURPRISE)">
-            <p class="eyebrow">Act II · Latent prediction error</p>
+            <p class="eyebrow">Act II · Token-delta persistence</p>
             <h2 class="act__title"><CalligraphyWord word="Surprise" :drawn="isSeen(ACT.SURPRISE)" /></h2>
-            <p class="formula math">𝑆(𝑡) = ‖𝑧<sub>pred</sub> − 𝑧<sub>target</sub>‖<sub>2</sub></p>
+            <p class="formula math">Token-Δ (43×43 ViT-B/16 grid) · P99 𝜏 = {{ facts.tau }}</p>
             <p class="body">
-              <span class="math">𝑆(𝑡)</span> rises when observed dynamics differ from prediction ({{ facts.eventCount }} peaks in
-              {{ facts.measurementCount }} windows). At 00:00 (<span class="math">{{ facts.maxSurprise }}𝜎</span>), camera placement shakes the
-              whole frame including the grass; at {{ facts.focusTime }} (<strong class="math">{{ facts.focusSurprise }}𝜎</strong>,
-              frame #{{ facts.focusFrame }}), the camera is stationary and attention localizes on the flight board.
+              The token-delta score rises when patch tokens change rapidly ({{ facts.eventCount }} peaks in
+              {{ facts.measurementCount }} windows). At 00:00 (<span class="math">{{ facts.maxSurprise }}</span>), camera placement shifts the
+              whole frame including the grass; at {{ facts.focusTime }} (<strong class="math">{{ facts.focusSurprise }}</strong>,
+              frame #{{ facts.focusFrame }}), the camera is stationary and token change localizes on the flight board.
             </p>
-            <p class="data">Peak events glow ember · height = recorded <span class="math">𝑆(𝑡)</span></p>
+            <p class="data">Peak events glow ember · height = recorded <span class="math">Token-Δ</span></p>
           </div>
         </div>
       </section>
@@ -491,11 +491,11 @@ onBeforeUnmount(() => {
       <section :ref="bindSection(ACT.SACCADE)" class="act act--tall" :class="{ 'is-seen': isSeen(ACT.SACCADE) }">
         <div class="act__content">
           <div class="act__inner" :style="actStyle(ACT.SACCADE)">
-            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} (<span class="math">{{ facts.focusSurprise }}𝜎</span>)</p>
+            <p class="eyebrow">Act III · Foveal crop · {{ facts.focusTime }} (Token-Δ <span class="math">{{ facts.focusSurprise }}</span>)</p>
             <h2 class="act__title"><CalligraphyWord word="Saccade" :drawn="isSeen(ACT.SACCADE)" /></h2>
             <p class="body">
-              The view moves to the region marked by the V-JEPA attention map at {{ facts.focusTime }}. SAM 3.1
-              segments the bees on the landing board and isolates the active cluster inside the attention hotspot.
+              The view moves to the region marked by the V-JEPA overlay at {{ facts.focusTime }}. SAM 3.1
+              segments the bees on the landing board and isolates the active cluster inside the measured hotspot.
             </p>
             <dl class="readout">
               <div>
@@ -507,11 +507,11 @@ onBeforeUnmount(() => {
                 <dd>{{ facts.hotspotBeesSam }} <small>bees</small></dd>
               </div>
               <div>
-                <dt>V-JEPA detector · board</dt>
-                <dd>{{ facts.boardBeesDetector }} <small>bees</small></dd>
+                <dt>V-JEPA board · tokens</dt>
+                <dd>{{ facts.boardBeesDetector }} <small>peaks</small></dd>
               </div>
               <div class="readout__wide">
-                <dt>Geometric pre-classification</dt>
+                <dt>Geometric classification</dt>
                 <dd class="readout__code">{{ facts.classification }}</dd>
               </div>
             </dl>

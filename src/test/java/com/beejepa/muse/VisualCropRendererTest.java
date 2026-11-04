@@ -35,7 +35,7 @@ class VisualCropRendererTest {
         g.fillRect(0, 0, 688, 688);
         g.dispose();
 
-        BoundingBox hotspot = SamGeometry.defaultEntranceHotspot();
+        BoundingBox hotspot = new BoundingBox(235, 372, 395, 480);
         BoundingBox bee = new BoundingBox(310, 380, 350, 420);
         ContainedBee containedBee = new ContainedBee(0, bee.toList(), 1.0);
 

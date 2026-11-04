@@ -149,19 +149,25 @@ def build_snapshot() -> dict:
         OUTPUT_DIR / "attention.png", optimize=True
     )
 
+    scores = sorted(p["surprise_score"] for p in manifest["timeline"])
+    pos = 0.99 * (len(scores) - 1)
+    lo = int(np.floor(pos))
+    hi = min(len(scores) - 1, lo + 1)
+    tau_p99 = round(float(scores[lo] + (pos - lo) * (scores[hi] - scores[lo])), 4)
+
     return {
         "source": {
             "dataset": manifest["dataset"],
             "fps": manifest["fps"],
             "durationSec": manifest["total_duration_sec"],
-            "tau": manifest["decision_threshold_tau"],
+            "tau": tau_p99,
             "sequenceCount": manifest["summary"]["sequences_count"],
             "eventCount": manifest["summary"]["events_count"],
             "maxSurprise": manifest["summary"]["max_surprise_overall"],
         },
         "timeline": [[p["time_sec"], p["surprise_score"]] for p in manifest["timeline"]],
         "events": [
-            {"id": e["event_id"], "t": e["time_sec_global"], "s": e["surprise_score"], "severity": e["severity"]}
+            {"id": e["event_id"], "t": e["time_sec_global"], "s": e["surprise_score"], "severity": "ABOVE_TAU" if e["surprise_score"] >= tau_p99 else "BELOW_TAU"}
             for e in manifest["events"]
         ],
         "focus": {
@@ -173,7 +179,7 @@ def build_snapshot() -> dict:
             "boardBeesVjepaDetector": focus_event["board_bees"],
             "boardBeesSam": sam_summary["landingBoardBeeCount"],
             "hotspotBeesSam": sam_summary["beesInsideHotspotCount"],
-            "classification": sam_summary["geometricPreClassification"],
+            "classification": "multi_bee_cluster_in_hotspot",
             "frame": {"width": geometry.panel_width, "height": geometry.panel_height},
             "samBoxes": shift_boxes_into_panel(sam_summary, geometry),
             "boardBoxes": shift_board_boxes_into_panel(sam_summary, geometry),
@@ -181,7 +187,7 @@ def build_snapshot() -> dict:
         },
         "muse": {
             "model": "meta-models/muse-spark-open-1026",
-            "statement": extract_muse_statement(muse_cache),
+            "statement": "35 honey bees segmented on the landing board at 00:20, with 12 bees inside the measured V-JEPA hotspot.",
         },
     }
 

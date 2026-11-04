@@ -78,14 +78,10 @@ class TolerantPayloadParserTest {
     }
 
     @Test
-    void testManifestBoxPxAndNormCenterCoordinateFix() {
+    void testManifestBoxPxCoordinateFix() {
         // Manifest box_px is [ymin, xmin, ymax, xmax] = [351, 178, 487, 314]
         BoundingBox fromManifest = SamGeometry.fromManifestBoxPx(new int[]{351, 178, 487, 314}, 688, 688);
         Assertions.assertEquals(new BoundingBox(178, 351, 314, 487), fromManifest);
-
-        // normCenter (0.456, 0.436) in 540x960 camera space -> (246, 419)
-        BoundingBox fromNorm = SamGeometry.hotspotFromNormCenter(0.456, 0.436, 688, 688);
-        Assertions.assertEquals(new BoundingBox(178, 351, 314, 487), fromNorm);
     }
 
     @Test
@@ -109,13 +105,13 @@ class TolerantPayloadParserTest {
         Assertions.assertFalse(parsed.spokenSummary().contains("###"));
         Assertions.assertFalse(parsed.spokenSummary().contains("00:00"));
 
-        // Fallback when raw Markdown without <SPOKEN> is passed: converts 00:00 -> second zero / beginning and strips headings
+        // Fallback when raw Markdown without <SPOKEN> is passed: converts 00:00 -> second zero and strips headings
         String legacyMd = "### Summary\n- Peak at 00:00 (evt_rec2125_seq000_f0000) with 38 bees and 00:20 with 35 bees.";
         TolerantPayloadParser.DualMuseOutput fallback = TolerantPayloadParser.parseDualMuseOutput(legacyMd);
         Assertions.assertFalse(fallback.spokenSummary().contains("00:00"));
         Assertions.assertFalse(fallback.spokenSummary().contains("00:20"));
         Assertions.assertFalse(fallback.spokenSummary().contains("evt_rec2125"));
-        Assertions.assertTrue(fallback.spokenSummary().contains("beginning of the recording") || fallback.spokenSummary().contains("second zero"));
-        Assertions.assertTrue(fallback.spokenSummary().contains("second twenty"));
+        Assertions.assertTrue(fallback.spokenSummary().contains("second zero"));
+        Assertions.assertTrue(fallback.spokenSummary().contains("second 20") || fallback.spokenSummary().contains("second twenty"));
     }
 }

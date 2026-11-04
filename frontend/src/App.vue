@@ -30,7 +30,6 @@ const {
   activeSaccade,
   ablationPyramid,
   selectedPyramidTier,
-  selectedCounterfactual,
   fetchSaccadicTargets,
   fetchAblationPyramid,
   updateActiveSaccade,
@@ -44,6 +43,7 @@ const {
   museQuestionInput,
   stagedTab,
   museDiagnosis,
+  museError,
   isAskingMuse,
   showRawWirePayload,
   askMuse,
@@ -63,7 +63,6 @@ const {
 } = useHiveStore()
 
 const videoPlayer = ref(null)
-const showAblationMatrix = ref(false)
 const rightTab = ref('briefing')
 let activeStopRecording = null
 
@@ -77,12 +76,6 @@ const activePyramidTierObj = computed(() => {
   const list = ablationPyramid.value?.tiers
   if (!Array.isArray(list) || !list.length) return null
   return list.find(t => t.id === selectedPyramidTier.value) || list[1] || list[0]
-})
-
-const activeCounterfactualObj = computed(() => {
-  const list = ablationPyramid.value?.counterfactuals
-  if (!Array.isArray(list) || !list.length) return null
-  return list.find(c => c.id === selectedCounterfactual.value) || list[list.length - 1]
 })
 
 function pyramidTierWidthClass(tierIndex) {
@@ -107,11 +100,12 @@ const saccadicReticleStyle = computed(() => {
   if (!selectedEvent.value?.hotspot) return null
   const normX = activeSaccade.value
     ? (activeSaccade.value.focusCenterX / 540)
-    : Number(selectedEvent.value.hotspot.normCenterX || 0.456)
+    : Number(selectedEvent.value.hotspot.normCenterX)
   // focusCenterY and normCenterY already account for the 35px top black header bar in the 1080x960 frame
   const normY = activeSaccade.value
     ? (activeSaccade.value.focusCenterY / 960)
-    : Number(selectedEvent.value.hotspot.normCenterY || 0.436)
+    : Number(selectedEvent.value.hotspot.normCenterY)
+  if (!Number.isFinite(normX) || !Number.isFinite(normY)) return null
 
   // All 1080x960 event media (sequence, raw clip, peak frame) have the camera panel on the left half (0..50% width)
   const leftPct = normX * 50
@@ -122,6 +116,27 @@ const saccadicReticleStyle = computed(() => {
     top: `${topPct.toFixed(2)}%`
   }
 })
+
+function downsampleBuffer(samples, inputRate, targetRate = 16000) {
+  if (!samples || samples.length === 0 || inputRate === targetRate) {
+    return samples
+  }
+  const ratio = inputRate / targetRate
+  const newLength = Math.max(1, Math.round(samples.length / ratio))
+  const result = new Float32Array(newLength)
+  for (let i = 0; i < newLength; i++) {
+    const start = Math.floor(i * ratio)
+    const end = Math.min(samples.length, Math.floor((i + 1) * ratio))
+    let sum = 0
+    let count = 0
+    for (let j = start; j < end; j++) {
+      sum += samples[j]
+      count++
+    }
+    result[i] = count > 0 ? sum / count : samples[Math.min(samples.length - 1, start)]
+  }
+  return result
+}
 
 function encodeWavBuffer(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2)
@@ -281,11 +296,14 @@ async function toggleMicrophoneListening() {
         off += c.length
       }
 
-      const wavBytes = encodeWavBuffer(allSamples, sampleRate)
+      const targetRate = 16000
+      const resampled = downsampleBuffer(allSamples, sampleRate, targetRate)
+      const wavBytes = encodeWavBuffer(resampled, targetRate)
 
       isProcessing.value = false
+      museError.value = null
 
-      let recognizedText = museQuestionInput.value.trim()
+      let recognizedText = ''
 
       try {
         isTranscribing.value = true
@@ -301,8 +319,11 @@ async function toggleMicrophoneListening() {
           recognizedText = transRes.data.transcript.trim()
           voiceTranscript.value = recognizedText
           museQuestionInput.value = recognizedText
+        } else {
+          museError.value = transRes.data?.error || 'Voice transcription returned no speech.'
         }
       } catch (err) {
+        museError.value = 'Voice transcription failed.'
         console.debug('Transcribe error:', err)
       } finally {
         isTranscribing.value = false
@@ -472,16 +493,11 @@ const currentSequence = computed(() => {
   if (timelineMeta.value?.sequences && timelineMeta.value.sequences.length > 0) {
     return timelineMeta.value.sequences[currentSequenceIndex.value] || timelineMeta.value.sequences[0]
   }
-  const idx = currentSequenceIndex.value
-  const pad = String(idx).padStart(2, '0') // taste-skill-ignore
-  return {
-    index: idx,
-    filename: `clip_${pad}_rec2125_seq00${idx}_${pad}_00_to_${pad}_30.mp4`
-  }
+  return null
 })
 
 const sequenceClipUrl = computed(() => {
-  if (!currentSequence.value) return ''
+  if (!currentSequence.value?.filename) return ''
   return `/api/v1/sequences/${currentSequence.value.filename}`
 })
 
@@ -513,7 +529,7 @@ const activeMediaSource = computed(() => {
 // V-JEPA Hotspot rectangle in 1080x960 frame coordinates (left panel: 0..540)
 const vjepaHotspotRect = computed(() => {
   if (!selectedEvent.value?.hotspot) {
-    return { x: 235, y: 372, width: 160, height: 108 }
+    return null
   }
   const hs = selectedEvent.value.hotspot
   const box = hs.boundingBoxPx || hs.boxPx
@@ -527,8 +543,11 @@ const vjepaHotspotRect = computed(() => {
       height: Math.max(10, y2 - cleanY1)
     }
   }
-  const cx = Math.round(Number(hs.normCenterX || 0.456) * 540)
-  const cy = Math.round(Number(hs.normCenterY || 0.436) * 960)
+  if (!Number.isFinite(Number(hs.normCenterX)) || !Number.isFinite(Number(hs.normCenterY))) {
+    return null
+  }
+  const cx = Math.round(Number(hs.normCenterX) * 540)
+  const cy = Math.round(Number(hs.normCenterY) * 960)
   return {
     x: Math.max(0, cx - 68),
     y: Math.max(35, cy - 68),
@@ -556,15 +575,16 @@ const samBoardBoxes = computed(() => {
     .filter(b => !containedKeys.has(b.join(',')))
 })
 
-const maxDuration = computed(() => timelineMeta.value?.totalDurationSec || 300)
-const minScore = computed(() => Number(timelineMeta.value?.minSurprise ?? 9.5))
-const maxScore = computed(() => Number(timelineMeta.value?.maxSurprise ?? 16.5))
+const maxDuration = computed(() => Math.max(1, Number(timelineMeta.value?.totalDurationSec || 0)))
+const minScore = computed(() => Number(timelineMeta.value?.minSurprise ?? 0))
+const maxScore = computed(() => Number(timelineMeta.value?.maxSurprise ?? 1))
 const svgWidth = 1000
 const svgHeight = 100
 
 const tauY = computed(() => {
+  const tau = Number(timelineMeta.value?.decisionThreshold)
+  if (!Number.isFinite(tau)) return null
   const range = Math.max(1.0, maxScore.value - minScore.value)
-  const tau = Number(timelineMeta.value?.decisionThreshold || 10.2)
   const clamped = Math.max(minScore.value, Math.min(tau, maxScore.value))
   return (svgHeight - 8 - ((clamped - minScore.value) / range) * (svgHeight - 16)).toFixed(1)
 })
@@ -931,7 +951,9 @@ async function handleLogout() {
 
             <!-- Active Event Timestamp Readout -->
             <div v-if="selectedEvent" class="hidden sm:flex items-center gap-1.5 text-xs text-ink-400 tabular-nums shrink-0">
-              <span class="text-ink-200 font-medium">{{ formatTime(selectedEvent.timestampSec) }}</span>
+              <span v-if="selectedEvent.recordingId" class="text-honey-400 font-medium">{{ selectedEvent.recordingId }}</span>
+              <span v-if="selectedEvent.recordingId" class="text-ink-600">·</span>
+              <span class="text-ink-200 font-medium">{{ selectedEvent.formattedTime || formatTime(selectedEvent.timestampSec) }}</span>
               <span class="text-ink-600">·</span>
               <span>Frame {{ selectedEvent.frameIndex }}</span>
             </div>
@@ -987,39 +1009,41 @@ async function handleLogout() {
                     />
                   </template>
                   <!-- V-JEPA 2.1 Hotspot Box (camera panel + heatmap panel) -->
-                  <rect
-                    :x="vjepaHotspotRect.x"
-                    :y="vjepaHotspotRect.y"
-                    :width="vjepaHotspotRect.width"
-                    :height="vjepaHotspotRect.height"
-                    fill="none"
-                    stroke="#F36C47"
-                    stroke-width="3"
-                    stroke-dasharray="7 5"
-                  />
-                  <rect
-                    :x="vjepaHotspotRect.x + 540"
-                    :y="vjepaHotspotRect.y"
-                    :width="vjepaHotspotRect.width"
-                    :height="vjepaHotspotRect.height"
-                    fill="none"
-                    stroke="#EAA23A"
-                    stroke-width="2.5"
-                    stroke-dasharray="6 5"
-                  />
+                  <template v-if="vjepaHotspotRect">
+                    <rect
+                      :x="vjepaHotspotRect.x"
+                      :y="vjepaHotspotRect.y"
+                      :width="vjepaHotspotRect.width"
+                      :height="vjepaHotspotRect.height"
+                      fill="none"
+                      stroke="#F36C47"
+                      stroke-width="3"
+                      stroke-dasharray="7 5"
+                    />
+                    <rect
+                      :x="vjepaHotspotRect.x + 540"
+                      :y="vjepaHotspotRect.y"
+                      :width="vjepaHotspotRect.width"
+                      :height="vjepaHotspotRect.height"
+                      fill="none"
+                      stroke="#EAA23A"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 5"
+                    />
+                  </template>
                 </svg>
                 <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1.5 pointer-events-none">
                   <span
                     v-if="selectedEvent?.hasSamSpatial && selectedEvent?.samSpatial"
                     class="bg-ink-950/90 text-clover-300 text-[11px] font-medium px-2.5 py-1 rounded tabular-nums"
                   >
-                    SAM 3.1 · {{ selectedEvent.samSpatial.landingBoardBeeCount }} board · {{ selectedEvent.samSpatial.beesInsideHotspotCount }} in hotspot
+                    SAM 3.1 · {{ selectedEvent.samSpatial.landingBoardBeeCount >= 0 ? `${selectedEvent.samSpatial.landingBoardBeeCount} board` : 'board unknown' }} · {{ selectedEvent.samSpatial.beesInsideHotspotCount >= 0 ? `${selectedEvent.samSpatial.beesInsideHotspotCount} in hotspot` : 'hotspot unknown' }}
                   </span>
                   <span
                     v-else
                     class="bg-ink-950/90 text-ink-300 text-[11px] font-medium px-2.5 py-1 rounded tabular-nums"
                   >
-                    V-JEPA 2.1 hotspot
+                    {{ vjepaHotspotRect ? 'V-JEPA 2.1 measured hotspot' : `Hotspot: ${selectedEvent?.hotspotStatus || 'PENDING'}` }}
                   </span>
                 </div>
               </div>
@@ -1044,16 +1068,16 @@ async function handleLogout() {
             </div>
           </div>
 
-          <!-- Coupled Latent Surprise Timeline & Stepper -->
+          <!-- Coupled Token-Delta Timeline & Stepper -->
           <div class="bg-ink-900 px-3 sm:px-4 py-3 shrink-0">
             <div class="flex items-center justify-between gap-2 mb-2 text-xs">
               <div class="flex items-center gap-2 min-w-0">
-                <span class="font-medium text-ink-200 truncate">Surprise Timeline</span>
+                <span class="font-medium text-ink-200 truncate">Token-Δ Timeline</span>
                 <span
-                  v-if="timelineData && timelineData.length > 0"
+                  v-if="timelineData && timelineData.length > 0 && timelineMeta?.decisionThreshold != null"
                   class="text-[11px] text-ink-400 tabular-nums shrink-0"
                 >
-                  · <span class="math">𝜏 = {{ timelineMeta?.decisionThreshold || timelineMeta?.thresholdSigma || '10.2' }}𝜎</span>
+                  · <span class="math">𝜏 = {{ Number(timelineMeta.decisionThreshold).toFixed(2) }}</span> (P99)
                 </span>
               </div>
 
@@ -1113,7 +1137,7 @@ async function handleLogout() {
                   </defs>
 
                   <line x1="0" y1="92" x2="1000" y2="92" stroke="#202224" stroke-width="1" />
-                  <line x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#F36C47" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
+                  <line v-if="tauY != null" x1="0" :y1="tauY" x2="1000" :y2="tauY" stroke="#F36C47" stroke-dasharray="4 4" stroke-width="1.2" opacity="0.6" />
 
                   <path v-if="svgAreaPath" :d="svgAreaPath" fill="url(#curveGradient)" />
                   <path
@@ -1142,7 +1166,7 @@ async function handleLogout() {
                   </div>
 
                   <div class="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-ink-900 px-2 py-0.5 rounded text-[10px] text-honey-300 whitespace-nowrap pointer-events-none z-30 tabular-nums">
-                    <span class="math">{{ spike.surpriseScoreL2 }}𝜎</span> ({{ formatTime(spike.timestampSec) }})
+                    <span class="math">{{ Number(spike.tokenDeltaScore ?? spike.surpriseScoreL2).toFixed(2) }}</span> ({{ formatTime(spike.timestampSec) }})
                   </div>
                 </div>
 
@@ -1225,42 +1249,44 @@ async function handleLogout() {
             <!-- 4-Cell Metric Strip (One Figure, One Place) -->
             <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-1.5 shrink-0">
               <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
-                <div class="text-[11px] text-ink-400">Surprise</div>
+                <div class="text-[11px] text-ink-400">Token-Δ Score</div>
                 <div class="text-xl font-semibold text-ember-400 mt-0.5 tabular-nums leading-tight">
-                  <span class="math">{{ Number(selectedEvent.surpriseScoreL2).toFixed(2) }}𝜎</span>
+                  <span class="math">{{ Number(selectedEvent.tokenDeltaScore ?? selectedEvent.surpriseScoreL2).toFixed(2) }}</span>
                 </div>
-                <div class="text-[10px] text-ink-500 mt-0.5">Latent <span class="math">‖𝑧̂ − 𝑧‖<sub>2</sub></span></div>
+                <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
+                  P99 𝜏 = {{ timelineMeta?.decisionThreshold != null ? Number(timelineMeta.decisionThreshold).toFixed(2) : '—' }}
+                </div>
               </div>
 
               <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">Landing Board</div>
                 <div class="text-lg font-semibold text-ink-100 mt-0.5 tabular-nums leading-tight">
-                  {{ selectedEvent.boardBees ?? '—' }} bees
+                  {{ selectedEvent.hasSamSpatial && selectedEvent.boardBees >= 0 ? `${selectedEvent.boardBees} bees` : `${selectedEvent.boardPeaks ?? '—'} peaks` }}
                 </div>
                 <div class="text-[10px] text-ink-500 mt-0.5">
-                  {{ selectedEvent.hasSamSpatial ? 'SAM 3.1' : 'V-JEPA 2.1' }}
+                  {{ selectedEvent.hasSamSpatial && selectedEvent.boardBees >= 0 ? 'SAM 3.1' : 'V-JEPA board tokens' }}
                 </div>
               </div>
 
               <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">
-                  {{ selectedEvent.hasSamSpatial ? 'Hotspot' : 'Active Cells' }}
+                  {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? 'Hotspot' : 'Active Cells' }}
                 </div>
                 <div class="text-lg font-semibold text-electric-300 mt-0.5 tabular-nums leading-tight">
-                  {{ selectedEvent.hasSamSpatial ? (selectedEvent.hotspotBeesCount + ' bees') : ((selectedEvent.activeCells ?? '—') + ' cells') }}
+                  {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? `${selectedEvent.hotspotBeesCount} bees` : `${selectedEvent.activeCells ?? '—'} cells` }}
                 </div>
                 <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
-                  {{ selectedEvent.hasSamSpatial ? 'IoA ≥ 0.25' : '43×43 grid' }}
+                  {{ selectedEvent.hasSamSpatial && selectedEvent.hotspotBeesCount >= 0 ? 'IoA ≥ 0.25' : '43×43 board overlay' }}
                 </div>
               </div>
 
               <div class="p-2.5 sm:p-3 bg-ink-950 rounded-md flex flex-col justify-between">
                 <div class="text-[11px] text-ink-400">Fixation</div>
                 <div class="text-lg font-semibold text-honey-400 mt-0.5 tabular-nums leading-tight">
-                  ({{ selectedEvent?.hotspot?.tubeletGridX ?? 2 }}, {{ selectedEvent?.hotspot?.tubeletGridY ?? 3 }})
+                  {{ selectedEvent?.hotspot ? `(${selectedEvent.hotspot.tubeletGridX}, ${selectedEvent.hotspot.tubeletGridY})` : (selectedEvent?.hotspotStatus || 'PENDING') }}
                 </div>
                 <div class="text-[10px] text-ink-500 mt-0.5 tabular-nums">
-                  {{ activeSaccade ? `Jump ${activeSaccade.saccadicJumpDistancePx} px` : `(${Number(selectedEvent?.hotspot?.normCenterX ?? 0.456).toFixed(2)}, ${Number(selectedEvent?.hotspot?.normCenterY ?? 0.436).toFixed(2)})` }}
+                  {{ activeSaccade ? `Jump ${activeSaccade.saccadicJumpDistancePx} px` : (selectedEvent?.hotspot ? `(${Number(selectedEvent.hotspot.normCenterX).toFixed(2)}, ${Number(selectedEvent.hotspot.normCenterY).toFixed(2)})` : 'Measured overlay') }}
                 </div>
               </div>
             </div>
@@ -1308,7 +1334,13 @@ async function handleLogout() {
 
                 <!-- Prose Report (Directly on surface, no nested card-in-card) -->
                 <div
-                  v-if="museDiagnosis"
+                  v-if="museError"
+                  class="p-2.5 rounded bg-ember-500/15 text-ember-300 text-xs leading-relaxed"
+                >
+                  {{ museError }}
+                </div>
+                <div
+                  v-else-if="museDiagnosis"
                   v-html="formatMarkdownReport(museDiagnosis.report || museDiagnosis.diagnosis)"
                   class="text-xs text-ink-200 leading-relaxed font-sans space-y-1.5"
                 ></div>
@@ -1339,7 +1371,9 @@ async function handleLogout() {
                       />
                       <div class="flex items-center justify-between text-[10px] text-ink-400 tabular-nums px-0.5">
                         <span>{{ evt.timestamp }}</span>
-                        <span class="text-honey-400 font-medium">{{ evt.beesInsideHotspotCount !== undefined ? evt.beesInsideHotspotCount : evt.landingBoardBeeCount }} bees</span>
+                        <span class="text-honey-400 font-medium">
+                          {{ evt.beesInsideHotspotCount >= 0 ? `${evt.beesInsideHotspotCount} bees` : (evt.landingBoardBeeCount >= 0 ? `${evt.landingBoardBeeCount} board` : 'unsegmented') }}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1413,14 +1447,14 @@ async function handleLogout() {
             </div>
 
             <!-- =========================================================== -->
-            <!-- TAB 2: 5-TIER ABLATION PYRAMID & EMPIRICAL MATRIX           -->
+            <!-- TAB 2: 5-TIER PIPELINE ROLES & MEASURED TELEMETRY           -->
             <!-- =========================================================== -->
             <div v-else-if="rightTab === 'ablation'" class="mt-4 space-y-4">
               <template v-if="ablationPyramid">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-xs font-semibold text-ink-100">5-Tier Architecture</span>
-                  <span class="text-[11px] text-ink-400 tabular-nums">
-                    -{{ ablationPyramid.funnelMetrics?.compressionRatioPct || 93.6 }}% frames · +{{ ablationPyramid.funnelMetrics?.tokenDensityBoost || 8.3 }}x density
+                  <span class="text-xs font-semibold text-ink-100">5-Tier Pipeline Roles</span>
+                  <span v-if="ablationPyramid.measured" class="text-[11px] text-ink-400 tabular-nums">
+                    {{ ablationPyramid.measured.eventsWithMeasuredHotspot ?? 0 }}/{{ ablationPyramid.measured.eventsTotal ?? 0 }} measured hotspots
                   </span>
                 </div>
 
@@ -1440,7 +1474,7 @@ async function handleLogout() {
                     class="min-h-[38px] sm:min-h-[34px] px-3 py-1.5 rounded text-xs flex items-center justify-between transition-colors cursor-pointer tabular-nums touch-manipulation"
                   >
                     <span class="font-semibold truncate">T{{ tier.tierIndex }} · {{ tier.shortTitle }}</span>
-                    <span class="text-[11px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.quantitativeMetric.split('·')[0] }}</span>
+                    <span class="text-[11px] text-ink-400 ml-2 shrink-0 hidden sm:inline">{{ tier.modelOrComponent }}</span>
                   </button>
                 </div>
 
@@ -1467,39 +1501,28 @@ async function handleLogout() {
                   </div>
                 </div>
 
-                <!-- Counterfactual Ablation Matrix Toggle -->
-                <div class="space-y-2">
-                  <button
-                    type="button"
-                    @click="showAblationMatrix = !showAblationMatrix"
-                    class="w-full min-h-[36px] px-3 rounded-md bg-ink-950 hover:bg-ink-800/80 flex items-center justify-between text-xs text-ink-300 hover:text-honey-300 transition-colors tabular-nums touch-manipulation"
-                  >
-                    <span>{{ showAblationMatrix ? 'Hide' : 'Show' }} Empirical Matrix (N=20)</span>
-                    <span class="text-honey-400 shrink-0 ml-2">
-                      Hit {{ activeCounterfactualObj?.pointingHitRatePct ?? 100 }}% · IoU {{ activeCounterfactualObj?.meanHotspotIou ?? 1.0 }}
-                    </span>
-                  </button>
-
-                  <div v-if="showAblationMatrix" class="space-y-2">
-                    <div class="grid grid-cols-1 gap-1">
-                      <button
-                        v-for="cf in ablationPyramid.counterfactuals"
-                        :key="cf.id"
-                        type="button"
-                        @click="selectedCounterfactual = cf.id"
-                        :class="selectedCounterfactual === cf.id ? 'bg-ink-800 text-ink-100' : 'bg-ink-950 text-ink-400 hover:text-ink-200'"
-                        class="min-h-[36px] px-3 py-1.5 rounded text-left text-[11px] flex items-center justify-between transition-colors tabular-nums touch-manipulation"
-                      >
-                        <span class="truncate">{{ cf.label }}</span>
-                        <span class="text-honey-400 shrink-0 ml-2">
-                          Hit {{ cf.pointingHitRatePct ?? (cf.capabilitiesScore * 20) }}% · MAE {{ cf.hotspotCountMae ?? '—' }}
-                        </span>
-                      </button>
-                    </div>
-
-                    <div v-if="activeCounterfactualObj" class="p-3 bg-ink-950 rounded-md text-xs text-ink-300 leading-relaxed">
-                      {{ activeCounterfactualObj.observedOutcome }}
-                    </div>
+                <!-- Live Measured Event & Catalog Telemetry -->
+                <div v-if="ablationPyramid.measured" class="p-3 bg-ink-950 rounded-md space-y-1.5 text-[11px] tabular-nums">
+                  <div class="text-xs font-semibold text-ink-100 mb-1">Measured Telemetry</div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-ink-400">Catalog source</span>
+                    <span class="text-ink-200">{{ ablationPyramid.measured.datasetSource }}</span>
+                  </div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-ink-400">Timeline windows / Events</span>
+                    <span class="text-ink-200">{{ ablationPyramid.measured.timelineWindows }} / {{ ablationPyramid.measured.eventsTotal }} ({{ ablationPyramid.measured.eventsAboveTau }} ≥ 𝜏)</span>
+                  </div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-ink-400">Threshold 𝜏 (P99)</span>
+                    <span class="text-honey-300">{{ ablationPyramid.measured.decisionThresholdTau }}</span>
+                  </div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-ink-400">Hotspot status</span>
+                    <span class="text-ink-200">{{ ablationPyramid.measured.hotspotStatus }} ({{ ablationPyramid.measured.activeBoardCells ?? '—' }} cells)</span>
+                  </div>
+                  <div class="flex justify-between gap-3">
+                    <span class="text-ink-400">SAM 3.1 status</span>
+                    <span class="text-clover-300">{{ ablationPyramid.measured.samStatus }}</span>
                   </div>
                 </div>
               </template>

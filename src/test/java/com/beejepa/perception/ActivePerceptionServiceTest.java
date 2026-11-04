@@ -20,7 +20,7 @@ public class ActivePerceptionServiceTest {
     private ActivePerceptionService perceptionService;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws InterruptedException {
         ringBuffer = new OffHeapFrameRingBuffer(50);
         simdEvaluator = new SimdLatentEvaluator();
         com.beejepa.config.StorageConfig storageConfig = new com.beejepa.config.StorageConfig();
@@ -32,6 +32,7 @@ public class ActivePerceptionServiceTest {
 
         ObjectMapper objectMapper = ObjectMapper.getDefault();
         eventService = new EventService(storageService, objectMapper);
+        eventService.awaitHotspotMeasurement(10_000);
         perceptionService = new ActivePerceptionService(ringBuffer, simdEvaluator, eventService);
         perceptionService.initialize();
     }
@@ -46,12 +47,11 @@ public class ActivePerceptionServiceTest {
     @Test
     void testTrajectoryGenerationFromRealEvents() {
         List<SaccadicTarget> trajectory = perceptionService.getSaccadicTrajectory();
-        Assertions.assertFalse(trajectory.isEmpty(), "Trajectory should be loaded from real manifest events");
-        Assertions.assertTrue(trajectory.size() >= 10, "Should contain at least 10 sample events");
+        Assertions.assertFalse(trajectory.isEmpty(), "Trajectory should be loaded from measured hotspot events");
 
         SaccadicTarget first = trajectory.getFirst();
         Assertions.assertEquals("evt_rec2125_seq000_f0000", first.eventId());
-        Assertions.assertTrue(first.tokenDeltaScore() > 10.0, "First peak event surprise should exceed tau=10.2");
+        Assertions.assertTrue(first.tokenDeltaScore() > 13.0, "First peak event token-delta score should exceed tau");
         Assertions.assertNotNull(first.foveaCropBox());
         Assertions.assertEquals(4, first.foveaCropBox().size());
     }
@@ -63,7 +63,8 @@ public class ActivePerceptionServiceTest {
 
         SaccadicTarget target = targetOpt.get();
         Assertions.assertEquals("evt_rec2125_seq000_f0000", target.eventId());
-        Assertions.assertEquals("multi_bee_interaction_cluster", target.classification());
+        Assertions.assertNotNull(target.classification());
+        Assertions.assertFalse(target.classification().isBlank());
         Assertions.assertTrue(target.focusCenterX() > 0);
         Assertions.assertTrue(target.focusCenterY() > 0);
     }

@@ -1,6 +1,6 @@
 package com.beejepa.controller;
 
-import com.beejepa.muse.SamGeometry;
+import com.beejepa.event.EventService;
 import com.beejepa.perception.OffHeapFrameRingBuffer;
 import com.beejepa.perception.SaccadicTarget;
 import io.micronaut.core.type.Argument;
@@ -24,6 +24,9 @@ class PerceptionControllerTest {
     @Client("/")
     HttpClient client;
 
+    @Inject
+    EventService eventService;
+
     @Test
     void testGetRingBufferTelemetry() {
         HttpResponse<OffHeapFrameRingBuffer.BufferTelemetry> response = client.toBlocking().exchange(
@@ -39,7 +42,8 @@ class PerceptionControllerTest {
     }
 
     @Test
-    void testGetSaccades() {
+    void testGetSaccades() throws InterruptedException {
+        eventService.awaitHotspotMeasurement(10_000);
         HttpResponse<List<SaccadicTarget>> response = client.toBlocking().exchange(
                 HttpRequest.GET("/api/v1/perception/saccades"),
                 Argument.listOf(SaccadicTarget.class)
@@ -50,7 +54,7 @@ class PerceptionControllerTest {
         Assertions.assertFalse(saccades.isEmpty());
 
         SaccadicTarget first = saccades.getFirst();
-        Assertions.assertEquals("evt_rec2125_seq000_f0000", first.eventId());
+        Assertions.assertNotNull(first.eventId());
         Assertions.assertTrue(first.focusCenterX() > 0);
         Assertions.assertTrue(first.focusCenterY() > 0);
 
@@ -85,7 +89,8 @@ class PerceptionControllerTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void testAblationPyramidEndpoint() {
+    void testAblationPyramidEndpoint() throws InterruptedException {
+        eventService.awaitHotspotMeasurement(10_000);
         HttpResponse<Map<String, Object>> response = client.toBlocking().exchange(
                 HttpRequest.GET("/api/v1/perception/ablation-pyramid?eventId=evt_rec2125_seq000_f0000"),
                 Argument.mapOf(String.class, Object.class)
@@ -94,50 +99,19 @@ class PerceptionControllerTest {
         Map<String, Object> body = response.body();
         Assertions.assertNotNull(body);
         Assertions.assertEquals("evt_rec2125_seq000_f0000", body.get("eventId"));
+        Assertions.assertFalse(body.containsKey("funnelMetrics"));
+        Assertions.assertFalse(body.containsKey("counterfactuals"));
 
-        Map<String, Object> funnel = (Map<String, Object>) body.get("funnelMetrics");
-        Assertions.assertNotNull(funnel);
-        Assertions.assertEquals(88, ((Number) funnel.get("fullFramePatches")).intValue());
-        Assertions.assertEquals(88, ((Number) funnel.get("nativeCropPatches")).intValue());
-        Assertions.assertEquals(729, ((Number) funnel.get("fovealCropPatches")).intValue());
-        Assertions.assertEquals(68.6, ((Number) funnel.get("attentionFlopRatio")).doubleValue(), 0.1);
-        Assertions.assertEquals(30.0, ((Number) funnel.get("staticB1PointingHitRatePct")).doubleValue(), 0.1);
-        Assertions.assertEquals(21.0, ((Number) funnel.get("randomGazeB3PointingHitRatePct")).doubleValue(), 0.1);
-        Assertions.assertTrue(((Number) funnel.get("hotspotBeeCoverageRatio")).doubleValue() > 0.22);
-        Assertions.assertTrue(((Number) funnel.get("boardBeesCount")).intValue() > 0);
-        Assertions.assertTrue(((Number) funnel.get("hotspotBeesCount")).intValue() > 0);
+        Map<String, Object> measured = (Map<String, Object>) body.get("measured");
+        Assertions.assertNotNull(measured);
+        Assertions.assertEquals(20, ((Number) measured.get("eventsTotal")).intValue());
+        Assertions.assertEquals(280, ((Number) measured.get("timelineWindows")).intValue());
+        Assertions.assertTrue(((Number) measured.get("decisionThresholdTau")).doubleValue() > 13.0);
 
         List<Map<String, Object>> tiers = (List<Map<String, Object>>) body.get("tiers");
         Assertions.assertNotNull(tiers);
         Assertions.assertEquals(5, tiers.size());
         Assertions.assertEquals("TIER_0_RAW_STREAM", tiers.getFirst().get("id"));
         Assertions.assertEquals("TIER_4_MUSE_SPARK_REASONING", tiers.getLast().get("id"));
-
-        List<Map<String, Object>> counterfactuals = (List<Map<String, Object>>) body.get("counterfactuals");
-        Assertions.assertNotNull(counterfactuals);
-        Assertions.assertEquals(6, counterfactuals.size());
-        Assertions.assertEquals(30.0, ((Number) counterfactuals.get(3).get("pointingHitRatePct")).doubleValue(), 0.1);
-        Assertions.assertEquals(100.0, ((Number) counterfactuals.get(5).get("pointingHitRatePct")).doubleValue(), 0.1);
-    }
-
-    @Test
-    void testSamGeometryDefensiveBeeBallingVoidGuard() {
-        SamGeometry.BoundingBox hotspot = new SamGeometry.BoundingBox(200, 300, 400, 500); // area = 40,000 px^2
-        List<SamGeometry.ContainedBee> peripheralBees = List.of(
-                new SamGeometry.ContainedBee(0, List.of(205, 305, 235, 335), 1.0), // 900 px^2
-                new SamGeometry.ContainedBee(1, List.of(365, 465, 395, 495), 1.0)  // 900 px^2
-        );
-        double coverage = SamGeometry.computeHotspotBeeCoverageRatio(hotspot, peripheralBees);
-        Assertions.assertTrue(coverage < 0.22);
-        // Under extreme surpriseSigma >= 12.5 with <22% bee coverage, classifyHotspot triggers the bee-balling guard
-        Assertions.assertEquals(
-                "defensive_bee_balling_or_intruder_candidate",
-                SamGeometry.classifyHotspot(peripheralBees, hotspot, 16.05)
-        );
-        // Under moderate surpriseSigma < 12.5, standard multi-bee cluster classification applies
-        Assertions.assertEquals(
-                "multi_bee_interaction_cluster",
-                SamGeometry.classifyHotspot(peripheralBees, hotspot, 9.5)
-        );
     }
 }

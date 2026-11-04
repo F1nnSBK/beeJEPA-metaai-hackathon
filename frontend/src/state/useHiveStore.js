@@ -102,6 +102,7 @@ const voiceTranscript = ref('')
 const museQuestionInput = ref(initialSession.museQuestionInput || '')
 const stagedTab = ref('prompt')
 const museDiagnosis = ref(null)
+const museError = ref(null)
 const isAskingMuse = ref(false)
 const showRawWirePayload = ref(false)
 
@@ -332,6 +333,7 @@ async function askMuse(question = null, options = {}) {
   const silentAutoLoad = Boolean(options?.silentAutoLoad)
   const q = (question || museQuestionInput.value || 'What happened at my hive today?').trim()
   isAskingMuse.value = true
+  museError.value = null
   try {
     const res = await apiFetch('/api/v1/muse/ask', {
       method: 'POST',
@@ -345,7 +347,7 @@ async function askMuse(question = null, options = {}) {
       retries: 1,
       timeoutMs: 45000
     })
-    if (res.ok && res.data) {
+    if (res.ok && res.data && res.data.sourceMode !== 'UNAVAILABLE') {
       const normalized = normalizeMuseDiagnosis(res.data)
       museDiagnosis.value = normalized
       fetchSaccadicTargets()
@@ -358,6 +360,9 @@ async function askMuse(question = null, options = {}) {
           readAloud(normalized.spokenSummary)
         }
       }
+    } else if (!res.aborted) {
+      museDiagnosis.value = null
+      museError.value = res.data?.error || 'Meta Muse is currently unavailable. No answer was generated.'
     }
   } finally {
     isAskingMuse.value = false
@@ -496,6 +501,7 @@ export function useHiveStore() {
     museQuestionInput,
     stagedTab,
     museDiagnosis,
+    museError,
     isAskingMuse,
     showRawWirePayload,
     askMuse,

@@ -42,21 +42,8 @@ public class AudioSpectralAnalyzerTest {
     }
 
     @Test
-    public void testLogNormalConversationalTurnTakingDistribution() {
+    public void testZeroArtificialLatencyModel() {
         ResponseLatencyModel model = new ResponseLatencyModel();
-
-        long minObserved = Long.MAX_VALUE;
-        long maxObserved = Long.MIN_VALUE;
-
-        for (int i = 0; i < 50; i++) {
-            long delay = model.sampleConversationalDelayMs();
-            assertTrue(delay >= 280, "Delay must respect biological floor");
-            assertTrue(delay <= 1400, "Delay must stay within conversational ceiling");
-            if (delay < minObserved) minObserved = delay;
-            if (delay > maxObserved) maxObserved = delay;
-        }
-
-        // Verify that delay is not constant (has realistic biological variance)
-        assertTrue(maxObserved > minObserved, "Conversational delays must be stochastic and not constant");
+        assertEquals(0L, model.sampleConversationalDelayMs());
     }
 }
