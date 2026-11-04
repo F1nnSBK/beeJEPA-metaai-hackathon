@@ -1494,6 +1494,12 @@ async function handleLogout() {
           <div v-else class="flex-1 flex flex-col items-center justify-center text-center p-6 text-ink-400 my-auto">
             <p class="text-xs text-ink-400 max-w-xs">Awaiting anomaly events on storage.</p>
           </div>
+
+          <footer class="px-4 py-1.5 flex items-center justify-end gap-2 text-[10px] text-ink-500/50 shrink-0">
+            <a href="https://www.finn-hertsch.de/impressum" target="_blank" rel="noopener noreferrer" class="hover:text-ink-400 transition-colors">Impressum</a>
+            <span aria-hidden="true">·</span>
+            <a href="https://www.finn-hertsch.de/datenschutz" target="_blank" rel="noopener noreferrer" class="hover:text-ink-400 transition-colors">Datenschutz</a>
+          </footer>
         </section>
       </main>
     </div>

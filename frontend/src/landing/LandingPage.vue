@@ -280,6 +280,11 @@ onBeforeUnmount(() => {
             <p class="eyebrow">Beekeeper console</p>
             <h2 class="enter-title">Inside the hive</h2>
             <LoginCard @authenticated="emit('authenticated', $event)" />
+            <nav class="landing__legal" aria-label="Legal">
+              <a href="https://www.finn-hertsch.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>
+              <span aria-hidden="true">·</span>
+              <a href="https://www.finn-hertsch.de/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutz</a>
+            </nav>
           </div>
         </div>
       </section>
@@ -290,6 +295,11 @@ onBeforeUnmount(() => {
         <h1 class="enter-title">beeJEPA</h1>
         <p class="body">The hive recording could not be loaded. You can still sign in.</p>
         <LoginCard @authenticated="emit('authenticated', $event)" />
+        <nav class="landing__legal" aria-label="Legal">
+          <a href="https://www.finn-hertsch.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://www.finn-hertsch.de/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutz</a>
+        </nav>
       </div>
     </main>
   </div>
@@ -752,5 +762,27 @@ onBeforeUnmount(() => {
   .scroll-cue::before {
     animation: none;
   }
+}
+
+.landing__legal {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: rgba(147, 149, 153, 0.38);
+}
+
+.landing__legal a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.landing__legal a:hover {
+  color: rgba(234, 235, 237, 0.65);
 }
 </style>
