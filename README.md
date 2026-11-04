@@ -13,40 +13,53 @@ Hive entrance monitoring system combining **V-JEPA 2.1** prediction error tracki
 
 ---
 
-## Overview
+## Overview & Hackathon Scope
 
 ![Figure 1: Pipeline overview](figures/figure1_head_concept.svg)
 
-Continuous 60 fps video from a beehive entrance produces too much footage for manual review or constant cloud VLM calls. **beeJEPA** splits the workload into two stages:
+Continuous 60 fps video from a beehive entrance produces too much footage for manual review or constant cloud VLM calls. To provide clear transparency for the hackathon evaluation, the overview below distinguishes between the pre-existing university coursework foundation and the system built during the **Meta Global AI Developer Hackathon 2026**:
 
-- **Stage 1 — Continuous Video Encoding:**
-  A pre-computed **V-JEPA 2.1** ViT-H/16 encoder processes `1080x960` entrance video at 60 fps using an overlapping `9x9` patch grid. It measures the L2 distance `S(t) = ||z_pred - z_target||_2` between predicted and observed latent features and triggers the second stage only when `S(t)` exceeds the threshold `τ`.
+- **Pre-Existing University Coursework Foundation — System 1:**
+  Self-supervised feature extraction from 60 fps `1080x960` hive camera footage using **V-JEPA 2.1** ViT-H/16 over an overlapping `9x9` patch grid. It computes the continuous prediction error `S(t) = ||z_pred - z_target||_2` and exports the anomaly timeline and event clips to the Hugging Face dataset. At this stage, outputs are numerical surprise scores and spatial grid coordinates without instance masks, language output, or a web interface.
 
-- **Stage 2 — Targeted Segmentation and Multimodal Analysis:**
-  - **Hotspot Cropping:** When `S(t)` crosses `τ`, `VisualCropRenderer` extracts a `688x688` overview of the flight board and a `384x384` crop around the V-JEPA attention peak.
+- **Built During the Meta AI Hackathon — System 2:**
+  - **Hotspot Cropping:** When `S(t)` crosses the threshold `τ`, `VisualCropRenderer` extracts a `688x688` overview of the flight board and a `384x384` crop around the V-JEPA attention peak.
   - **Off-Heap Frame Buffer and Vector API:** `OffHeapFrameRingBuffer` stores keyframes outside the JVM heap via Java 25 `Arena` and `MemorySegment`, while `SimdLatentEvaluator` computes vector distances and cosine similarity with `FloatVector`.
   - **SAM 3.1 Segmentation and Geometric Filtering:** `Sam31Client` segments bees on the landing board via **Meta SAM 3.1**, and `SamGeometry` measures how much of each detected bee lies inside the V-JEPA hotspot using an Intersection-over-Area threshold of `0.25` and a `22%` minimum hotspot coverage check.
   - **Muse Spark Open Report Generation:** `MetaMuseService` sends the event crops and segmentation metrics to `meta-models/muse-spark-open-1026` on Baseten. The model can call `QuerySam31Concept` and `QueryFovealHotspot` as tools and returns both a `<REPORT>` block in Markdown and a `<SPOKEN>` block formatted for text-to-speech.
   - **Caching and Fault Tolerance:** `ResilientApiExecutor` handles retries, circuit breaking, and API key failover. Results are cached across an in-memory map, Redis, and a local SQLite WAL database.
-  - **Web Interface:** A Three.js scroll introduction leads into a Vue 3 console with video playback, SAM overlays, English speech output via `edge-tts`, and synthesized bee audio from `BeeAcousticSynthesizer`.
+  - **Web Interface and Audio:** A Three.js scroll introduction leads into a Vue 3 console with video playback, SAM overlays, English speech output via `edge-tts`, and synthesized bee audio from `BeeAcousticSynthesizer`.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  STAGE 1: V-JEPA 2.1 VIDEO STREAM                            │
-│  60 fps 1080x960 Entrance Video -> V-JEPA 2.1 ViT-H/16       │
-│  Prediction Error Trajectory S(t) = ||z_pred - z_target||_2  │
+│  PRE-EXISTING UNIVERSITY COURSEWORK (System 1)               │
+│  - Raw 60 fps 1080x960 hive entrance video                   │
+│  - Self-supervised V-JEPA 2.1 ViT-H/16 feature extraction    │
+│  - Prediction error trajectory S(t) = ||z_pred - z_target||_2│
+│  - Exported event clips & timeline dataset on Hugging Face   │
 └──────────────────────────────┬───────────────────────────────┘
-                               │  Trigger when S(t) >= τ
+                               │  [HACKATHON CUT-OFF LINE]
+═══════════════════════════════╪════════════════════════════════
 ┌──────────────────────────────▼───────────────────────────────┐
-│  STAGE 2: SEGMENTATION, REASONING & WEB CONSOLE              │
-│  1. Java 25 Off-Heap Frame Buffer & Vector API               │
+│  BUILT DURING META AI HACKATHON (System 2)                   │
+│  1. Java 25 Off-Heap Frame Buffer & Vector API Evaluator     │
 │  2. Meta SAM 3.1 Instance Segmentation on Landing Board      │
 │  3. Geometric Hotspot Containment Filter with IoA >= 0.25    │
-│  4. Meta Muse Spark Open Report & Spoken Summary             │
-│  5. In-Memory, Redis & SQLite WAL Cache                      │
-│  6. Three.js Scroll Intro & Vue 3 Console                    │
+│  4. Meta Muse Spark Open Report & Spoken Summary on Baseten  │
+│  5. Resilient Executor + Memory, Redis & SQLite WAL Cache    │
+│  6. Three.js 3D Scroll Intro, Vue 3 Console & Audio Pipeline │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### Coursework vs. Hackathon Scope Matrix
+
+| Area | Pre-Existing University Coursework (System 1) | Built During Meta AI Hackathon (System 2) |
+| :--- | :--- | :--- |
+| **Vision Models** | Pre-computed V-JEPA 2.1 encoder | **Meta SAM 3.1** instance segmentation via `/v1/responses` on the landing board ROI |
+| **Spatial Grounding** | Numerical surprise heatmap and hotspot coordinates | **Geometric Containment (`SamGeometry`)** intersecting SAM 3.1 boxes with the V-JEPA hotspot via `IoA >= 0.25` and `< 22%` coverage check |
+| **Multimodal Reasoning** | None — numerical surprise scores `S(t)` only | **Meta Muse Spark Open** (`meta-models/muse-spark-open-1026`) on Baseten with `688x688` + `384x384` visual inputs, tool calling, and `<REPORT>` + `<SPOKEN>` output |
+| **Backend Runtime** | Offline Python evaluation scripts | **Java 25 & Micronaut 4.7 GraalVM Native Server** with Virtual Threads, FFM off-heap buffer, Vector API, Redis RESP2 client, SQLite WAL cache, and PBKDF2 auth |
+| **Frontend & Audio** | Static plots and exported MP4 clips | **Three.js 3D Scroll Story + Vue 3 Console** with interactive timeline, `edge-tts` speech synthesis, `BeeAcousticSynthesizer`, and FFT acoustic mirror |
 
 ---
 
