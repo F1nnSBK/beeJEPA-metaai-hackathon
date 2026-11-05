@@ -333,7 +333,7 @@ async function toggleMicrophoneListening() {
       if (recognizedText) {
         isAskingMuse.value = true
         isTranscribing.value = false
-        await askMuse(recognizedText)
+        await askMuse(recognizedText, { fromVoice: true })
       } else {
         isTranscribing.value = false
       }

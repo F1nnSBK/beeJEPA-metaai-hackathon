@@ -373,7 +373,7 @@ function isGlobalCohortQuestion(questionText) {
 }
 
 async function askMuse(question = null, options = {}) {
-  const silentAutoLoad = Boolean(options?.silentAutoLoad)
+  const fromVoice = Boolean(options?.fromVoice)
   const q = (question ?? museQuestionInput.value ?? '').trim()
   if (!q) {
     museError.value = 'Please enter a question.'
@@ -403,11 +403,11 @@ async function askMuse(question = null, options = {}) {
       museDiagnosis.value = normalized
       fetchSaccadicTargets()
 
-      if (!silentAutoLoad) {
+      if (fromVoice) {
         if (beeModeActive.value) {
           const textToBuzz = normalized.spokenSummary || normalized.diagnosis || 'Anomaly diagnosed by Meta Muse.'
           playBeeBuzz(textToBuzz)
-        } else if (autoReadAloud.value && normalized.spokenSummary) {
+        } else if (normalized.spokenSummary) {
           readAloud(normalized.spokenSummary)
         }
       }
